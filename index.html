@@ -1,0 +1,2072 @@
+<title>箱庭の村</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: full-bleed canvas diorama; top HUD (clock, language, phrasebook, god's voice, villagers), bottom-left log/cards, bottom-right camera controls, side phrasebook */
+:root{
+  --ink:#4a3f5c;
+  --ink-soft:#7a6d8f;
+  --panel:rgba(255,253,250,.84);
+  --line:rgba(120,100,160,.22);
+  --accent:#e0786c;
+  --gold:#c8902e;
+  --en:#3f7fa8;
+  --sky:#cfd9f0;
+  --font:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Yu Gothic",system-ui,sans-serif;
+}
+html,body{height:100%}
+[hidden]{display:none!important}
+body{background:var(--sky);color:var(--ink);font-family:var(--font);overflow:hidden}
+#scene{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#scene:active{cursor:grabbing}
+.hud{position:fixed;z-index:2}
+.panel{background:var(--panel);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:14px}
+.top{top:calc(env(safe-area-inset-top,0px) + 10px);left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.row1{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;pointer-events:none}
+.row1>*{pointer-events:auto}
+.clock{padding:6px 14px 7px;display:flex;align-items:baseline;gap:10px;white-space:nowrap}
+.clock .day{font-size:12px;color:var(--ink-soft);letter-spacing:.04em}
+.clock b{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.clock .period{font-size:13px;font-weight:700;color:var(--accent)}
+.clock .wx{font-size:12px;color:var(--ink-soft)}
+.pill{font:inherit;font-size:13px;font-weight:700;color:var(--ink);background:var(--panel);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:12px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+.pill[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:transparent}
+.pill.lang{color:#fff;background:var(--en);border-color:transparent}
+.pill .n{display:inline-block;min-width:1.4em;margin-left:4px;padding:0 5px;border-radius:8px;background:rgba(63,127,168,.15);color:var(--en);font-variant-numeric:tabular-nums}
+.god{flex:1 1 300px;min-width:0;display:flex;align-items:center;gap:6px;padding:5px 5px 5px 12px}
+.god label{font-size:12px;font-weight:700;color:var(--gold);letter-spacing:.06em;white-space:nowrap}
+.god input{flex:1;min-width:0;font:inherit;font-size:14px;color:var(--ink);background:transparent;border:0;outline:0;padding:6px 2px}
+.god input::placeholder{color:#a397b4}
+.god button{font:inherit;font-size:13px;font-weight:700;color:#fff;background:var(--gold);border:0;border-radius:10px;padding:8px 14px;cursor:pointer;white-space:nowrap}
+.god button:disabled{opacity:.55;cursor:default}
+.god:focus-within{box-shadow:0 0 0 2px rgba(200,144,46,.35)}
+#roster{list-style:none;margin:0;padding:0 0 2px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;pointer-events:auto;align-self:flex-start;max-width:100%}
+#roster::-webkit-scrollbar{display:none}
+#roster button{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 11px 4px 5px;font:inherit;font-size:12px;font-weight:700;color:var(--ink);cursor:pointer;white-space:nowrap}
+#roster button[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 2px rgba(224,120,108,.25)}
+.dot{width:14px;height:14px;border-radius:50%;flex:none;box-shadow:inset 0 -2px 0 rgba(0,0,0,.12)}
+.hint{margin:0;font-size:11px;color:var(--ink-soft);pointer-events:none;align-self:flex-start;background:var(--panel);border-radius:8px;padding:2px 8px}
+.log{left:max(16px,env(safe-area-inset-left,0px));bottom:calc(env(safe-area-inset-bottom,0px) + 12px);width:min(440px,calc(100% - 340px));min-width:240px;padding:7px 12px;margin:0;list-style:none;font-size:12px;line-height:1.5;display:flex;flex-direction:column;gap:2px}
+.log li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.log time{color:var(--ink-soft);font-variant-numeric:tabular-nums;margin-right:6px}
+.log .sub{color:var(--ink-soft);margin-left:6px;font-size:11px}
+.log .god-line{color:var(--gold);font-weight:700}
+.sheet{left:max(16px,env(safe-area-inset-left,0px));bottom:calc(env(safe-area-inset-bottom,0px) + 12px);width:min(350px,calc(100% - 32px));padding:12px 14px 14px;display:flex;flex-direction:column;gap:8px;max-height:calc(100% - 200px);overflow:auto}
+@media (max-width:640px){
+  .log{width:auto;right:max(16px,env(safe-area-inset-right,0px));min-width:0;bottom:calc(env(safe-area-inset-bottom,0px) + 58px)}
+  .sheet{bottom:calc(env(safe-area-inset-bottom,0px) + 58px)}
+}
+.sheet header{display:flex;align-items:center;gap:8px}
+.sheet h2{margin:0;font-size:17px}
+.sheet .mood{font-size:12px;color:var(--ink-soft)}
+.x{margin-left:auto;font:inherit;font-size:18px;line-height:1;color:var(--ink-soft);background:none;border:0;cursor:pointer;padding:4px 6px}
+.persona{margin:0;font-size:12px;color:var(--ink-soft);line-height:1.5}
+.status{margin:0;font-size:14px;font-weight:700;display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap}
+.status .ja,.ja-sub{font-size:12px;font-weight:500;color:var(--ink-soft);display:block;width:100%}
+.needs{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:4px 8px;align-items:center;font-size:11px}
+.bar{height:7px;border-radius:4px;background:rgba(120,100,160,.14);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:4px}
+.acts{display:flex;gap:6px;flex-wrap:wrap}
+.acts button{font:inherit;font-size:12px;font-weight:700;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:9px;padding:6px 10px;cursor:pointer}
+.acts button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.say-btn{font:inherit;font-size:12px;line-height:1;color:var(--en);background:rgba(63,127,168,.1);border:0;border-radius:8px;padding:5px 7px;cursor:pointer;flex:none}
+.thought{margin:0;font-size:13px;line-height:1.6;background:rgba(200,144,46,.1);border-radius:10px;padding:8px 10px}
+.word h2{font-size:22px;color:var(--en)}
+.word .ex{margin:0;font-size:14px;line-height:1.55;font-weight:700}
+.word .exja{margin:0;font-size:12px;color:var(--ink-soft)}
+.book{top:calc(env(safe-area-inset-top,0px) + 10px);right:max(16px,env(safe-area-inset-right,0px));bottom:calc(env(safe-area-inset-bottom,0px) + 12px);width:min(360px,calc(100% - 32px));padding:12px 14px;display:flex;flex-direction:column;gap:8px;z-index:4}
+.townbtns{display:flex;gap:6px;flex-wrap:wrap}
+.persona.wish{color:var(--gold);font-weight:700}
+.book header{display:flex;align-items:center;gap:8px}
+.book h2{margin:0;font-size:16px}
+.book p{margin:0;font-size:12px;color:var(--ink-soft);line-height:1.5}
+.book ul{list-style:none;margin:0;padding:0;overflow:auto;display:flex;flex-direction:column;gap:6px;flex:1;min-height:0}
+.book li{display:flex;gap:8px;align-items:flex-start;padding:7px 9px;background:#fff;border:1px solid var(--line);border-radius:10px}
+.book li div{flex:1;min-width:0}
+.book li b{display:block;font-size:13px;line-height:1.45}
+.book li span{display:block;font-size:11px;color:var(--ink-soft);line-height:1.45}
+.controls{bottom:calc(env(safe-area-inset-bottom,0px) + 12px);right:max(16px,env(safe-area-inset-right,0px));display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.controls button{font:inherit;font-size:13px;font-weight:700;color:var(--ink);background:var(--panel);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:10px;padding:8px 12px;cursor:pointer;min-width:38px}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#fpv{position:fixed;inset:0;z-index:1;background:#000}
+#fpv canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#fpvCanvas{touch-action:none;cursor:grab}
+#fpvOverlay{pointer-events:none}
+body.fpv .log,body.fpv .controls,body.fpv .hint,body.fpv #card{display:none!important}
+.acts button.play{background:var(--en);color:#fff;border-color:transparent}
+.fpvhud{z-index:3;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 12px);width:min(640px,calc(100% - 32px));padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+body.coarse .fpvhud{left:auto;right:max(16px,env(safe-area-inset-right,0px));transform:none;width:calc(100% - 184px)}
+.fpvtop{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
+.fneeds{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.mini{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--ink-soft)}
+.mini em{font-style:normal}
+.mini .bar{width:30px;height:6px}
+.fsub{margin:0;font-size:15px;line-height:1.45}
+.fsub b{display:block}
+.fsub span{display:block;font-size:12px;color:var(--ink-soft)}
+.facts{display:flex;gap:6px;flex-wrap:wrap}
+.facts:empty{display:none}
+.facts button{font:inherit;font-size:13px;font-weight:700;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:6px}
+.facts button.main{background:var(--en);color:#fff;border-color:transparent}
+.facts button.on{background:var(--ink);color:#fff;border-color:transparent}
+kbd{font:inherit;font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(0,0,0,.14)}
+.fctl{display:flex;gap:6px;align-items:center}
+.fhint{flex:1;min-width:0;font-size:11px;color:var(--ink-soft)}
+.fctl button{font:inherit;font-size:12px;font-weight:700;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:9px;padding:6px 10px;cursor:pointer;white-space:nowrap}
+.joy{display:none;position:fixed;z-index:3;left:max(20px,env(safe-area-inset-left,0px));bottom:calc(env(safe-area-inset-bottom,0px) + 24px);width:130px;height:130px;border-radius:50%;background:rgba(255,255,255,.22);border:2px solid rgba(255,255,255,.6);touch-action:none}
+body.fpv.coarse .joy{display:block}
+.joy span{position:absolute;left:50%;top:50%;width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.85);transform:translate(-50%,-50%);pointer-events:none}
+.talk{z-index:3;top:calc(env(safe-area-inset-top,0px) + 118px);right:max(16px,env(safe-area-inset-right,0px));width:min(380px,calc(100% - 32px));max-height:calc(100% - 330px);min-height:220px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.talk header{display:flex;align-items:center;gap:8px}.talk h2{margin:0;font-size:16px}
+#tList{list-style:none;margin:0;padding:0;overflow:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:6px}
+#tList li{max-width:88%;padding:7px 10px;border-radius:12px;font-size:13px;line-height:1.45;background:#fff;border:1px solid var(--line);align-self:flex-start}
+#tList li.me{align-self:flex-end;background:rgba(63,127,168,.12);border-color:transparent}
+#tList li b{display:block;font-weight:700}
+#tList li span{display:block;font-size:11px;color:var(--ink-soft)}
+#tList .tip{margin-top:4px;font-size:11px;color:var(--gold);font-weight:700}
+#tList .say-btn{margin-top:4px}
+.chips{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none}
+.chips button{font:inherit;font-size:11px;white-space:nowrap;color:var(--en);background:rgba(63,127,168,.1);border:0;border-radius:999px;padding:5px 9px;cursor:pointer}
+#tForm{display:flex;gap:6px}
+#tForm input{flex:1;min-width:0;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+#tForm button{font:inherit;font-size:13px;font-weight:700;color:#fff;background:var(--en);border:0;border-radius:10px;padding:8px 12px;cursor:pointer}
+.toast{position:fixed;z-index:6;left:50%;top:42%;transform:translate(-50%,-50%);background:rgba(40,34,56,.86);color:#fff;font-size:13px;padding:8px 14px;border-radius:10px;pointer-events:none}
+.word{z-index:4}
+</style>
+
+<canvas id="scene" aria-label="住人たちが暮らす小さな箱庭の村"></canvas>
+<div class="hud top" id="hudTop">
+  <div class="row1">
+    <div class="clock panel"><span class="day" id="day">1日目</span><b id="time">07:00</b><span class="period" id="period">朝</span><span class="wx" id="wx">晴れ</span></div>
+    <button class="pill lang" id="langBtn" type="button">English</button>
+    <button class="pill" id="labelBtn" type="button" aria-pressed="false" hidden>Labels: Off</button>
+    <button class="pill" id="townBtn" type="button">町</button>
+    <button class="pill" id="bookBtn" type="button"><span id="bookLbl">フレーズ帳</span><span class="n" id="bookN">0</span></button>
+    <form class="god panel" id="godForm" autocomplete="off">
+      <label for="godInput" id="godLbl">神の声</label>
+      <input id="godInput" maxlength="140" placeholder="例：今日はお祭りだ！みんな広場に集まれ">
+      <button id="godSend" type="submit">告げる</button>
+    </form>
+  </div>
+  <ul id="roster"></ul>
+  <p class="hint" id="hint">ドラッグで回転・ホイールで拡大・住人や物をタップ</p>
+</div>
+<ul class="hud log panel" id="log"></ul>
+<section class="hud sheet panel" id="card" hidden>
+  <header><span class="dot" id="cDot"></span><h2 id="cName"></h2><span class="mood" id="cMood"></span><button class="x" id="cClose" type="button" aria-label="閉じる">×</button></header>
+  <p class="persona" id="cPersona"></p>
+  <p class="persona wish" id="cWish" hidden></p>
+  <p class="status"><span id="cStatus"></span><button class="say-btn" id="cSay" type="button" aria-label="Listen">🔊</button><span class="ja" id="cStatusJa"></span></p>
+  <div class="needs" id="cNeeds"></div>
+  <div class="acts"><button id="cThink" type="button">心の声を聞く</button><button id="cFollow" type="button" aria-pressed="false">この人を追う</button><button id="cPlay" class="play" type="button">この人になる（一人称）</button></div>
+  <p class="thought" id="cThought" hidden></p>
+</section>
+<section class="hud sheet panel word" id="wordCard" hidden>
+  <header><h2 id="wWord"></h2><button class="say-btn" id="wSay" type="button" aria-label="Listen">🔊</button><button class="x" id="wClose" type="button" aria-label="閉じる">×</button></header>
+  <p class="exja" id="wJa"></p>
+  <p class="ex" id="wEx"></p>
+  <p class="exja" id="wExJa"></p>
+  <div class="acts"><button id="wExSay" type="button">🔊 例文を聞く</button></div>
+</section>
+<section class="hud book panel" id="town" hidden>
+  <header><h2 id="townTitle">町の保存と歩み</h2><button class="x" id="townClose" type="button" aria-label="閉じる">×</button></header>
+  <p id="townNote"></p>
+  <div class="townbtns"><button class="pill" id="townSave" type="button"></button><button class="pill" id="townReset" type="button"></button></div>
+  <p id="townStamp"></p>
+  <ul id="townList"></ul>
+</section>
+<section class="hud book panel" id="book" hidden>
+  <header><h2 id="bookTitle">フレーズ帳</h2><button class="x" id="bookClose" type="button" aria-label="閉じる">×</button></header>
+  <p id="bookNote">村で聞こえた英語のフレーズがたまっていきます。🔊で発音を聞けます。</p>
+  <ul id="bookList"></ul>
+</section>
+<div class="hud controls" id="controls">
+  <button id="zoomOut" type="button" aria-label="縮小">－</button>
+  <button id="zoomIn" type="button" aria-label="拡大">＋</button>
+  <button id="roofBtn" type="button">外観を見る</button>
+  <button id="speed" type="button">早送り ×1</button>
+  <button id="reset" type="button">視点を戻す</button>
+</div>
+
+<div id="fpv" hidden><canvas id="fpvOverlay"></canvas></div>
+<section class="hud fpvhud panel" id="fpvHud" hidden>
+  <div class="fpvtop"><span class="dot" id="fpvDot"></span><b id="fpvName"></b><div class="fneeds" id="fpvNeeds"></div></div>
+  <p class="fsub" id="fpvSub" hidden></p>
+  <div class="facts" id="fpvActs"></div>
+  <div class="fctl"><span class="fhint" id="fpvHint"></span><button id="fpvSpeed" type="button">×1</button><button id="fpvExit" type="button">戻る</button></div>
+</section>
+<div class="joy" id="joy"><span id="joyKnob"></span></div>
+<section class="hud talk panel" id="talk" hidden>
+  <header><span class="dot" id="tDot"></span><h2 id="tName"></h2><button class="x" id="tClose" type="button" aria-label="閉じる">×</button></header>
+  <ul id="tList"></ul>
+  <div class="chips" id="tChips"></div>
+  <form id="tForm" autocomplete="off"><input id="tInput" maxlength="160" aria-label="message"><button id="tSend" type="submit">送る</button></form>
+</section>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+// ================= math =================
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const ISO_AZ=Math.PI/4, ISO_EL=Math.asin(1/Math.sqrt(3));
+const cross=(t,e)=>[t[1]*e[2]-t[2]*e[1],t[2]*e[0]-t[0]*e[2],t[0]*e[1]-t[1]*e[0]];
+const dot=(t,e)=>t[0]*e[0]+t[1]*e[1]+t[2]*e[2];
+const smooth=t=>{const e=clamp(t,0,1);return e*e*(3-2*e)};
+const mix=(t,e,l)=>[lerp(t[0],e[0],l),lerp(t[1],e[1],l),lerp(t[2],e[2],l)];
+const hash=t=>{const e=43758.5453*Math.sin(127.1*t+311.7);return e-Math.floor(e)};
+const hx=s=>[parseInt(s.slice(1,3),16),parseInt(s.slice(3,5),16),parseInt(s.slice(5,7),16)];
+const rand=([a,b])=>a+Math.random()*(b-a);
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const FONT='"Zen Maru Gothic","Hiragino Maru Gothic ProN",system-ui,sans-serif';
+
+// ================= language =================
+let L='ja',showLabels=false;
+try{showLabels=localStorage.getItem('hakoniwa-labels')==='1'}catch(e){}
+try{const s=localStorage.getItem('hakoniwa-lang');if(s==='en'||s==='ja')L=s}catch(e){}
+const tr=o=>o==null?'':typeof o==='string'?o:(o[L]??o.ja??o.en??'');
+const J=(ja,en)=>({ja,en});
+const UI={
+  god:J('神の声','Voice of God'),send:J('告げる','Speak'),sending:J('届けています…','Sending…'),
+  ph:J('例：今日はお祭りだ！みんな広場に集まれ','e.g. "It\'s festival day! Everyone, come to the plaza!"'),
+  lang:J('English','日本語'),book:J('フレーズ帳','Phrasebook'),
+  bookNote:J('村で聞こえた英語のフレーズがたまっていきます。🔊で発音を聞けます。','English phrases you hear in the village are saved here. Tap 🔊 to listen.'),
+  bookEmpty:J('まだフレーズがありません。英語モードで住人の会話を聞いてみましょう。','No phrases yet. Watch the villagers in English mode.'),
+  hint:J('ドラッグで回転・ホイールで拡大・住人や物をタップ','Drag to rotate · zoom in to see names · tap people and things to learn words'),
+  think:J('心の声を聞く','Inner voice'),follow:J('この人を追う','Follow'),listening:J('耳をすましています…','Listening…'),
+  roofOn:J('外観を見る','Show roofs'),roofOff:J('家の中を見る','Show inside'),
+  speed:J('早送り','Speed'),play:J('この人になる（一人称）','Play as this person'),reset:J('視点を戻す','Reset view'),exSay:J('🔊 例文を聞く','🔊 Example')};
+const MOOD_T={happy:J('ごきげん','happy'),excited:J('わくわく','excited'),calm:J('おだやか','calm'),sad:J('しょんぼり','sad'),scared:J('こわがり中','scared'),angry:J('ぷんぷん','angry'),tired:J('くたくた','tired')};
+const WX_T={clear:J('晴れ','Sunny'),rain:J('雨','Rainy'),snow:J('雪','Snowy')};
+const NEED_T={energy:[J('元気','Energy'),'#7fc7a0'],food:[J('満腹','Full'),'#a0b8e8'],social:[J('交流','Social'),'#e8a0b0'],fun:[J('楽しさ','Fun'),'#f0c070'],bladder:[J('トイレ','Bladder'),'#c9b3e8'],hygiene:[J('清潔','Clean'),'#8fd3e0']};
+const canSpeak='speechSynthesis' in window;
+function speak(text){if(!canSpeak||!text)return;try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='en-US';u.rate=.88;speechSynthesis.speak(u)}catch(e){}}
+
+const P={wall:[246,214,190],wall2:[226,226,206],wallTrim:[252,238,224],coral:[236,140,132],teal:[120,170,180],recess:[118,104,150],glass:[150,186,222],
+  cream:[252,240,222],grass:[176,218,160],path:[242,228,200],plaza:[232,222,216],rock:[182,164,214],rockDark:[146,128,190],gold:[244,196,110],
+  shadowTint:[96,84,150],soil:[178,134,108],water:[136,194,226],stone:[200,194,214],wood:[198,150,120],woodL:[222,184,148],brick:[214,148,136],
+  white:[246,246,250],porcelain:[236,240,248],floorW:[226,190,150],tileB:[214,230,236],tileK:[238,226,206],paper:[250,240,228],paper2:[236,240,232],dark:[64,60,84],steel:[200,206,218]};
+const LIGHT=(()=>{const t=[.32,.72,1],e=Math.hypot(...t);return t.map(v=>v/e)})();
+const SKY={day:['#a9c8f2','#d3e1f6','#f3e8e4','#fbefe4'].map(hx),dusk:['#6c7cc2','#c993c0','#f2ad92','#fbcfa8'].map(hx),night:['#111a3a','#222c5a','#36396c','#463f72'].map(hx)};
+
+let amb=[1,1,1], ambOut=[1,1,1], dayK=1, duskK=0, nightK=0, rainK=0, snowK=0, snowCover=0, rainbowK=0, festK=0, skyMid=[200,210,240];
+let interior=true;
+const fpv={on:false,w:null,yaw:0,pitch:0,keys:new Set(),joy:[0,0],sig:'',typing:false,moving:false};
+const A=c=>[c[0]*amb[0],c[1]*amb[1],c[2]*amb[2]];
+const rgb=(t,e=1,l=1)=>`rgba(${Math.round(clamp(t[0]*e,0,255))},${Math.round(clamp(t[1]*e,0,255))},${Math.round(clamp(t[2]*e,0,255))},${l})`;
+const rgbA=(t,e,l)=>rgb(A(t),e,l);
+let snowOn=false;
+const snowy=c=>snowOn&&snowCover>0?mix(c,[244,246,252],snowCover*.85):c;
+function shade(c,n){const l=Math.max(0,dot(n,LIGHT)),i=.74+.3*l;return A(mix(c.map(v=>v*i),P.shadowTint,.2*(1-l)))}
+
+// ================= host =================
+const cv=document.getElementById('scene');let N=cv.getContext('2d');
+const S={width:0,height:0,dpr:1,time:0};
+const cam={az:ISO_AZ,el:ISO_EL,taz:ISO_AZ,tel:ISO_EL,d:null,r:null,u:null,scale:30,cx:0,cy:0,center:[8.5,7.5,0],
+  base:{scale:30,center:[8.5,7.5,0],cx:0,cy:0,areaX:0,areaY:0},zoom:1,tzoom:1,follow:null};
+function basis(){const c=Math.cos(cam.el);cam.d=[c*Math.cos(cam.az),c*Math.sin(cam.az),Math.sin(cam.el)];cam.r=[Math.sin(cam.az),-Math.cos(cam.az),0];cam.u=cross(cam.r,cam.d)}
+let projOverride=null;
+function project(p){if(projOverride)return projOverride(p);const e=[p[0]-cam.center[0],p[1]-cam.center[1],p[2]-cam.center[2]];return[cam.cx+cam.scale*dot(e,cam.r),cam.cy-cam.scale*dot(e,cam.u)]}
+const isoProj=t=>[.70710678*(t[0]-t[1]),.40824829*(t[0]+t[1])-.81649658*t[2]];
+
+// ================= world =================
+const boxes=[], tiles=[], tileAt=new Map(), VOCAB=[];
+const key=(x,y)=>x+','+y;
+const MW=18, MH=16, WALL_H=1.6, FLOOR=.12;
+function box(lo,hi,o={}){const b={...o,lo,hi,id:boxes.length,kind:'box'};b.top=o.top||o.side||P.wall;b.side=o.side||P.wall;b.deco=o.deco||{};boxes.push(b);return b}
+function tile(x,y,z,o={}){const t={...o,pos:[x,y,z],id:tiles.length,links:[]};tiles.push(t);tileAt.set(key(x,y),t);return t}
+const T=(x,y)=>tileAt.get(key(x,y));
+function vocab(word,ja,ex,exja,pos,o={}){VOCAB.push({word,ja,ex,exja,pos,...o})}
+
+const POND={x:15.2,y:12.3,rx:2.25,ry:1.7};
+const inPond=(x,y,m=0)=>((x-POND.x)/(POND.rx+m))**2+((y-POND.y)/(POND.ry+m))**2<1;
+const plazaCells=[];for(let x=7;x<=9;x++)for(let y=10;y<=12;y++)if(!(x===8&&y===11))plazaCells.push([x,y]);
+let pathCells=[];for(let x=0;x<MW;x++)pathCells.push([x,8]);[2,11].forEach(x=>pathCells.push([x,7]));for(let y=9;y<MH;y++){pathCells.push([5,y]);pathCells.push([12,y])}
+pathCells=pathCells.filter(([x,y])=>!inPond(x,y,.15));
+const fieldCells=[];for(let x=0;x<=3;x++)for(let y=12;y<=14;y++)fieldCells.push([x,y]);
+const bedCells=[[0,7],[1,7],[14,7],[15,7],[8,6],[8,7]];
+const pathSet=new Set(pathCells.map(([x,y])=>key(x,y))), plazaSet=new Set(plazaCells.map(([x,y])=>key(x,y))), fieldSet=new Set(fieldCells.map(([x,y])=>key(x,y))), bedSet=new Set(bedCells.map(([x,y])=>key(x,y)));
+const TREES=[[0,0,.85],[8,0,.7],[17,0,.78],[17,6,.7],[0,10,.62],[7,15,.62],[10,14,.6],[15,15,.6],[17,9,.55]];
+const LANTERNS=[[4,7],[6,9],[9,7],[13,7],[10,10],[10,13]];
+const blocked=new Set(), houseCells=new Set();
+const block=(x,y)=>blocked.add(key(x,y));
+TREES.forEach(([x,y])=>block(x,y));LANTERNS.forEach(([x,y])=>block(x,y));
+[[8,3],[16,3],[6,13],[8,11]].forEach(([x,y])=>block(x,y));
+fieldCells.forEach(([x,y])=>block(x,y));bedCells.forEach(([x,y])=>block(x,y));
+for(let x=0;x<MW;x++)for(let y=0;y<MH;y++)if(inPond(x,y,.1))block(x,y);
+
+// island
+box([-.5,-.5,-1],[MW-.5,MH-.5,0],{top:P.grass,side:P.rock,deco:{top:'ground',px:'strata',py:'strata',nx:'strata',ny:'strata'}});
+box([.3,.3,-2],[16.7,14.7,-1],{side:P.rock,deco:{px:'strata',py:'strata',nx:'strata',ny:'strata'}});
+box([2,1.8,-3],[14.5,13.5,-2],{side:P.rockDark,deco:{px:'strata',py:'strata',nx:'strata',ny:'strata'}});
+box([5,4.5,-3.8],[11.5,10,-3],{side:P.rockDark,deco:{px:'strata',py:'strata'}});
+box([7,6,-4.4],[9.5,8.5,-3.8],{side:P.rockDark});
+
+// ---------- houses (cutaway dollhouses) ----------
+const ROOMS={bed:J('寝室','bedroom'),bath:J('お風呂・トイレ','bathroom'),kitchen:J('キッチン','kitchen'),living:J('リビング','living room')};
+const roomOf=(c,r)=>r<=1?(c<=2?'bed':'bath'):(c<=2?'living':'kitchen');
+const houses={};
+function buildHouse(id,x0,y0,wallC,roofC,paperC,blanket){
+  const X=c=>x0+c, Y=r=>y0+r;
+  const h={id,x0,y0,blockedEdges:new Set(),spots:{},lights:false,glow:0,mealReady:0,mealName:null,dirty:false,cooking:null,tvOn:false,paper:paperC,
+    stoveP:[X(4),Y(2)-.05,.66],tvP:[X(0)-.2,Y(3),.66],chimney:[X(4),Y(2),WALL_H+1.25],residents:[]};
+  houses[id]=h;
+  for(let c=0;c<6;c++)for(let r=0;r<6;r++)houseCells.add(key(X(c),Y(r)));
+  const H=WALL_H, I={indoor:true,house:h};
+  box([x0-.5,y0-.5,0],[x0+5.5,y0+5.5,FLOOR],{...I,top:P.floorW,side:mix(wallC,[150,120,110],.3),deco:{top:'floor'}});
+  const opp={px:'nx',nx:'px',py:'ny',ny:'py'};
+  const wall=(lo,hi,n,wins,extra={})=>{const outer=n[0]>0?'px':n[0]<0?'nx':n[1]>0?'py':'ny';
+    return box(lo,hi,{side:wallC,top:P.wallTrim,house:h,cutN:n,wall:{wins,outer,inner:opp[outer]},deco:{[outer]:'wallOut',[opp[outer]]:'wallIn'},...extra})};
+  wall([x0-.5,y0-.5,FLOOR],[x0-.38,y0+5.5,H],[-1,0,0],[Y(1),Y(4.5)]);
+  wall([x0+5.38,y0-.5,FLOOR],[x0+5.5,y0+5.5,H],[1,0,0],[Y(3),Y(5)]);
+  wall([x0-.38,y0-.5,FLOOR],[x0+5.38,y0-.38,H],[0,-1,0],[X(1),X(4)]);
+  wall([x0-.38,y0+5.38,FLOOR],[x0+.55,y0+5.5,H],[0,1,0],[]);
+  wall([x0+.55,y0+5.38,1.3],[x0+1.45,y0+5.5,H],[0,1,0],[]);
+  wall([x0+1.45,y0+5.38,FLOOR],[x0+5.38,y0+5.5,H],[0,1,0],[X(3),X(4.6)]);
+  box([x0+.58,y0+5.41,FLOOR],[x0+1.42,y0+5.47,1.3],{side:mix(P.coral,[120,70,90],.3),house:h,exteriorOnly:true,deco:{py:'doorleaf'}});
+  const part=(lo,hi)=>box(lo,[hi[0],hi[1],.6],{...I,side:paperC,top:P.wallTrim});
+  part([x0-.38,y0+1.44,FLOOR],[x0+.5,y0+1.56]);part([x0+1.5,y0+1.44,FLOOR],[x0+5.38,y0+1.56]);
+  part([x0+2.44,y0-.38,FLOOR],[x0+2.56,y0+.5]);part([x0+2.44,y0+1.56,FLOOR],[x0+2.56,y0+3.5]);
+  const be=(a,b)=>{h.blockedEdges.add(key(...a)+'|'+key(...b));h.blockedEdges.add(key(...b)+'|'+key(...a))};
+  [0,2,3,4,5].forEach(c=>be([X(c),Y(1)],[X(c),Y(2)]));
+  be([X(2),Y(0)],[X(3),Y(0)]);be([X(2),Y(2)],[X(3),Y(2)]);be([X(2),Y(3)],[X(3),Y(3)]);
+  h.door=[[X(1),Y(5)],[X(1),Y(6)]];
+  const solid=new Set(), use=new Map(), F={...I};
+  const seat=(c,r,z,type,face,extra={})=>use.set(key(X(c),Y(r)),{z,furn:{type,face,...extra}});
+  // bedroom
+  for(let c=0;c<3;c++){const cx=X(c),cy=Y(0);
+    box([cx-.36,cy-.36,FLOOR],[cx+.36,cy-.28,.72],{...F,side:P.wood,top:P.woodL});
+    box([cx-.36,cy-.28,FLOOR],[cx+.36,cy+.45,.34],{...F,side:P.woodL,top:P.white,deco:{top:'bedTop'},blanket:blanket[c]});
+    seat(c,0,.34,'bed',[0,1],{head:[cx,cy-.12,.34],foot:[cx,cy+.42,.34],lo:[cx-.36,cy-.28],hi:[cx+.36,cy+.45]});
+    if(c===1)vocab('bed','ベッド','I go to bed at ten.','10時に寝ます。',[cx,cy+.1,.4],{house:h})}
+  // bathroom
+  {const cx=X(3),cy=Y(0);box([cx-.2,cy-.36,FLOOR],[cx+.2,cy-.18,.72],{...F,side:P.porcelain,top:P.porcelain});box([cx-.17,cy-.18,FLOOR],[cx+.17,cy+.22,.4],{...F,side:P.porcelain,top:P.porcelain,deco:{top:'toiletTop'}});
+    seat(3,0,.4,'seat',[0,1]);vocab('toilet','トイレ（便器）','Don\'t forget to flush the toilet.','トイレを流すのを忘れないでね。',[cx,cy,.6],{house:h})}
+  {const cx=X(4),cy=Y(0);box([cx-.3,cy-.36,FLOOR],[cx+.3,cy+.1,.72],{...F,side:P.woodL,top:P.porcelain,deco:{top:'basinTop',py:'cabinet'}});
+    box([cx-.22,cy-.38,.95],[cx+.22,cy-.35,1.4],{...F,side:P.steel,top:P.steel,deco:{py:'mirror'},cutWith:[0,-1,0]});
+    solid.add(key(cx,cy));vocab('washbasin','洗面台','I wash my face at the washbasin.','洗面台で顔を洗います。',[cx,cy,.8],{house:h});
+    vocab('mirror','鏡','I look in the mirror every morning.','毎朝、鏡を見ます。',[cx,cy-.3,1.25],{house:h,mirror:true})}
+  {const cx=X(5),cy=Y(0);box([cx-.38,cy-.36,FLOOR],[cx+.36,cy+.42,.5],{...F,side:P.porcelain,top:P.porcelain,deco:{top:'tubTop'}});
+    seat(5,0,.5,'tub',[0,1],{lo:[cx-.38,cy-.36],hi:[cx+.36,cy+.42]});vocab('bathtub','浴槽（バスタブ）','The bathtub is full of hot water.','お風呂にお湯がいっぱい。',[cx,cy,.55],{house:h})}
+  // kitchen
+  {const cx=X(3),cy=Y(2);box([cx-.42,cy-.42,FLOOR],[cx+.46,cy+.3,.66],{...F,side:P.woodL,top:P.steel,deco:{top:'sinkTop',py:'cabinet'}});solid.add(key(cx,cy));
+    vocab('sink','流し台（シンク）','Put the dirty dishes in the sink.','汚れたお皿は流しに入れてね。',[cx,cy,.7],{house:h})}
+  {const cx=X(4),cy=Y(2);box([cx-.46,cy-.42,FLOOR],[cx+.46,cy+.3,.66],{...F,side:P.woodL,top:P.dark,deco:{top:'stoveTop',py:'oven'}});solid.add(key(cx,cy));
+    vocab('stove','コンロ','Be careful. The stove is hot!','気をつけて、コンロが熱いよ！',[cx,cy,.7],{house:h})}
+  {const cx=X(5),cy=Y(2);box([cx-.38,cy-.42,FLOOR],[cx+.36,cy+.3,1.45],{...F,side:P.white,top:P.white,deco:{py:'fridge'}});solid.add(key(cx,cy));
+    vocab('fridge','冷蔵庫','There is some milk in the fridge.','冷蔵庫に牛乳があるよ。',[cx,cy,1.45],{house:h})}
+  {const cx=X(4),cy=Y(5);box([cx-.42,cy-.42,.5],[cx+.42,cy+.34,.58],{...F,side:P.wood,top:P.woodL,deco:{top:'tableTop'}});box([cx-.07,cy-.07,FLOOR],[cx+.07,cy+.07,.5],{...F,side:P.wood});solid.add(key(cx,cy));
+    vocab('table','テーブル（食卓）','Dinner is on the table.','夕ごはんがテーブルに並んでいるよ。',[cx,cy,.6],{house:h})}
+  const chair=(c,r,face)=>{const cx=X(c),cy=Y(r);box([cx-.2,cy-.2,FLOOR],[cx+.2,cy+.2,.34],{...F,side:P.wood,top:P.coral});
+    const bx=-face[0],by=-face[1];
+    const blo=[bx?cx+bx*.2-(bx>0?0:.06):cx-.2,by?cy+by*.2-(by>0?0:.06):cy-.2],bhi=[bx?blo[0]+.06:cx+.2,by?blo[1]+.06:cy+.2];
+    box([blo[0],blo[1],FLOOR],[bhi[0],bhi[1],.74],{...F,side:P.wood,top:P.woodL});seat(c,r,.34,'seat',face)};
+  chair(3,5,[1,0]);chair(5,5,[-1,0]);chair(4,4,[0,1]);
+  vocab('chair','いす','Please sit down on the chair.','どうぞいすに座ってください。',[X(3),Y(5),.5],{house:h});
+  // living room
+  {const cx=X(0),cy=Y(3);box([cx-.36,cy-.42,FLOOR],[cx+.05,cy+.42,.4],{...F,side:P.wood,top:P.woodL});box([cx-.3,cy-.38,.4],[cx-.22,cy+.38,.92],{...F,side:P.dark,top:P.dark,deco:{px:'screen'}});solid.add(key(cx,cy));
+    vocab('TV','テレビ','Can you turn on the TV?','テレビをつけてくれる？',[cx-.2,cy,.98],{house:h})}
+  for(const r of[2,3]){const cx=X(2),cy=Y(r);box([cx-.38,cy-.44,FLOOR],[cx+.28,cy+.44,.34],{...F,side:blanket[3],top:mix(blanket[3],[255,255,255],.25),deco:{top:'cushion'}});box([cx+.28,cy-.44,FLOOR],[cx+.4,cy+.44,.66],{...F,side:blanket[3],top:mix(blanket[3],[255,255,255],.2)});seat(2,r,.34,'seat',[-1,0])}
+  vocab('sofa','ソファ','Let\'s sit on the sofa and relax.','ソファに座ってくつろごう。',[X(2),Y(2.5),.55],{house:h});
+  // roof (exterior view only)
+  box([x0-.65,y0-.65,H],[x0+5.65,y0+5.65,H+.28],{side:roofC,top:roofC,house:h,exteriorOnly:true,deco:{top:'roof',px:'dentils',py:'dentils',nx:'dentils',ny:'dentils'}});
+  box([x0+.2,y0+.2,H+.28],[x0+4.8,y0+4.8,H+.6],{side:roofC,top:mix(roofC,[255,255,255],.18),house:h,exteriorOnly:true,deco:{top:'roof'}});
+  box([X(4)-.25,Y(2)-.25,H+.6],[X(4)+.25,Y(2)+.25,H+1.2],{side:P.brick,top:P.brick,house:h,exteriorOnly:true,deco:{top:'flue'}});
+  // tiles
+  for(let c=0;c<6;c++)for(let r=0;r<6;r++){const k=key(X(c),Y(r));if(solid.has(k))continue;const u=use.get(k);
+    if(u)tile(X(c),Y(r),u.z,{indoor:true,house:h,stop:true,furn:u.furn,room:roomOf(c,r)});else tile(X(c),Y(r),FLOOR,{indoor:true,house:h,room:roomOf(c,r)})}
+  const S_=(c,r)=>T(X(c),Y(r));
+  h.spots={beds:[S_(0,0),S_(1,0),S_(2,0)],toilet:[S_(3,0)],tub:[S_(5,0)],basin:[S_(4,1)],sink:[S_(3,3)],stove:[S_(4,3)],fridge:[S_(5,3)],chairs:[S_(3,5),S_(5,5),S_(4,4)],sofa:[S_(2,2),S_(2,3)],
+    floor:tiles.filter(t=>t.house===h&&!t.stop)};
+  h.roomCenters={bed:[X(1),Y(.85),FLOOR],bath:[X(4),Y(1),FLOOR],kitchen:[X(4),Y(3.4),FLOOR],living:[X(1),Y(4.6),FLOOR]};
+  h.cell=(c,r)=>T(X(c),Y(r));
+  return h;
+}
+buildHouse('A',1,1,P.wall,P.coral,P.paper,[[244,160,150],[240,200,120],[140,180,230],[236,150,130]]);
+buildHouse('B',10,1,P.wall2,P.teal,P.paper2,[[160,210,200],[190,170,230],[246,180,200],[120,170,180]]);
+
+// stall, well, bench
+box([7.55,2.6,0],[8.45,3.4,.62],{side:P.wood,top:[226,190,150],deco:{py:'stallfront'}});
+box([7.58,2.6,.62],[7.66,2.68,1.42],{side:P.wood});box([8.34,2.6,.62],[8.42,2.68,1.42],{side:P.wood});
+box([7.45,2.5,1.42],[8.55,3.55,1.52],{side:P.coral,top:P.cream,deco:{top:'awning',py:'awningEdge',px:'awningEdge'}});
+box([15.62,2.62,0],[16.38,3.38,.55],{side:P.stone,top:P.stone,deco:{top:'wellwater'}});
+box([15.66,2.95,.55],[15.76,3.05,1.18],{side:P.wood});box([16.24,2.95,.55],[16.34,3.05,1.18],{side:P.wood});
+box([15.52,2.6,1.18],[16.48,3.4,1.28],{side:P.coral,top:P.coral});
+box([5.62,12.82,0],[5.72,13.12,.3],{side:P.wood});box([6.28,12.82,0],[6.38,13.12,.3],{side:P.wood});
+box([5.56,12.8,.3],[6.44,13.18,.37],{side:P.wood,top:[214,170,138]});box([5.56,12.74,.37],[6.44,12.8,.72],{side:P.wood});
+
+vocab('well','井戸','We get water from the well.','井戸から水をくみます。',[16,3,1.35]);
+vocab('pond','池','There are fish in the pond.','池には魚がいるよ。',[15,12.3,0]);
+vocab('field','畑','We grow vegetables in the field.','畑で野菜を育てています。',[1.5,13,.2]);
+vocab('stall','屋台','The stall sells fresh fruit.','屋台では新鮮な果物を売っています。',[8,3,1.6]);
+vocab('bench','ベンチ','Let\'s sit on the bench.','ベンチに座ろう。',[6,13,.5]);
+vocab('cherry tree','桜の木','The cherry tree is in full bloom.','桜が満開です。',[8,11,1.7]);
+vocab('tree','木','I take a nap under the tree.','木の下で昼寝をします。',[0,0,1.3],{showLabel:true});
+vocab('street lamp','街灯','The street lamp is on at night.','夜は街灯がつきます。',[4,7,.9],{showLabel:true});
+vocab('waterfall','滝','The waterfall is very loud.','滝の音がとても大きい。',[17.5,12.3,-1]);
+vocab('flower bed','花壇','I water the flower bed every day.','毎日花壇に水をやります。',[.5,7,.1]);
+vocab('plaza','広場','Everyone meets at the plaza.','みんな広場に集まります。',[8,10,0]);
+vocab('house','家','This is my house.','これがわたしの家です。',[3.5,3.5,WALL_H+.65],{exterior:true});
+vocab('roof','屋根','There is snow on the roof.','屋根に雪が積もっています。',[12.5,3.5,WALL_H+.65],{exterior:true});
+vocab('chimney','煙突','Smoke comes out of the chimney.','煙突から煙が出ています。',[14,3,WALL_H+1.25],{exterior:true});
+
+// outdoor tiles + links
+for(let x=0;x<MW;x++)for(let y=0;y<MH;y++){const k=key(x,y);if(!blocked.has(k)&&!houseCells.has(k))tile(x,y,0,{tag:'ground'})}
+const edgeOK=(a,b)=>{
+  if(a.house||b.house){
+    const ka=key(a.pos[0],a.pos[1]),kb=key(b.pos[0],b.pos[1]);
+    if(a.house&&b.house&&a.house===b.house)return!a.house.blockedEdges.has(ka+'|'+kb);
+    const h=a.house||b.house,k1=key(...h.door[0]),k2=key(...h.door[1]);
+    return(ka===k1&&kb===k2)||(ka===k2&&kb===k1);
+  }return true};
+for(const t of tiles)for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const o=T(t.pos[0]+dx,t.pos[1]+dy);if(!o)continue;const dz=o.pos[2]-t.pos[2];if(Math.abs(dz)>.55)continue;if(!edgeOK(t,o))continue;if(t.stop&&o.stop)continue;t.links.push({to:o,dir:[dx,dy],dz})}
+const ground=tiles.filter(t=>t.tag==='ground');
+const nbrTiles=(cells)=>{const out=new Set();cells.forEach(([x,y])=>[[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy])=>{const t=T(x+dx,y+dy);if(t&&t.tag==='ground')out.add(t)}));return[...out]};
+const SPOTS={
+  field:[T(4,12),T(4,13),T(4,14),T(0,11),T(1,11),T(2,11),T(3,11)].filter(Boolean),
+  fish:ground.filter(t=>[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>inPond(t.pos[0]+dx,t.pos[1]+dy,.1))),
+  well:[T(16,4),T(17,3),T(16,2)].filter(Boolean),
+  nap:nbrTiles(TREES.map(([x,y])=>[x,y])),
+  flower:nbrTiles(bedCells),
+  bench:[T(5,13),T(7,13),T(6,12)].filter(Boolean),
+  stall:[T(8,4),T(7,3),T(9,3)].filter(Boolean),
+  keeper:[T(8,2)].filter(Boolean),
+  plaza:plazaCells.map(([x,y])=>T(x,y)).filter(Boolean)};
+
+// props
+const props=[];
+TREES.forEach(([x,y,r])=>props.push({kind:'tree',local:[x,y,0],r}));
+props.push({kind:'sakura',local:[8,11,0],r:1.05});
+LANTERNS.forEach(([x,y])=>props.push({kind:'lantern',local:[x,y,0]}));
+props.push({kind:'falls',local:[17.5,12.3,0]});
+fieldCells.forEach(([x,y])=>props.push({kind:'crop',local:[x,y,0],type:(x+y)%2}));
+[[6.5,9.5],[9.5,9.5],[9.5,12.5],[6.5,12.5]].forEach(([x,y])=>props.push({kind:'pole',local:[x,y,0]}));
+props.forEach((t,i)=>{const big=t.kind==='tree'||t.kind==='sakura',e=big?.25:.08;const top=big?1.9*t.r:t.kind==='pole'?1.7:.8;
+  t.lo=[t.local[0]-e,t.local[1]-e,t.local[2]];t.hi=[t.local[0]+e,t.local[1]+e,t.local[2]+top];
+  if(t.kind==='falls'){t.lo=[17.5,11.6,-5];t.hi=[17.62,13,0]}t.id=1000+i});
+
+// ================= time & weather =================
+const DAY=180, HR=DAY/24, START_H=6.8;
+const clock={sim:0,hour:START_H,day:1,speed:1,lastDay:1,lastHourInt:6};
+const weather={kind:'clear',until:0,rainbowUntil:0,festUntil:0,plan:null};
+function setWeather(kind,hours){weather.kind=kind;weather.until=clock.sim+hours*HR}
+const mealName=()=>{const h=clock.hour;return h<10.5?J('朝ごはん','breakfast'):h<15.5?J('お昼ごはん','lunch'):J('夕ごはん','dinner')};
+const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s;
+let houseMealCtx=null;const houseMeal=()=>houseMealCtx&&houseMealCtx.mealName;
+
+// ================= activities =================
+const ACTS={
+  sleep:{label:J('ベッドで寝ている','sleeping in bed'),glyph:'z',indoor:true,phrase:()=>J('おやすみなさい！','Good night!')},
+  toilet:{label:J('トイレ中','using the toilet'),glyph:'…',indoor:true,dur:[.12,.2],gain:{bladder:7},
+    phrase:()=>pick([J('トイレに行きたいな。','I need to go to the bathroom.'),J('ちょっとトイレ。','Excuse me, I\'m going to the restroom.')])},
+  bath:{label:J('お風呂に入っている','taking a bath'),glyph:'♨',indoor:true,dur:[.45,.7],gain:{hygiene:2.4,fun:.4,energy:.25},
+    phrase:()=>pick([J('お風呂に入ってる。あったかい！','I\'m taking a bath. It\'s so warm!'),J('お風呂が気持ちいい。','The bath feels nice.')])},
+  brush:{label:J('歯みがき中','brushing my teeth'),glyph:'✧',indoor:true,dur:[.12,.2],gain:{hygiene:.9},
+    phrase:()=>clock.hour<12?J('毎朝、歯をみがくよ。','I brush my teeth every morning.'):J('寝る前に歯をみがかなきゃ。','I have to brush my teeth before bed.')},
+  wash:{label:J('顔を洗っている','washing my face'),glyph:'✧',indoor:true,dur:[.08,.14],gain:{hygiene:.8},
+    phrase:()=>J('顔を洗ってすっきり。','I wash my face to wake up.')},
+  cook:{label:()=>J(`${mealName().ja}を作っている`,`cooking ${mealName().en}`),glyph:'♨',indoor:true,dur:[.5,.75],gain:{fun:.15},
+    phrase:()=>J(`${mealName().ja}を作ってるよ。`,`I'm cooking ${mealName().en}.`)},
+  eat:{label:()=>J(`${(houseMeal()||mealName()).ja}を食べている`,`eating ${(houseMeal()||mealName()).en}`),glyph:'♪',indoor:true,dur:[.4,.6],gain:{food:2,social:.35,fun:.15},
+    phrase:()=>pick([J('いただきます！','Let\'s eat!'),J('おいしい！','This is delicious!'),J('おかわりある？','Can I have some more?')])},
+  snack:{label:J('冷蔵庫から飲み物を出している','getting a drink from the fridge'),glyph:'◦',indoor:true,dur:[.1,.18],gain:{food:1.4},
+    phrase:()=>pick([J('のどがかわいた。','I\'m thirsty.'),J('冷蔵庫に何があるかな？','What\'s in the fridge?')])},
+  dishes:{label:J('お皿を洗っている','doing the dishes'),glyph:'◦',indoor:true,dur:[.25,.4],gain:{},
+    phrase:()=>J('お皿を洗うね。','I\'ll do the dishes.')},
+  tv:{label:J('テレビを見ている','watching TV'),glyph:'♪',indoor:true,dur:[.8,1.4],gain:{fun:.5,energy:.08},
+    phrase:()=>pick([J('テレビを見よう。','Let\'s watch TV.'),J('何やってるかな？','What\'s on TV?'),J('この番組おもしろい！','This show is funny!')])},
+  rest:{label:J('ソファでくつろいでいる','relaxing on the sofa'),glyph:'…',indoor:true,dur:[.5,1],gain:{energy:.3,fun:.1},
+    phrase:()=>J('ちょっとひと休み。','Let me take a short break.')},
+  sit:{label:J('いすに座っている','sitting on a chair'),glyph:'…',indoor:true,dur:[.3,.5],gain:{energy:.1},phrase:()=>J('ちょっと座ろう。','Let me sit down.')},
+  field:{label:J('畑しごと','working in the field'),glyph:'✿',dur:[1,1.8],gain:{fun:.06,energy:-.08,hygiene:-.15},
+    phrase:w=>w.kid?J('てんとう虫みつけた！','I found a ladybug!'):J('野菜に水をやらなきゃ。','I need to water the vegetables.')},
+  fish:{label:J('池でつり','fishing at the pond'),glyph:'～',dur:[1.2,2.4],gain:{fun:.22,energy:.03},
+    phrase:()=>J('池に釣りに行ってくる。','I\'m going fishing at the pond.')},
+  well:{label:J('井戸で水くみ','getting water from the well'),glyph:'◦',dur:[.3,.6],gain:{fun:.05},
+    phrase:()=>J('水をくんでこなきゃ。','I need to get some water.')},
+  nap:{label:J('木かげで昼寝','napping under a tree'),glyph:'z',dur:[.8,1.5],gain:{energy:.45},
+    phrase:()=>J('木の下で昼寝しよう。','I\'ll take a nap under the tree.')},
+  chat:{label:J('おしゃべり','chatting'),glyph:'♪',dur:[.7,1.2],gain:{social:.55,fun:.1}},
+  flower:{label:J('花に水やり','watering the flowers'),glyph:'✿',dur:[.5,.9],gain:{fun:.18},
+    phrase:()=>J('お花がとってもきれい。','The flowers are so pretty.')},
+  bench:{label:J('ベンチで休憩','resting on the bench'),glyph:'…',dur:[.8,1.5],gain:{energy:.2,fun:.1},
+    phrase:w=>w.name==='ミノリ'?J('ベンチで本を読もう。','I\'ll read a book on the bench.'):J('ちょっと座ろう。','Let me sit down for a bit.')},
+  stall:{label:J('屋台で買い物','shopping at the stall'),glyph:'◇',dur:[.3,.6],gain:{food:.4,fun:.12,social:.12},
+    phrase:w=>w.keeper?J('いらっしゃい！今日は新鮮な果物だよ！','Welcome! We have fresh fruit today!'):pick([J('このりんごはいくらですか？','How much is this apple?'),J('バナナを2本ください。','Two bananas, please.')])},
+  play:{label:J('かけっこ','playing tag'),glyph:'!',dur:[.25,.5],gain:{fun:.45,energy:-.12,hygiene:-.1},random:true,run:true,
+    phrase:()=>pick([J('鬼ごっこしよう！','Let\'s play tag!'),J('つかまえてごらん！','Catch me if you can!')])},
+  walk:{label:J('さんぽ','taking a walk'),glyph:'♪',dur:[.15,.4],gain:{fun:.12},random:true,
+    phrase:()=>J('ちょっとさんぽしてくる。','I\'m going for a walk.')},
+  plaza:{label:J('広場でくつろぐ','hanging out at the plaza'),glyph:'♪',dur:[.8,1.6],gain:{social:.18,fun:.08},
+    phrase:()=>J('広場で会おうね。','Let\'s meet at the plaza.')},
+  dance:{label:J('広場で踊る','dancing at the plaza'),glyph:'♪',dur:[.8,1.6],gain:{fun:.5,social:.2,energy:-.1},
+    phrase:()=>J('一緒に踊ろう！','Let\'s dance together!')}};
+let ACT_IDS=Object.keys(ACTS);
+const labelOf=(w,id)=>{const a=ACTS[id];if(!a)return J('ひと休み','taking a break');if(id==='stall'&&w.keeper)return J('屋台の店番','running the stall');if(id==='bench'&&w.name==='ミノリ')return J('ベンチで読書','reading on the bench');if(id==='field'&&w.kid)return J('畑で虫さがし','looking for bugs in the field');return typeof a.label==='function'?a.label():a.label};
+
+// ================= villagers =================
+const PEOPLE=[
+  {name:'ハナ',en:'Hana',home:'A',bed:0,cloak:[232,112,100],cap:[255,246,236],persona:J('元気いっぱいで花が大好き。料理も得意。','Cheerful and loves flowers. A good cook.'),likes:{flower:.6,field:.3,chat:.3,cook:.6},wake:6.1,sleep:21.8,speed:1.5,at:[2,4]},
+  {name:'ゴロウ',en:'Goro',home:'A',bed:1,cloak:[226,170,84],cap:[120,158,206],persona:J('無口な力持ちの職人。畑と水くみが日課。','A quiet, strong craftsman. Works in the field every day.'),likes:{field:.6,well:.4,chat:-.2,tv:.3},wake:5.5,sleep:21.5,speed:1.2,at:[2,9]},
+  {name:'ケンタ',en:'Kenta',home:'A',bed:2,cloak:[110,160,220],cap:[244,196,110],persona:J('いたずら好きの子ども。テレビとかけっこが好き。','A playful kid who loves TV and running around.'),likes:{play:.9,walk:.3,tv:.6,fish:.2,bench:-.4,field:-.3},wake:7,sleep:20.5,speed:1.75,kid:true,at:[1,5]},
+  {name:'ソラ',en:'Sora',home:'B',bed:0,cloak:[86,170,168],cap:[244,196,110],persona:J('のんびり屋の釣り好き。昼寝の名人。','Easygoing and loves fishing. A champion napper.'),likes:{fish:.7,nap:.5,rest:.3,field:-.2},wake:7.2,sleep:22.5,speed:1.2,at:[13,9]},
+  {name:'ミノリ',en:'Minori',home:'B',bed:1,cloak:[150,122,196],cap:[252,236,222],persona:J('物静かな読書家。きれい好きで皆の相談役。','A quiet bookworm. Tidy, and everyone asks her for advice.'),likes:{bench:.7,bath:.4,flower:.2,cook:.4},wake:6.3,sleep:22.8,speed:1.25,at:[12,5]},
+  {name:'ユイ',en:'Yui',home:'B',bed:2,cloak:[236,150,180],cap:[255,240,214],persona:J('明るい商売人。屋台を切り盛りしていて噂話が好き。','A bright shopkeeper who runs the stall and loves gossip.'),likes:{stall:.6,chat:.4,tv:.2},wake:6,sleep:22,speed:1.4,keeper:true,at:[8,4]}];
+const walkers=PEOPLE.map((p,i)=>{const h=houses[p.home];const w={...p,kind:'person',house:h,tile:T(...p.at)||ground[0],
+  link:null,t:0,phase:i*1.3,wait:.05*HR*i,path:[],goal:null,target:null,act:null,lastDir:[0,1],lastAct:null,
+  needs:{energy:.8,food:.35+.1*hash(i),social:.45+.3*hash(i+3),fun:.5+.3*hash(i+7),bladder:.35+.4*hash(i+11),hygiene:.55+.3*hash(i+13)},
+  mood:null,moodUntil:0,say:null,forced:null,directive:null,memory:[],rel:{},chatT:0,turn:0,brushedAt:-99*HR,washedAt:-99*HR};h.residents.push(w);return w});
+walkers.forEach(w=>PEOPLE.forEach(o=>{if(o.name!==w.name)w.rel[o.name]=(w.home===o.home?.55:.35)+.15*hash(w.name.length*7+o.name.length)}));
+const cat={name:'タマ',en:'Tama',kind:'cat',tile:T(9,8),speed:1.9,cloak:[236,168,110],cap:[255,236,214],persona:J('村の猫。気まぐれ。','The village cat. Does whatever it likes.'),
+  link:null,t:0,phase:2,wait:.5,path:[],goal:null,target:null,act:null,lastDir:[1,0],say:null,forced:null,memory:[],needs:null};
+walkers.push(cat);
+const people=walkers.filter(w=>w.kind==='person');
+const byName=n=>walkers.find(w=>w.name===n||(w.en&&w.en.toLowerCase()===String(n).toLowerCase()));
+const nameOf=w=>L==='en'?w.en:w.name;
+
+function bfs(a,b){if(a===b)return[];const prev=new Map([[a,null]]),q=[a];while(q.length){const o=q.shift();if(o===b){const p=[];let c=b;while(c!==a){p.unshift(c);c=prev.get(c)}return p}if(o.stop&&o!==a)continue;for(const l of o.links)if(!prev.has(l.to)){prev.set(l.to,o);q.push(l.to)}}return null}
+const directiveOn=w=>w.directive&&clock.sim<w.directive.until;
+const sleepTime=w=>{const h=clock.hour;const s=h>=w.sleep||h<w.wake;return s&&!(directiveOn(w)&&w.directive.goal!=='sleep'&&w.directive.goal!=='home')};
+const taken=w=>{const s=new Set();walkers.forEach(o=>{if(o===w)return;if(o.target)s.add(o.target);s.add(o.link?o.link.to:o.tile)});return s};
+const remember=(w,txt)=>{if(!w.memory)return;w.memory.push(`${hhmm(clock.hour)} ${txt}`);if(w.memory.length>8)w.memory.shift()};
+const say=(w,phrase,secs=4)=>{if(!phrase)return;w.say={...phrase,until:S.time+secs};addPhrase(phrase)};
+// villagers who start the day still in bed
+people.forEach(w=>{if(sleepTime(w)){w.tile=w.house.spots.beds[w.bed];w.act={id:'sleep'};w.wait=(((w.wake-clock.hour)%24+24)%24)*HR;w.lastDir=[0,1]}});
+
+function spotsFor(w,id){
+  const h=w.house;
+  switch(id){
+    case'sleep':return[h.spots.beds[w.bed]];case'toilet':return h.spots.toilet;case'bath':return h.spots.tub;case'brush':case'wash':return h.spots.basin;
+    case'cook':return h.spots.stove;case'eat':return h.spots.chairs;case'snack':return h.spots.fridge;case'dishes':return h.spots.sink;
+    case'tv':case'rest':return h.spots.sofa;case'stall':return w.keeper?SPOTS.keeper:SPOTS.stall;case'dance':return SPOTS.plaza;
+    default:return SPOTS[id]||[]}
+}
+function planAct(w,id){
+  const a=ACTS[id];if(!a)return null;
+  const goal={id,dur:a.dur,run:a.run};
+  const busy=taken(w);let target;
+  if(a.random){const here=w.tile.pos,c=ground.filter(t=>!busy.has(t)&&Math.abs(t.pos[0]-here[0])+Math.abs(t.pos[1]-here[1])<(a.run?7:10));target=pick(c.length?c:ground)}
+  else{const c=spotsFor(w,id).filter(t=>t&&!busy.has(t));if(!c.length)return null;target=pick(c)}
+  return{goal,target};
+}
+function setPlan(w,p){if(!p)return false;const path=bfs(w.tile,p.target);if(!path)return false;w.path=path;w.goal=p.goal;w.target=p.target;return true}
+const mealWindow=h=>(h>=6.3&&h<9)||(h>=11.5&&h<13.5)||(h>=17.5&&h<20);
+
+function score(w,id){
+  const a=ACTS[id],h=clock.hour,n=w.needs,hs=w.house;let s=0;
+  if(id==='sleep'||id==='sit')return-99;
+  switch(id){
+    case'toilet':s=n.bladder<.22?5:n.bladder<.45?1.1:-3;break;
+    case'eat':s=hs.mealReady>clock.sim&&n.food<.85?2.6+(1-n.food)*2:-3;break;
+    case'snack':s=n.food<.3?1.4+(.3-n.food)*5:(n.food<.55&&Math.random()<.15?.6:-2);break;
+    case'cook':s=!w.kid&&mealWindow(h)&&hs.mealReady<clock.sim&&!hs.cooking&&hs.residents.some(o=>o.needs.food<.7)?3.2:-3;break;
+    case'dishes':s=hs.dirty&&!w.kid?1.4:-3;break;
+    case'brush':{const morning=h>=w.wake&&h<w.wake+2,night=h>=w.sleep-1.2&&h<w.sleep;s=(morning||night)&&clock.sim-w.brushedAt>3*HR?2.6:-3;break}
+    case'wash':s=h>=w.wake&&h<w.wake+1.2&&clock.sim-w.washedAt>6*HR?2:-3;break;
+    case'bath':s=(h>=17.5||h<1)&&n.hygiene<.65?1.7+(1-n.hygiene)*1.6:n.hygiene<.18?1.6:-2;break;
+    case'tv':s=(h>=18?.8:-.1)+(1-n.fun)*.9;break;
+    case'rest':s=(1-n.energy)*1.2-.3+(weather.kind!=='clear'?.4:0);break;
+    default:{for(const k in a.gain){const g=a.gain[k];s+=g>0?g*(1-n[k])*2.4:g*(1-n[k])*1.4}
+      if(id==='dance')s+=clock.sim<weather.festUntil||(directiveOn(w)&&w.directive.goal==='dance')?1.2:-99;
+      if(id==='field'&&(h<6||h>17))s-=2;
+      if(id==='fish'&&h>=14&&h<17)s+=.2;
+      if(id==='nap')s+=h>=12&&h<15?.35:-.25;
+      if(id==='stall'){if(w.keeper)s+=h>=8&&h<18?1.1:-2;else{const k=people.find(o=>o.keeper);s+=k&&k.act&&k.act.id==='stall'?.4:-.4}}
+      if(id==='play'&&!w.kid)s-=.8;
+      if((h>=19.5||h<5.5)&&!(id==='dance'&&clock.sim<weather.festUntil))s-=2.2;
+      if(weather.kind==='rain')s-=w.kid?.5:1.7;
+      if(weather.kind==='snow')s+=w.kid?.4:-.6;
+      if(directiveOn(w)&&w.directive.goal==='home')s-=4;
+      if(a.created!=null)s+=Math.max(0,1.6-(clock.sim-a.created)/(10*HR));
+    }
+  }
+  s+=(w.likes[id]||0);
+  if(id===w.lastAct&&id!=='eat')s-=.6;
+  if(directiveOn(w)){if(w.directive.goal===id)s+=6;else if(w.directive.goal==='home'&&a.indoor)s+=.8;else s-=.3}
+  return s+Math.random()*.4;
+}
+
+function chatPartner(w){
+  let best=null,bs=-1;
+  people.forEach(o=>{if(o===w||o.player||sleepTime(o)||o.forced||directiveOn(o)||o.tile.stop||o.link)return;
+    if((o.act&&(o.act.id==='chat'||(ACTS[o.act.id]&&ACTS[o.act.id].indoor)))||(o.goal&&o.goal.id==='chat'))return;
+    if(o.keeper&&o.act&&o.act.id==='stall')return;if(o.tile.indoor!==w.tile.indoor&&Math.random()<.5)return;
+    const s=w.rel[o.name]+(1-o.needs.social)*.6+Math.random()*.3;if(s>bs){bs=s;best=o}});
+  return best;
+}
+function startChat(w){
+  const o=chatPartner(w);if(!o)return false;
+  const busy=taken(w),mx=(w.tile.pos[0]+o.tile.pos[0])/2,my=(w.tile.pos[1]+o.tile.pos[1])/2;
+  const sameHouse=w.tile.house&&w.tile.house===o.tile.house;
+  const pool=(sameHouse?w.tile.house.spots.floor:ground).filter(t=>!busy.has(t));
+  const cand=pool.sort((a,b)=>Math.hypot(a.pos[0]-mx,a.pos[1]-my)-Math.hypot(b.pos[0]-mx,b.pos[1]-my));
+  for(const t of cand.slice(0,30)){const nb=t.links.map(l=>l.to).find(n=>!n.stop&&n.house===t.house&&!busy.has(n));if(!nb)continue;
+    const g1={id:'chat',dur:ACTS.chat.dur,partner:o,lead:true},g2={id:'chat',dur:ACTS.chat.dur,partner:w};
+    if(!setPlan(w,{goal:g1,target:t}))return false;o.forced={goal:g2,target:nb};return true}
+  return false;
+}
+function bedtime(w){
+  if(w.needs.bladder<.6&&setPlan(w,planAct(w,'toilet')))return true;
+  if(clock.sim-w.brushedAt>4*HR&&setPlan(w,planAct(w,'brush')))return true;
+  return false;
+}
+function chooseGoal(w){
+  if(w.kind==='cat')return catGoal(w);
+  if(sleepTime(w)||(directiveOn(w)&&w.directive.goal==='sleep')){if(bedtime(w))return;if(setPlan(w,planAct(w,'sleep')))return;w.wait=.2*HR;return}
+  const ranked=ACT_IDS.map(id=>[id,score(w,id)]).sort((a,b)=>b[1]-a[1]);
+  for(const[id,s]of ranked){if(s<-50)break;
+    if(id==='chat'){if(startChat(w))return;continue}
+    if(setPlan(w,planAct(w,id)))return;
+  }
+  w.wait=.3*HR;
+}
+function catGoal(w){
+  const h=clock.hour,night=h>=21||h<6,hA=houses.A;
+  if(night){const t=hA.spots.sofa.find(t=>!taken(w).has(t))||pick(hA.spots.floor);setPlan(w,{goal:{id:'catsleep',dur:[2,4]},target:t});return}
+  if(weather.kind==='rain'){setPlan(w,{goal:{id:'cat',dur:[.5,1]},target:pick(hA.spots.floor)});return}
+  const pool=Math.random()<.25?pick([hA,houses.B]).spots.floor:ground;
+  setPlan(w,{goal:{id:'cat',dur:[.3,1]},target:pick(pool)});
+}
+
+function startAct(w,g){
+  w.act=g;
+  const a=ACTS[g.id];
+  if(g.id==='sleep'){const left=((w.wake-clock.hour)%24+24)%24;w.wait=(directiveOn(w)&&w.directive.goal==='sleep'?Math.max(.3,(w.directive.until-clock.sim)/HR):Math.max(.3,left))*HR;say(w,a.phrase(w),3);w.lastDir=[0,1];return}
+  w.wait=rand(g.dur||[.3,.6])*HR;
+  const hs=g.hs||w.house;if(!hs)return;
+  if(g.id==='cook'){hs.cooking=w;hs.cookName=mealName()}
+  if(g.id==='tv')hs.tvOn=true;
+  if(g.id==='chat'&&g.partner){const d=[g.partner.tile.pos[0]-w.tile.pos[0],g.partner.tile.pos[1]-w.tile.pos[1]];if(d[0]||d[1])w.lastDir=[Math.sign(d[0]),Math.sign(d[1])];return}
+  if(w.tile.furn&&w.tile.furn.face)w.lastDir=w.tile.furn.face;
+  if(a&&a.phrase&&(w.player||Math.random()<.8)){houseMealCtx=hs;say(w,a.phrase(w));houseMealCtx=null}
+  if(g.id==='brush')w.brushedAt=clock.sim;if(g.id==='wash')w.washedAt=clock.sim;
+}
+function finishAct(w,interrupted){
+  const a=w.act;w.act=null;w.target=null;if(!a||!w.house)return;
+  w.lastAct=a.id;const hs=a.hs||w.house;
+  if(a.id==='sleep'){w.needs.energy=Math.max(w.needs.energy,.92);if(!interrupted)say(w,pick([J('おはよう！よく眠れた。','Good morning! I slept well.'),J('ふぁ〜、おはよう。','Yawn... good morning.')]));remember(w,'ぐっすり眠った')}
+  if(a.id==='toilet'&&!interrupted&&Math.random()<.6)say(w,J('トイレを流して、手を洗おう。','Flush the toilet and wash your hands.'));
+  if(a.id==='cook'){hs.cooking=null;if(!interrupted){hs.mealReady=clock.sim+2.5*HR;hs.mealName=hs.cookName;say(w,J(`${hs.mealName.ja}ができたよ！`,`${cap(hs.mealName.en)} is ready!`),5);log(J(`${w.name}が${hs.mealName.ja}を作った`,`${w.en} made ${hs.mealName.en}.`))}}
+  if(a.id==='eat'){hs.dirty=true;remember(w,'ごはんを食べた');if(!interrupted&&Math.random()<.5)say(w,J('ごちそうさまでした。','Thank you for the meal. That was good.'))}
+  if(a.id==='dishes'&&!interrupted)hs.dirty=false;
+  if(a.id==='tv'&&!walkers.some(o=>o!==w&&o.act&&o.act.id==='tv'&&(o.act.hs||o.house)===hs))hs.tvOn=false;
+  if(a.id==='bath'&&!interrupted)say(w,J('さっぱりした！','I feel so clean!'));
+  if(a.id==='chat'&&a.partner){const p=a.partner;
+    w.rel[p.name]=clamp((w.rel[p.name]||.4)+.05,0,1);
+    if(a.lead){remember(w,`${p.name}とおしゃべりした`);remember(p,`${w.name}とおしゃべりした`);if(Math.random()<.5)log(J(`${w.name}と${p.name}がおしゃべりした`,`${w.en} and ${p.en} had a chat.`))}
+    if(p.act&&p.act.id==='chat'&&p.act.partner===w&&p.wait>0)p.wait=Math.min(p.wait,.05)}
+  if(a.id==='fish'&&Math.random()<.5){remember(w,'魚を釣った');say(w,pick([J('釣れた！','I caught one!'),J('大物だ！','It\'s a big one!')]))}
+}
+function applyForced(w){
+  const f=w.forced;w.forced=null;
+  if(w.act)finishAct(w,true);
+  w.act=null;w.wait=0;w.path=[];w.goal=null;w.target=null;
+  if(!setPlan(w,f)){if(w.tile===f.target){w.goal=f.goal;w.target=f.target}}
+}
+function updateWalker(w,sdt){
+  const dtH=sdt/HR,n=w.needs;
+  if(n){
+    const asleep=w.act&&w.act.id==='sleep'&&!w.link;
+    n.energy+=(asleep?.14:-.045)*dtH;n.food-=(asleep?.015:.055)*dtH;n.social-=(asleep?.005:.05)*dtH;n.fun-=(asleep?0:.05)*dtH;n.bladder-=(asleep?.03:.11)*dtH;n.hygiene-=(asleep?.01:.035)*dtH;
+    if(w.act&&!w.link&&w.wait>0){const g=ACTS[w.act.id]&&ACTS[w.act.id].gain;if(g)for(const k in g)n[k]+=g[k]*dtH}
+    for(const k in n)n[k]=clamp(n[k],0,1);
+    if(n.bladder<.06&&!w.player&&!(w.act&&w.act.id==='toilet')&&!(w.goal&&w.goal.id==='toilet')&&!w.link&&!w.forced){const p=planAct(w,'toilet');if(p){w.forced=p;say(w,J('もれちゃう〜！','I really need to go!'))}}
+  }
+  if(w.player){playerTick(w,sdt);return}
+  if(w.link){const run=w.goal&&w.goal.run;w.phase+=(run?13:9)*sdt;w.t+=sdt*w.speed*(run?1.7:1);if(w.t>=1){w.lastDir=w.link.dir;w.tile=w.link.to;w.link=null;w.t=0}else return}
+  if(w.forced){applyForced(w);return}
+  if(w.wait>0){w.wait-=sdt;if(w.wait<=0&&w.act)finishAct(w,false);return}
+  if(w.path.length){const nx=w.path.shift(),Lk=w.tile.links.find(l=>l.to===nx);if(!Lk){w.path=[];w.goal=null;w.target=null;return}w.link=Lk;w.t=0;return}
+  if(w.goal){const g=w.goal;w.goal=null;startAct(w,g);return}
+  w.act=null;w.target=null;
+  chooseGoal(w);
+}
+
+function walkerPos(w){if(w.player&&w.ppos)return[w.ppos[0],w.ppos[1],w.pz];const e=w.tile.pos;if(!w.link)return e.slice();const l=w.link,i=w.t;return[e[0]+l.dir[0]*i,e[1]+l.dir[1]*i,e[2]+smooth((i-.15)/.5)*l.dz]}
+function faceOf(w){
+  let d=w.link?w.link.dir:w.lastDir;
+  if(!w.link&&w.act&&w.act.id==='chat'&&w.act.partner){const p=w.act.partner.tile.pos;d=[p[0]-w.tile.pos[0],p[1]-w.tile.pos[1]]}
+  if(!w.link&&w.act&&w.act.id==='dance')return Math.sin(S.time*4+w.phase)>0?1:-1;
+  return dot([d[0],d[1],0],cam.r)>=0?1:-1}
+function moodOf(w){
+  if(!w.needs)return'calm';
+  if(w.mood&&clock.sim<w.moodUntil)return w.mood;
+  const n=w.needs;if(n.energy<.18)return'tired';const avg=(n.energy+n.social+n.fun+n.food+n.hygiene)/5;return avg>.62?'happy':avg<.32?'sad':'calm'}
+function statusOf(w){
+  if(w.kind==='cat'){if(w.act&&w.act.id==='catsleep'&&!w.link)return J('すやすや眠っている','sleeping');if(w.link||w.goal)return J('うろうろ','wandering around');return J('ひなたで毛づくろい','grooming in the sun')}
+  const g=w.goal;
+  if(g){if(g.id==='chat')return J(`${g.partner.name}とおしゃべりしに行く`,`going to chat with ${g.partner.en}`);const l=labelOf(w,g.id);return J(`${l.ja}へ`,`on the way: ${l.en}`)}
+  if(w.act){if(w.act.id==='chat')return J(`${w.act.partner.name}とおしゃべり`,`chatting with ${w.act.partner.en}`);houseMealCtx=w.house;const l=labelOf(w,w.act.id);houseMealCtx=null;return l}
+  return J('ひと休み','taking a break');
+}
+
+// ================= sorting =================
+const corner=(lo,hi,h)=>[h&1?hi[0]:lo[0],h&2?hi[1]:lo[1],h&4?hi[2]:lo[2]];
+function prepBox(b){
+  b.skip=false;b.cut=false;let hi=b.hi,lo=b.lo;
+  if(b.st&&b.st.k<1){lo=[b.lo[0],b.lo[1],b.lo[2]*b.st.k];hi=[b.hi[0],b.hi[1],Math.max(lo[2]+.01,b.hi[2]*b.st.k)]}
+  if(b.exteriorOnly&&interior){b.skip=true;return}
+  const cn=b.cutN||b.cutWith;
+  if(cn&&interior&&dot(cn,cam.d)>.02){if(b.cutWith||b.lo[2]>FLOOR+.2){b.skip=true;return}hi=[b.hi[0],b.hi[1],FLOOR+.2];b.cut=true}
+  b.wc=[];for(let h=0;h<8;h++)b.wc.push(corner(lo,hi,h));b.sc=b.wc.map(project);
+  let x0=1/0,y0=1/0,x1=-1/0,y1=-1/0;for(const s of b.sc){x0=Math.min(x0,s[0]);x1=Math.max(x1,s[0]);y0=Math.min(y0,s[1]);y1=Math.max(y1,s[1])}
+  b.bb=[x0,y0,x1,y1];b.wlo=lo;b.whi=hi;b.depth=dot([(lo[0]+hi[0])/2,(lo[1]+hi[1])/2,(lo[2]+hi[2])/2],cam.d)}
+function prepItem(t,lo,hi){t.wlo=lo;t.whi=hi;let x0=1/0,y0=1/0,x1=-1/0,y1=-1/0;for(let h=0;h<8;h++){const s=project([h&1?hi[0]:lo[0],h&2?hi[1]:lo[1],h&4?hi[2]:lo[2]]);x0=Math.min(x0,s[0]);x1=Math.max(x1,s[0]);y0=Math.min(y0,s[1]);y1=Math.max(y1,s[1])}const p=cam.scale*.5;t.bb=[x0-p,y0-p,x1+p,y1+p*.3];t.depth=dot([(lo[0]+hi[0])/2,(lo[1]+hi[1])/2,(lo[2]+hi[2])/2],cam.d)}
+function sep(t,e){if(Math.abs(cam.d[2])>1e-4&&t.whi[0]>t.wlo[0]+.02&&e.whi[0]>e.wlo[0]+.02&&t.wlo[0]<e.whi[0]-.02&&e.wlo[0]<t.whi[0]-.02&&t.wlo[1]<e.whi[1]-.02&&e.wlo[1]<t.whi[1]-.02){const s=cam.d[2]>0?1:-1;if(e.wlo[2]>=t.whi[2]-1e-6)return s;if(t.wlo[2]>=e.whi[2]-1e-6)return-s}
+  let l=0,i=-1/0;for(let o=0;o<3;o++){const a=cam.d[o];if(Math.abs(a)<1e-4)continue;const n=a>0?e.wlo[o]-t.whi[o]:t.wlo[o]-e.whi[o],r=a>0?t.wlo[o]-e.whi[o]:e.wlo[o]-t.whi[o];if(n>-1e-6&&n*Math.abs(a)+1>i){i=n*Math.abs(a)+1;l=1}if(r>-1e-6&&r*Math.abs(a)+1>i){i=r*Math.abs(a)+1;l=-1}}return l===0?(t.depth<e.depth?1:-1):l}
+function topo(t){const e=t.length,inD=new Array(e).fill(0),adj=t.map(()=>[]);
+  for(let o=0;o<e;o++){const a=t[o];for(let n=o+1;n<e;n++){const b=t[n];if(a.bb[2]<b.bb[0]||b.bb[2]<a.bb[0]||a.bb[3]<b.bb[1]||b.bb[3]<a.bb[1])continue;if(sep(a,b)>0){adj[o].push(n);inD[n]++}else{adj[n].push(o);inD[o]++}}}
+  const out=[],done=new Array(e).fill(false);let q=[];for(let i=0;i<e;i++)if(inD[i]===0)q.push(i);
+  while(out.length<e){if(!q.length){let i=-1;for(let k=0;k<e;k++)if(!done[k]&&(i<0||t[k].depth<t[i].depth))i=k;q.push(i);inD[i]=0}
+    q.sort((x,y)=>t[y].depth-t[x].depth);const r=q.pop();if(done[r])continue;done[r]=true;out.push(t[r]);for(const k of adj[r]){inD[k]--;if(inD[k]===0&&!done[k])q.push(k)}}
+  return out}
+
+// ================= drawing: boxes =================
+const FACES=[{n:[1,0,0],o:3,u:1,v:7,key:'px'},{n:[0,1,0],o:2,u:3,v:6,key:'py'},{n:[-1,0,0],o:0,u:2,v:4,key:'nx'},{n:[0,-1,0],o:1,u:0,v:5,key:'ny'},{n:[0,0,1],o:4,u:5,v:6,key:'top'}];
+function faceXform(e,l,i){const o=S.dpr;N.setTransform(o*(l[0]-e[0]),o*(l[1]-e[1]),o*(i[0]-e[0]),o*(i[1]-e[1]),o*e[0],o*e[1])}
+function arch(t,e,l,i){const o=l/2;N.moveTo(t-o,e);N.lineTo(t-o,e+i-o);for(let k=0;k<=10;k++){const a=Math.PI-k/10*Math.PI;N.lineTo(t+Math.cos(a)*o,e+i-o+Math.sin(a)*o)}N.lineTo(t+o,e);N.closePath()}
+function rr(x,y,w,h,r){N.beginPath();if(N.roundRect)N.roundRect(x,y,w,h,r);else N.rect(x,y,w,h)}
+const faceU=(b,k,X)=>k==='px'?b.hi[1]-X:k==='nx'?X-b.lo[1]:k==='py'?X-b.lo[0]:b.hi[0]-X;
+const houseAmb=h=>h?mix(mix(ambOut,[.5,.5,.62],nightK*.4),[1.04,.95,.84],h.glow):ambOut;
+
+function drawGround(b,f,W,H){
+  const a=b.lo,n=f.n;snowOn=true;
+  N.fillStyle=rgb(shade(snowy(P.path),n));for(const[x,y]of pathCells){rr(x-a[0]-.46,y-a[1]-.46,.92,.92,.18);N.fill()}
+  N.fillStyle=rgb(shade(snowy(P.plaza),n));rr(7-a[0]-.5,10-a[1]-.5,3,3,.3);N.fill();
+  N.strokeStyle=rgb(shade(snowy(P.plaza),n),.9);N.lineWidth=.03;for(let k=1;k<6;k++){N.beginPath();N.moveTo(6.5-a[0]+k*.5,9.5-a[1]);N.lineTo(6.5-a[0]+k*.5,12.5-a[1]);N.moveTo(6.5-a[0],9.5-a[1]+k*.5);N.lineTo(9.5-a[0],9.5-a[1]+k*.5);N.stroke()}
+  for(const[x,y]of fieldCells){N.fillStyle=rgb(shade(snowy(P.soil),n));rr(x-a[0]-.46,y-a[1]-.46,.92,.92,.12);N.fill();N.fillStyle=rgb(shade(snowy(P.soil),n),.84);for(let k=0;k<3;k++)N.fillRect(x-a[0]-.36,y-a[1]-.28+k*.26,.72,.05)}
+  for(const[x,y]of bedCells){N.fillStyle=rgb(shade(snowy([160,128,104]),n));rr(x-a[0]-.44,y-a[1]-.44,.88,.88,.2);N.fill();
+    for(let k=0;k<9;k++){const c=[[255,150,170],[255,214,110],[200,160,240],[255,255,255]][k%4];N.fillStyle=rgbA(c);N.beginPath();N.arc(x-a[0]-.3+hash(k*3+x*7+y)*.6,y-a[1]-.3+hash(k*5+y*11+x)*.6,.09,0,2*Math.PI);N.fill()}}
+  const px=POND.x-a[0],py=POND.y-a[1];
+  N.fillStyle=rgb(shade(snowy([214,200,170]),n));N.beginPath();N.ellipse(px,py,POND.rx+.16,POND.ry+.16,0,0,2*Math.PI);N.fill();
+  N.fillStyle=rgb(mix(A(P.water),[60,80,140],nightK*.35));N.beginPath();N.ellipse(px,py,POND.rx,POND.ry,0,0,2*Math.PI);N.fill();
+  N.strokeStyle=rgb(A([226,244,252]),1,.7);N.lineWidth=.04;
+  for(let k=0;k<4;k++){const ph=(S.time*.35+k/4)%1;N.globalAlpha=1-ph;N.beginPath();N.ellipse(px-.6+k*.4,py+.2-k*.2,.15+ph*.5,.08+ph*.3,0,0,2*Math.PI);N.stroke()}N.globalAlpha=1;
+  if(rainK>.05){N.strokeStyle=`rgba(230,240,255,${.6*rainK})`;for(let k=0;k<10;k++){const ph=(S.time*1.6+hash(k))%1,rx=px+(hash(k*3)-.5)*2.6,ry=py+(hash(k*7)-.5)*1.8;N.globalAlpha=1-ph;N.beginPath();N.ellipse(rx,ry,ph*.25,ph*.15,0,0,2*Math.PI);N.stroke()}N.globalAlpha=1}
+  N.fillStyle=rgb(shade([120,186,130],n));[[-.9,.4],[-.4,.8],[.5,-.4]].forEach(([dx,dy])=>{N.beginPath();N.arc(px+dx,py+dy,.14,.3,2*Math.PI-.1);N.lineTo(px+dx,py+dy);N.fill()});
+  const open=(wx,wy)=>{const k=key(Math.round(wx),Math.round(wy));return!pathSet.has(k)&&!plazaSet.has(k)&&!fieldSet.has(k)&&!bedSet.has(k)&&!houseCells.has(k)&&!inPond(wx,wy,.2)&&!(Math.round(wx)===8&&Math.round(wy)===11)};
+  N.fillStyle=rgb(shade(snowy(P.grass),n),.9);
+  for(let t=0;t<W*H*1.2;t++){const x=hash(1.7*t+b.id)*W,y=hash(2.3*t+3*b.id)*H;if(!open(x+a[0],y+a[1]))continue;N.beginPath();N.arc(x,y,.08+.06*hash(t),0,2*Math.PI);N.fill()}
+  if(snowCover<.6)for(let t=0;t<W*H*.3;t++){const x=hash(5.3*t+b.id)*W,y=hash(4.1*t+7*b.id)*H;if(!open(x+a[0],y+a[1]))continue;N.fillStyle=rgbA(t%3===0?[255,236,150]:t%3===1?[255,214,226]:[255,255,255],1,.9*(1-snowCover));N.beginPath();N.arc(x,y,.05,0,2*Math.PI);N.fill()}
+  if(festK>0){N.fillStyle=`rgba(255,200,210,${.8*festK})`;for(let k=0;k<26;k++){N.beginPath();N.arc(7-a[0]-.4+hash(k*9)*2.8,10-a[1]-.4+hash(k*13)*2.8,.07,0,2*Math.PI);N.fill()}}
+  snowOn=false;
+}
+function drawFloor(b,f){
+  const h=b.house,n=f.n;
+  for(let c=0;c<6;c++)for(let r=0;r<6;r++){const room=roomOf(c,r),x=c,y=r;
+    if(room==='bath'||room==='kitchen'){const col=room==='bath'?P.tileB:P.tileK;for(let i=0;i<2;i++)for(let j=0;j<2;j++){N.fillStyle=rgb(shade((i+j)%2?col:mix(col,[255,255,255],.35),n));N.fillRect(x+i*.5,y+j*.5,.51,.51)}}
+    else{N.fillStyle=rgb(shade(room==='bed'?[214,178,140]:P.floorW,n));N.fillRect(x,y,1.01,1.01);N.fillStyle=rgb(shade(P.wood,n),.5);for(let k=0;k<4;k++)N.fillRect(x,y+k*.25,1,.02)}}
+  N.fillStyle=rgb(shade(h.id==='A'?[214,140,140]:[140,170,200],n));rr(1.1,3.2,1.4,1.6,.25);N.fill();N.strokeStyle=rgb(shade([255,240,220],n));N.lineWidth=.04;rr(1.2,3.3,1.2,1.4,.2);N.stroke();
+  N.fillStyle=rgb(shade([180,210,230],n));rr(5.15,1.25,.7,.45,.1);N.fill();
+}
+function drawDeco(b,f,W,H,base,c){
+  const r0=b.deco[f.key];const list=Array.isArray(r0)?r0:[{type:r0}];
+  for(const r of list)switch(r.type){
+    case'wallOut':{if(b.cut)break;const hs=b.house;for(const X of b.wall.wins){const u=faceU(b,f.key,X);if(u<.4||u>W-.4)continue;
+      N.fillStyle=rgbA(P.wallTrim);N.fillRect(u-.36,.5,.72,.07);N.fillStyle=rgbA(P.recess);N.beginPath();arch(u,.57,.56,.62);N.fill();
+      N.fillStyle=rgb(mix(A(P.glass),[255,206,126],hs.glow*.95),1,.6+.4*hs.glow);N.beginPath();arch(u+.04,.6,.4,.52);N.fill();
+      N.fillStyle=rgbA(P.wallTrim,1,.85);N.fillRect(u+.01,.6,.04,.44);N.fillRect(u-.16,.82,.4,.04)}
+      N.fillStyle=rgbA(P.wallTrim,.98);N.fillRect(0,H-.22,W,.1);break}
+    case'wallIn':{if(b.cut)break;N.fillStyle=rgb(shade(b.house.paper,f.n));N.fillRect(0,0,W,H);
+      N.fillStyle=rgb(shade(mix(b.house.paper,[200,170,150],.25),f.n),.5);for(let t=.15;t<W;t+=.3)N.fillRect(t,.08,.02,H-.2);
+      N.fillStyle=rgb(shade(P.wood,f.n));N.fillRect(0,0,W,.08);N.fillStyle=rgb(shade(P.wallTrim,f.n));N.fillRect(0,H-.08,W,.08);
+      for(const X of b.wall.wins){const u=faceU(b,f.key,X);if(u<.4||u>W-.4)continue;
+        N.fillStyle=rgb(shade(P.wallTrim,f.n));N.fillRect(u-.33,.55,.66,.7);N.fillStyle=rgb(mix(skyMid,[255,255,255],.15*dayK));N.fillRect(u-.27,.61,.54,.58);
+        N.fillStyle=rgb(shade(P.wallTrim,f.n));N.fillRect(u-.015,.61,.03,.58);N.fillRect(u-.27,.89,.54,.03);
+        N.fillStyle=rgb(shade(b.house.id==='A'?[236,170,160]:[160,200,190],f.n),.9);N.fillRect(u-.38,.5,.12,.78);N.fillRect(u+.26,.5,.12,.78)}
+      break}
+    case'doorleaf':N.fillStyle=rgb(c,.85);N.fillRect(.08,.1,W-.16,H-.25);N.fillStyle=rgbA(P.gold);N.fillRect(W-.22,H*.45,.07,.07);break;
+    case'dentils':N.fillStyle=rgb(c,.8);for(let t=.1;t<W;t+=.3)N.fillRect(t,.04,.14,.16);break;
+    case'strata':N.fillStyle=rgb(c,.9,.7);for(let t=0;t<4;t++){const l=H*(.2+.22*t);N.beginPath();N.moveTo(0,l);for(let o=0;o<=W+.01;o+=.5)N.lineTo(o,l+.06*Math.sin(1.7*o+2*t+b.id));N.lineTo(W,l-.05);N.lineTo(0,l-.05);N.closePath();N.fill()}
+      if(b.top===P.grass){snowOn=true;N.fillStyle=rgb(shade(snowy(P.grass),[0,0,1]),.96);snowOn=false;N.beginPath();N.moveTo(0,H);for(let t=0;t<=W+.01;t+=.25)N.lineTo(t,H-.12-.1*hash(3*t+b.id));N.lineTo(W,H);N.closePath();N.fill()}break;
+    case'roof':N.fillStyle=rgb(c,.92);for(let t=.25;t<W;t+=.5)N.fillRect(t,0,.05,H);break;
+    case'flue':N.fillStyle=rgbA([90,70,90]);N.fillRect(.1,.1,W-.2,H-.2);break;
+    case'wellwater':N.fillStyle=rgbA([70,110,150]);N.beginPath();N.arc(W/2,H/2,Math.min(W,H)*.36,0,2*Math.PI);N.fill();break;
+    case'awning':for(let t=0;t<W;t+=.22){N.fillStyle=(Math.round(t/.22)%2)?rgb(c):rgb(shade(P.coral,f.n));N.fillRect(t,0,.22,H)}break;
+    case'awningEdge':for(let t=0;t<W;t+=.22){N.fillStyle=(Math.round(t/.22)%2)?rgbA(P.cream):rgbA(P.coral);N.beginPath();N.moveTo(t,H);N.lineTo(t+.22,H);N.lineTo(t+.11,-.05);N.fill()}break;
+    case'stallfront':N.fillStyle=rgbA([236,190,90]);[[.2,.36],[.45,.4],[.7,.34]].forEach(([u,v])=>{N.beginPath();N.arc(u,v,.09,0,2*Math.PI);N.fill()});N.fillStyle=rgbA([232,112,100]);N.beginPath();N.arc(.33,.48,.08,0,2*Math.PI);N.arc(.58,.5,.08,0,2*Math.PI);N.fill();break;
+    case'floor':drawFloor(b,f);break;
+    case'gen':drawPattern(b.genSide,b,f,W,H,c);break;
+    case'genTop':drawPattern(b.genTop,b,f,W,H,c);break;
+    case'ground':drawGround(b,f,W,H);break;
+    case'bedTop':{const bl=b.blanket;N.fillStyle=rgb(shade(mix(bl,[255,255,255],.1),f.n));rr(.02,.22,W-.04,H-.24,.08);N.fill();N.fillStyle=rgb(shade(mix(bl,[255,255,255],.45),f.n));N.fillRect(.02,.22,W-.04,.08);
+      N.fillStyle=rgb(shade(P.white,f.n));rr(.12,.03,W-.24,.17,.07);N.fill();break}
+    case'toiletTop':N.fillStyle=rgb(shade([255,255,255],f.n));N.beginPath();N.ellipse(W/2,H*.55,W*.42,H*.4,0,0,2*Math.PI);N.fill();N.fillStyle=rgb(shade([190,214,232],f.n));N.beginPath();N.ellipse(W/2,H*.55,W*.26,H*.25,0,0,2*Math.PI);N.fill();break;
+    case'basinTop':N.fillStyle=rgb(shade([200,220,236],f.n));N.beginPath();N.ellipse(W/2,H*.55,W*.3,H*.28,0,0,2*Math.PI);N.fill();N.fillStyle=rgb(shade(P.steel,f.n));N.fillRect(W/2-.03,.04,.06,.14);break;
+    case'tubTop':{N.fillStyle=rgb(shade([255,255,255],f.n));N.fillRect(0,0,W,H);N.fillStyle=rgb(shade([150,206,236],f.n));rr(.08,.08,W-.16,H-.16,.15);N.fill();
+      if(b.house.bathing){N.fillStyle='rgba(255,255,255,0.85)';for(let k=0;k<9;k++){N.beginPath();N.arc(.15+hash(k*3)*(W-.3),.15+hash(k*7)*(H-.3),.05+.04*hash(k),0,2*Math.PI);N.fill()}}
+      N.fillStyle=rgb(shade(P.steel,f.n));N.fillRect(W/2-.04,.02,.08,.1);break}
+    case'sinkTop':N.fillStyle=rgb(shade([170,180,196],f.n));rr(.18,.15,W-.36,H-.3,.08);N.fill();N.fillStyle=rgb(shade([230,236,244],f.n));N.fillRect(W/2-.03,.03,.06,.15);
+      if(b.house.dirty){N.fillStyle=rgb(shade([250,250,250],f.n));[[.35,.4],[.55,.45],[.45,.3]].forEach(([u,v])=>{N.beginPath();N.ellipse(u*W,v*H+.05,.1,.07,0,0,2*Math.PI);N.fill()})}break;
+    case'stoveTop':{const on=!!b.house.cooking;[[.28,.35],[.66,.35],[.28,.65],[.66,.65]].forEach(([u,v],k)=>{N.strokeStyle=on&&k<2?`rgba(255,${(120+60*Math.sin(S.time*9+k))|0},60,0.95)`:rgb(shade([120,116,140],f.n));N.lineWidth=.04;N.beginPath();N.arc(u*W,v*H,.11,0,2*Math.PI);N.stroke()});
+      if(on){N.fillStyle=rgb(shade([200,206,220],f.n));N.beginPath();N.arc(.28*W,.35*H,.15,0,2*Math.PI);N.fill();N.fillStyle=rgb(shade([236,180,110],f.n));N.beginPath();N.arc(.28*W,.35*H,.1,0,2*Math.PI);N.fill();
+        N.fillStyle=rgb(shade([60,60,70],f.n));N.beginPath();N.ellipse(.66*W,.35*H,.14,.12,0,0,2*Math.PI);N.fill()}break}
+    case'cabinet':N.fillStyle=rgb(c,.88);N.fillRect(.06,.08,W/2-.09,H-.2);N.fillRect(W/2+.03,.08,W/2-.09,H-.2);N.fillStyle=rgb(shade(P.steel,f.n));N.fillRect(W/2-.12,H*.55,.06,.12);N.fillRect(W/2+.06,H*.55,.06,.12);break;
+    case'oven':N.fillStyle=rgb(c,.85);rr(.1,.1,W-.2,H-.25,.05);N.fill();N.fillStyle=rgb(shade([60,56,80],f.n));rr(.2,.18,W-.4,H*.4,.04);N.fill();if(b.house.cooking){N.fillStyle='rgba(255,170,80,0.55)';rr(.22,.2,W-.44,H*.36,.04);N.fill()}N.fillStyle=rgb(shade(P.steel,f.n));N.fillRect(.2,H-.2,W-.4,.04);break;
+    case'fridge':N.fillStyle=rgb(c,.9);N.fillRect(.04,H*.62,W-.08,.03);N.fillStyle=rgb(shade(P.steel,f.n));N.fillRect(.1,H*.66,.04,.2);N.fillRect(.1,H*.3,.04,.24);
+      N.fillStyle=rgb(shade([244,196,110],f.n));N.beginPath();N.arc(W*.6,H*.78,.05,0,2*Math.PI);N.fill();N.fillStyle=rgb(shade([232,112,100],f.n));N.fillRect(W*.5,H*.4,.12,.09);break;
+    case'tableTop':{const hs=b.house,ready=hs.mealReady>clock.sim,spots=[[.18,.5],[.82,.5],[.5,.2]];N.fillStyle=rgb(shade([250,236,214],f.n));spots.forEach(([u,v])=>{rr(u*W-.14,v*H-.12,.28,.24,.05);N.fill()});
+      if(ready||hs.dirty){spots.forEach(([u,v])=>{N.fillStyle=rgb(shade([255,255,255],f.n));N.beginPath();N.arc(u*W,v*H,.1,0,2*Math.PI);N.fill();if(ready){N.fillStyle=rgb(shade([236,170,90],f.n));N.beginPath();N.arc(u*W,v*H,.06,0,2*Math.PI);N.fill();N.fillStyle=rgb(shade([140,200,120],f.n));N.beginPath();N.arc(u*W+.03,v*H-.02,.03,0,2*Math.PI);N.fill()}})}
+      if(ready){N.fillStyle=rgb(shade([230,110,90],f.n));N.beginPath();N.arc(.5*W,.62*H,.12,0,2*Math.PI);N.fill()}break}
+    case'screen':{const on=b.house.tvOn;N.fillStyle=on?rgb([70,90,130]):rgb(shade([40,40,56],f.n));N.fillRect(.05,.05,W-.1,H-.1);
+      if(on){const k=Math.floor(S.time*1.5);N.fillStyle=`hsla(${(hash(k)*360)|0},70%,70%,0.9)`;N.fillRect(.1,.1,W*.5,H*.5);N.fillStyle=`hsla(${(hash(k+5)*360)|0},70%,75%,0.9)`;N.fillRect(W*.45,H*.35,W*.4,H*.5);N.fillStyle='rgba(255,255,255,0.8)';N.beginPath();N.arc(W*.3+Math.sin(S.time*2)*.1,H*.6,.06,0,2*Math.PI);N.fill()}break}
+    case'cushion':N.fillStyle=rgb(c,1.08);rr(.05,.05,W-.1,H/2-.08,.08);N.fill();rr(.05,H/2+.03,W-.1,H/2-.08,.08);N.fill();break;
+    case'mirror':N.fillStyle=rgb(mix(skyMid,[230,240,250],.6));rr(.04,.04,W-.08,H-.08,.06);N.fill();N.fillStyle='rgba(255,255,255,0.5)';N.fillRect(W*.2,H*.5,.04,H*.3);break;
+  }
+}
+function drawBox(b){
+  const inAmb=houseAmb(b.house);
+  for(const f of FACES){
+    if(dot(f.n,cam.d)<=.001)continue;
+    amb=b.indoor||(b.wall&&f.key===b.wall.inner)?inAmb:ambOut;
+    const i=b.sc[f.o],a=b.sc[f.u],n=b.sc[f.v],r=[a[0]+n[0]-i[0],a[1]+n[1]-i[1]];
+    let base=f.key==='top'?b.top:b.side;if(f.key==='top'&&!b.indoor&&!b.cut){snowOn=true;base=snowy(base);snowOn=false}const c=shade(base,f.n);
+    N.fillStyle=rgb(c);N.strokeStyle=rgb(c);N.lineWidth=.8;N.beginPath();N.moveTo(i[0],i[1]);N.lineTo(a[0],a[1]);N.lineTo(r[0],r[1]);N.lineTo(n[0],n[1]);N.closePath();N.fill();N.stroke();
+    if(b.deco[f.key]&&cam.scale>6){const l=b.wc[f.o],o=b.wc[f.u],h=b.wc[f.v],W=Math.hypot(o[0]-l[0],o[1]-l[1],o[2]-l[2]),H=Math.hypot(h[0]-l[0],h[1]-l[1],h[2]-l[2]);
+      N.save();N.beginPath();N.moveTo(i[0],i[1]);N.lineTo(a[0],a[1]);N.lineTo(r[0],r[1]);N.lineTo(n[0],n[1]);N.closePath();N.clip();
+      faceXform(i,[i[0]+(a[0]-i[0])/W,i[1]+(a[1]-i[1])/W],[i[0]+(n[0]-i[0])/H,i[1]+(n[1]-i[1])/H]);drawDeco(b,f,W,H,base,c);N.restore()}
+    if(f.key!=='top'&&!b.indoor){N.strokeStyle=`rgba(255,255,255,${.22*(.4+.6*dayK)})`;N.lineWidth=1;N.beginPath();N.moveTo(n[0],n[1]);N.lineTo(r[0],r[1]);N.stroke()}
+  }
+  amb=ambOut;
+}
+
+// ================= drawing: props =================
+function growth(){return .45+.55*(((clock.day-1)*24+clock.hour)%72)/72}
+function canopy(i,t,sway,cols,blossom){
+  snowOn=true;[[0,-1.25,.62],[-.32,-1,.42],[.34,-1.05,.45],[.05,-1.6,.4]].forEach(([x,y,r],k)=>{N.fillStyle=rgbA(k===3?snowy(cols[k]):mix(cols[k],snowy(cols[k]),.6));N.beginPath();N.arc(i[0]+x*t+sway*(-y),i[1]+y*t,r*t,0,2*Math.PI);N.fill()});snowOn=false;
+  N.fillStyle=rgbA(blossom,1,.95);for(let k=0;k<6;k++){N.beginPath();N.arc(i[0]+(hash(k+10*t)-.5)*t*1.1+sway,i[1]-t*(.9+.9*hash(3*k+t)),.06*t,0,2*Math.PI);N.fill()}
+}
+function drawProp(e){
+  const l=cam.scale,i=project(e.local);
+  if(e.kind==='tree'||e.kind==='sakura'){const t=e.r*l,sway=Math.sin(S.time*1.2+e.id)*t*.03;
+    N.fillStyle='rgba(60,50,100,0.18)';N.beginPath();N.ellipse(i[0],i[1],.7*t,.35*t,0,0,2*Math.PI);N.fill();
+    N.fillStyle=rgbA([185,138,118]);N.fillRect(i[0]-.08*t,i[1]-.9*t,.16*t,.9*t);
+    if(e.kind==='tree')canopy(i,t,sway,[[159,211,160],[140,199,149],[169,220,168],[191,230,178]],[255,190,200]);
+    else{canopy(i,t,sway,[[248,190,206],[240,172,194],[252,204,218],[255,222,232]],[255,250,252]);
+      N.fillStyle='rgba(255,200,215,0.85)';for(let k=0;k<5;k++){const ph=(S.time*.15+hash(k*4))%1;N.beginPath();N.ellipse(i[0]+(hash(k*7)-.5)*t*2+Math.sin(S.time+k)*t*.2,i[1]-t*1.6+ph*t*1.7,.05*t,.03*t,ph*6,0,2*Math.PI);N.fill()}}
+  }else if(e.kind==='lantern'){N.fillStyle=rgbA([143,127,180]);N.fillRect(i[0]-.025*l,i[1]-.62*l,.05*l,.62*l);
+    const gA=.2+.7*nightK,g=N.createRadialGradient(i[0],i[1]-.68*l,0,i[0],i[1]-.68*l,(.35+.45*nightK)*l);g.addColorStop(0,`rgba(255,226,150,${gA})`);g.addColorStop(1,'rgba(255,226,150,0)');N.fillStyle=g;N.fillRect(i[0]-l,i[1]-1.7*l,2*l,2*l);
+    N.fillStyle=rgb(mix(A([255,227,163]),[255,232,170],nightK));N.fillRect(i[0]-.07*l,i[1]-.78*l,.14*l,.18*l);
+  }else if(e.kind==='pole'){if(festK<.01)return;const h=1.7*l*festK;N.strokeStyle=rgbA([180,140,110]);N.lineWidth=Math.max(1.5,.05*l);N.beginPath();N.moveTo(i[0],i[1]);N.lineTo(i[0],i[1]-h);N.stroke();N.fillStyle=rgbA(P.coral);N.beginPath();N.arc(i[0],i[1]-h,.06*l,0,2*Math.PI);N.fill();
+  }else if(e.kind==='crop'){const g=growth(),t=l*g,y=i[1]-.05*l,sw=Math.sin(S.time*2+e.id)*.03*t;snowOn=true;
+    for(const dx of[-.22,.22]){const x=i[0]+dx*l*.9;
+      if(e.type===0){[[0,-.12,.17,[124,190,116]],[-.09,-.08,.12,[150,206,128]],[.09,-.09,.12,[140,200,124]],[0,-.17,.1,[178,224,150]]].forEach(([ox,oy,r,c])=>{N.fillStyle=rgbA(snowy(c));N.beginPath();N.arc(x+ox*t,y+oy*t,r*t,0,2*Math.PI);N.fill()})}
+      else{N.fillStyle=rgbA([238,140,74]);N.beginPath();N.ellipse(x,y-.02*t,.06*t,.04*t,0,0,2*Math.PI);N.fill();N.strokeStyle=rgbA([110,180,104]);N.lineWidth=Math.max(1,.04*l);N.beginPath();for(const a of[-.5,0,.5]){N.moveTo(x,y-.04*t);N.lineTo(x+a*.18*t+sw,y-.36*t)}N.stroke()}}snowOn=false;
+  }else if(e.kind==='falls'){const a=project([17.52,11.6,0]),b=project([17.52,13,0]),o=5*l;
+    const g=N.createLinearGradient(0,a[1],0,a[1]+o);const wc=mix(A([176,222,240]),[90,110,170],nightK*.3);g.addColorStop(0,rgb(wc,1,.95));g.addColorStop(.7,rgb(wc,1.05,.55));g.addColorStop(1,rgb(wc,1.1,0));
+    N.fillStyle=g;N.beginPath();N.moveTo(a[0],a[1]);N.lineTo(b[0],b[1]);N.lineTo(b[0]+.08*l,b[1]+o);N.lineTo(a[0]-.08*l,a[1]+o);N.closePath();N.fill();
+    N.save();N.clip();N.strokeStyle=`rgba(255,255,255,${.5+.25*dayK})`;N.lineWidth=Math.max(1,.035*l);
+    for(let k=0;k<8;k++){const n=(k+.5)/8,x=lerp(a[0],b[0],n),y=lerp(a[1],b[1],n),c=(.9*S.time+hash(9.1*k))%1*o;N.beginPath();N.moveTo(x,y+c-.6*l);N.lineTo(x,y+c);N.stroke()}N.restore()}
+}
+
+// ================= drawing: people =================
+const SKIN=[253,227,207];
+function postureOf(w){if(w.link||!w.tile.furn)return'stand';return w.tile.furn.type==='bed'?'lie':w.tile.furn.type==='tub'?'bath':'sit'}
+function drawPerson(w){
+  amb=w.tile.indoor?houseAmb(w.tile.house):ambOut;
+  const post=postureOf(w),sc=1.35*cam.scale*(w.kid?.8:1),moving=!!w.link,face=faceOf(w),mood=moodOf(w),s=cam.scale;
+  if(post==='lie'){const f=w.tile.furn,hp=project(f.head),fp=project(f.foot),mid=project([f.head[0]+(f.foot[0]-f.head[0])*.25,f.head[1]+(f.foot[1]-f.head[1])*.25,f.head[2]]);
+    N.strokeStyle=rgbA(mix(w.cloak,[255,255,255],.25));N.lineCap='round';N.lineWidth=.42*s;N.beginPath();N.moveTo(mid[0],mid[1]-.06*s);N.lineTo(fp[0],fp[1]-.05*s);N.stroke();
+    N.strokeStyle=rgbA(mix(w.cloak,[255,255,255],.5));N.lineWidth=.1*s;N.beginPath();N.moveTo(mid[0]-.17*s,mid[1]-.08*s);N.lineTo(mid[0]+.17*s,mid[1]-.02*s);N.stroke();
+    const hx_=hp[0],hy=hp[1]-.1*s,r=.11*s;N.fillStyle=rgbA(SKIN);N.beginPath();N.arc(hx_,hy,r,0,2*Math.PI);N.fill();N.fillStyle=rgbA(w.cap);N.beginPath();N.arc(hx_,hy-.02*s,r*1.02,Math.PI*1.05,Math.PI*1.95);N.fill();
+    N.strokeStyle=rgbA([74,63,92]);N.lineWidth=Math.max(1,.012*sc);N.beginPath();N.moveTo(hx_-.04*s,hy+.01*s);N.lineTo(hx_-.01*s,hy+.01*s);N.moveTo(hx_+.02*s,hy+.01*s);N.lineTo(hx_+.05*s,hy+.01*s);N.stroke();
+    if(w===selected){N.strokeStyle='rgba(255,255,255,0.95)';N.lineWidth=2;N.beginPath();N.arc(hx_,hy,r*1.6,0,2*Math.PI);N.stroke()}
+    amb=ambOut;return}
+  const l=project(walkerPos(w));let n=l[0],r=l[1];
+  if(post==='bath'){const c=project([w.tile.pos[0],w.tile.pos[1],w.tile.pos[2]-.02]);n=c[0];r=c[1];
+    N.fillStyle=rgbA(SKIN);N.beginPath();N.ellipse(n,r,.17*s,.06*s,0,0,2*Math.PI);N.fill();
+    const hy=r-.13*s;N.beginPath();N.arc(n,hy,.11*s,0,2*Math.PI);N.fill();N.fillStyle='rgba(255,255,255,0.95)';N.beginPath();N.ellipse(n,hy-.1*s,.1*s,.05*s,0,0,2*Math.PI);N.fill();
+    N.fillStyle=rgbA([74,63,92]);N.fillRect(n+face*.04*s-.02*s,hy,.04*s,.01*s);
+    N.fillStyle='rgba(255,255,255,0.9)';for(let k=0;k<6;k++){N.beginPath();N.arc(n+(hash(k*3)-.5)*.5*s,r+(hash(k*5)-.5)*.12*s,(.04+.03*hash(k))*s,0,2*Math.PI);N.fill()}
+    if(w===selected){N.strokeStyle='rgba(255,255,255,0.95)';N.lineWidth=2;N.beginPath();N.arc(n,hy,.2*s,0,2*Math.PI);N.stroke()}
+    amb=ambOut;return}
+  const i=sc,dancing=w.act&&w.act.id==='dance'&&!moving,sit=post==='sit';
+  let a=moving?Math.abs(Math.sin(w.phase))*i*.05:Math.sin(2*S.time+w.phase)*i*.008;
+  if(dancing)a=Math.abs(Math.sin(S.time*6+w.phase))*i*.14;
+  if(sit)a=-.1*i;
+  if(w===selected){N.strokeStyle='rgba(255,255,255,0.95)';N.lineWidth=2;N.beginPath();N.ellipse(n,r,.3*i,.13*i,0,0,2*Math.PI);N.stroke()}
+  if(!sit){N.fillStyle='rgba(60,45,100,0.22)';N.beginPath();N.ellipse(n,r,.2*i,.09*i,0,0,2*Math.PI);N.fill()}
+  const c=moving?Math.sin(w.phase)*i*.06:0;
+  N.strokeStyle=rgbA([91,76,116]);N.lineWidth=Math.max(1.2,.05*i);N.lineCap='round';N.beginPath();
+  if(sit){for(const dx of[-.04,.04]){N.moveTo(n+dx*i,r-.07*i);N.lineTo(n+dx*i+face*.13*i,r-.05*i);N.lineTo(n+dx*i+face*.15*i,r+.12*i)}}
+  else{N.moveTo(n-.05*i,r-.2*i-a);N.lineTo(n-.05*i+c,r-.02*i-(dancing?a*.5:0));N.moveTo(n+.05*i,r-.2*i-a);N.lineTo(n+.05*i-c,r-.02*i-(dancing?a*.5:0))}
+  N.stroke();
+  const h=r-.6*i-a,bot=sit?r-.06*i:r-.16*i-a;
+  N.fillStyle=rgbA(w.cloak);N.beginPath();N.moveTo(n-.09*i,h+.08*i);N.quadraticCurveTo(n-.2*i,bot-.04*i,n-.17*i,bot);N.lineTo(n+.17*i,bot);N.quadraticCurveTo(n+.2*i,bot-.04*i,n+.09*i,h+.08*i);N.closePath();N.fill();
+  N.fillStyle=rgbA(w.cloak,.82);N.beginPath();N.moveTo(n+face*i*.02,h+.1*i);N.lineTo(n+face*i*.17,bot);N.lineTo(n+face*i*.05,bot);N.closePath();N.fill();
+  const act=w.act&&!moving?w.act.id:null;
+  if(dancing){N.strokeStyle=rgbA(w.cloak);N.lineWidth=Math.max(1.5,.05*i);const sn=Math.sin(S.time*6+w.phase);N.beginPath();N.moveTo(n-.1*i,h+.15*i);N.lineTo(n-.25*i,h-.05*i+sn*.08*i);N.moveTo(n+.1*i,h+.15*i);N.lineTo(n+.25*i,h-.05*i-sn*.08*i);N.stroke()}
+  N.fillStyle=rgbA(SKIN);N.beginPath();N.arc(n,h,.1*i,0,2*Math.PI);N.fill();
+  const sleepy=act==='nap'||mood==='tired',ex=n+face*i*.04;
+  N.fillStyle=rgbA([74,63,92]);if(sleepy){N.fillRect(ex-.02*i,h+.005*i,.04*i,.008*i)}else{N.beginPath();N.arc(ex,h+.01*i,.014*i,0,2*Math.PI);N.fill()}
+  if(i>20){N.strokeStyle=rgbA([150,90,100]);N.lineWidth=Math.max(1,.012*i);N.beginPath();const mx=n+face*i*.055,my=h+.055*i;
+    if(act==='brush'){N.strokeStyle=rgbA([120,180,230]);N.lineWidth=Math.max(1.5,.025*i);N.moveTo(mx-.01*i,my);N.lineTo(mx+face*.1*i,my-.01*i+Math.sin(S.time*14)*.01*i)}
+    else if(mood==='happy'||mood==='excited')N.arc(mx,my-.012*i,.02*i,.2,Math.PI-.2);else if(mood==='sad'||mood==='tired')N.arc(mx,my+.012*i,.018*i,Math.PI+.4,-.4);else if(mood==='scared'){N.arc(mx,my,.012*i,0,2*Math.PI)}else if(mood==='angry'){N.moveTo(mx-.02*i,my);N.lineTo(mx+.02*i,my);N.moveTo(ex-.03*i,h-.03*i);N.lineTo(ex+.02*i,h-.015*i)}else{N.moveTo(mx-.012*i,my);N.lineTo(mx+.012*i,my)}N.stroke()}
+  if(mood==='happy'||mood==='excited'){N.fillStyle='rgba(240,140,140,0.45)';N.beginPath();N.arc(n+face*i*.02,h+.04*i,.022*i,0,2*Math.PI);N.fill()}
+  N.fillStyle=rgbA(w.cap);N.beginPath();N.arc(n,h-.015*i,.105*i,Math.PI,0);N.closePath();N.fill();N.beginPath();N.arc(n-face*i*.02,h-.13*i,.04*i,0,2*Math.PI);N.fill();
+  if(rainK>.3&&!w.tile.indoor&&!(w.link&&w.link.to.indoor)){N.strokeStyle=rgbA([120,100,90]);N.lineWidth=Math.max(1,.02*i);N.beginPath();N.moveTo(n+.12*i,h+.25*i);N.lineTo(n+.12*i,h-.32*i);N.stroke();
+    N.fillStyle=rgbA(mix(w.cloak,[255,255,255],.25));N.beginPath();N.moveTo(n+.12*i-.3*i,h-.24*i);N.quadraticCurveTo(n+.12*i,h-.62*i,n+.12*i+.3*i,h-.24*i);N.closePath();N.fill()}
+  if(act){
+    const hand=[n+face*.16*i,h+.28*i];
+    if(act==='fish'){N.strokeStyle=rgbA([150,110,90]);N.lineWidth=Math.max(1,.025*i);N.beginPath();N.moveTo(n+face*.1*i,h+.25*i);N.lineTo(n+face*.55*i,h-.15*i);N.stroke();
+      N.strokeStyle='rgba(255,255,255,0.6)';N.lineWidth=1;N.beginPath();N.moveTo(n+face*.55*i,h-.15*i);N.lineTo(n+face*.6*i,r+.05*i+Math.sin(S.time*2)*2);N.stroke()}
+    if(act==='field'){N.strokeStyle=rgbA([150,110,90]);N.lineWidth=Math.max(1,.03*i);const sw=Math.sin(S.time*4+w.phase)*.08*i;N.beginPath();N.moveTo(n+face*.12*i,h+.2*i);N.lineTo(n+face*.3*i,r-.02*i+sw);N.stroke()}
+    if(act==='flower'||act==='well'){N.fillStyle=rgbA([126,186,222]);N.fillRect(hand[0]-.05*i,hand[1],.1*i,.1*i)}
+    if(act==='cook'||act==='dishes'||act==='wash'){N.strokeStyle=rgbA(SKIN);N.lineWidth=Math.max(1.2,.04*i);const sw=Math.sin(S.time*7)*.03*i;N.beginPath();N.moveTo(n+face*.08*i,h+.2*i);N.lineTo(hand[0]+sw,hand[1]-.02*i);N.stroke()}
+    if(act==='eat'){N.strokeStyle=rgbA([150,110,90]);N.lineWidth=Math.max(1,.015*i);const up=(Math.sin(S.time*3)>0)?.12*i:0;N.beginPath();N.moveTo(hand[0],hand[1]-up);N.lineTo(hand[0]+face*.1*i,hand[1]-.05*i-up);N.stroke()}
+    if(act==='snack'){N.fillStyle=rgbA([236,240,250]);N.fillRect(hand[0]-.03*i,hand[1]-.1*i,.06*i,.1*i)}
+    if(act==='bench'&&w.name==='ミノリ'){N.fillStyle=rgbA([200,90,90]);N.fillRect(n+face*.06*i-.06*i,h+.18*i,.12*i,.09*i);N.fillStyle=rgbA([255,250,240]);N.fillRect(n+face*.06*i-.05*i,h+.19*i,.1*i,.07*i)}
+  }
+  amb=ambOut;
+}
+function drawCat(w){
+  amb=w.tile.indoor?houseAmb(w.tile.house):ambOut;
+  const l=project(walkerPos(w)),s=cam.scale,moving=!!w.link,face=faceOf(w),x=l[0],y=l[1];
+  const sleeping=w.act&&w.act.id==='catsleep'&&!moving,b=moving?Math.abs(Math.sin(w.phase*1.3))*s*.03:0;
+  if(w===selected){N.strokeStyle='rgba(255,255,255,0.9)';N.lineWidth=2;N.beginPath();N.ellipse(x,y,.28*s,.12*s,0,0,2*Math.PI);N.stroke()}
+  N.fillStyle='rgba(60,45,100,0.2)';N.beginPath();N.ellipse(x,y,.2*s,.07*s,0,0,2*Math.PI);N.fill();
+  const c=rgbA(w.cloak),c2=rgbA(w.cloak,.85);
+  if(sleeping){N.fillStyle=c;N.beginPath();N.ellipse(x,y-.08*s,.18*s,.1*s,0,0,2*Math.PI);N.fill();N.fillStyle=c2;N.beginPath();N.arc(x+face*.1*s,y-.1*s,.07*s,0,2*Math.PI);N.fill();amb=ambOut;return}
+  N.strokeStyle=c2;N.lineWidth=Math.max(1.5,.04*s);N.lineCap='round';N.beginPath();N.moveTo(x-face*.14*s,y-.14*s-b);N.quadraticCurveTo(x-face*.3*s,y-.2*s,x-face*.24*s,y-.36*s+Math.sin(S.time*3)*.04*s);N.stroke();
+  N.beginPath();for(const dx of[-.09,.09]){N.moveTo(x+dx*s,y-.1*s-b);N.lineTo(x+dx*s+(moving?Math.sin(w.phase+dx*20)*.03*s:0),y-.01*s)}N.stroke();
+  N.fillStyle=c;N.beginPath();N.ellipse(x,y-.14*s-b,.17*s,.08*s,0,0,2*Math.PI);N.fill();
+  const hx_=x+face*.16*s,hy=y-.24*s-b;N.beginPath();N.arc(hx_,hy,.075*s,0,2*Math.PI);N.fill();
+  N.beginPath();N.moveTo(hx_-.065*s,hy-.03*s);N.lineTo(hx_-.05*s,hy-.12*s);N.lineTo(hx_-.01*s,hy-.06*s);N.moveTo(hx_+.065*s,hy-.03*s);N.lineTo(hx_+.05*s,hy-.12*s);N.lineTo(hx_+.01*s,hy-.06*s);N.fill();
+  N.fillStyle=rgbA([74,63,92]);N.beginPath();N.arc(hx_+face*.03*s,hy-.005*s,.012*s,0,2*Math.PI);N.fill();amb=ambOut;
+}
+function headPoint(w){const p=project(walkerPos(w)),post=w.kind==='person'?postureOf(w):'stand';
+  if(post==='lie'){const q=project(w.tile.furn.head);return[q[0],q[1]-.25*cam.scale]}
+  if(post==='bath')return[p[0],p[1]-.35*cam.scale];
+  if(w.kind==='cat')return[p[0],p[1]-.42*cam.scale];
+  return[p[0],p[1]-(post==='sit'?.92:1.05)*cam.scale*(w.kid?.82:1)-(rainK>.3&&!w.tile.indoor?.2*cam.scale:0)]}
+function bubble(x,y,text,style){
+  const strong=style==='say'||style==='sel';N.font=`700 ${strong?12:11}px ${FONT}`;N.textAlign='center';N.textBaseline='middle';
+  const w=N.measureText(text).width+(strong?16:11),h=strong?22:18,bx=clamp(x-w/2,4,S.width-w-4);
+  rr(bx,y-h-7,w,h,h/2);N.fillStyle=style==='say'?'rgba(255,250,236,0.96)':'rgba(255,253,250,0.92)';N.fill();N.strokeStyle=style==='say'?'rgba(200,144,46,0.5)':'rgba(120,100,160,0.25)';N.lineWidth=1;N.stroke();
+  N.beginPath();N.moveTo(x-4,y-7.5);N.lineTo(x,y-2);N.lineTo(x+4,y-7.5);N.fillStyle=style==='say'?'rgba(255,250,236,0.96)':'rgba(255,253,250,0.92)';N.fill();
+  N.fillStyle='#4a3f5c';N.fillText(text,bx+w/2,y-7-h/2+1);N.textAlign='left'}
+function tag(x,y,text,kind){N.font=`700 ${kind==='room'?12:11}px ${FONT}`;N.textAlign='center';N.textBaseline='middle';const w=N.measureText(text).width+10,h=17;
+  rr(x-w/2,y-h/2,w,h,6);N.fillStyle=kind==='room'?'rgba(63,127,168,0.82)':'rgba(255,255,255,0.9)';N.fill();if(kind!=='room'){N.strokeStyle='rgba(63,127,168,0.45)';N.lineWidth=1;N.stroke()}
+  N.fillStyle=kind==='room'?'#fff':'#2f6a90';N.fillText(text,x,y+.5);N.textAlign='left'}
+
+// ================= sky & ambience =================
+const clouds=[];for(let t=0;t<9;t++)clouds.push({x:hash(3.1*t),y:.12+.7*hash(7.7*t),s:.6+.9*hash(1.3*t),v:.004+.008*hash(5.9*t),front:t>=6});
+const stars=[];for(let t=0;t<70;t++)stars.push({x:hash(11.3*t),y:hash(17.9*t)*.7,r:.6+1.2*hash(2.9*t),p:hash(5.1*t)*6});
+const drops=[];for(let t=0;t<150;t++)drops.push({x:hash(t*1.9),y:hash(t*2.7),v:.8+.4*hash(t*3.3)});
+const smoke=[],steam=[];
+const flies=[];for(let t=0;t<14;t++)flies.push({b:t<8?[13+hash(t)*3,9.4+hash(t+9)*3.6]:[hash(t*3)*4,10+hash(t*5)*3.4],p:hash(t*7)*6});
+function cloud(e,l){const W=S.width,H=S.height,a=W+400,n=(e.x*a+l*e.v*W)%a-200,r=e.front?H*(.93+.1*e.y):e.y*H,s=.07*Math.min(W,H)*e.s*(e.front?1.7:1);
+  let c=mix(mix([70,80,130],[255,251,249],dayK),[255,214,200],duskK*.6);c=mix(c,[150,155,170].map(v=>v*(.4+.6*dayK)),rainK*.7);N.fillStyle=rgb(c,1,e.front?.9:.6+.3*rainK);N.beginPath();
+  N.ellipse(n,r,1.6*s,.55*s,0,0,2*Math.PI);N.ellipse(n-.7*s,r-.2*s,.7*s,.55*s,0,0,2*Math.PI);N.ellipse(n+.3*s,r-.45*s,.85*s,.7*s,0,0,2*Math.PI);N.ellipse(n+s,r-.1*s,.6*s,.45*s,0,0,2*Math.PI);N.fill()}
+function drawSky(){
+  const W=S.width,H=S.height,h=clock.hour;
+  let pal=[0,1,2,3].map(i=>mix(mix(SKY.night[i],SKY.day[i],dayK),SKY.dusk[i],duskK));
+  const ov=Math.max(rainK,snowK*.6)*.85;if(ov>0)pal=pal.map(c=>{const g=(c[0]+c[1]+c[2])/3;return mix(c,[g*.95,g,g*1.08],ov)});
+  skyMid=pal[1];
+  const g=N.createLinearGradient(0,0,0,H);[0,.45,.8,1].forEach((s,i)=>g.addColorStop(s,rgb(pal[i])));N.fillStyle=g;N.fillRect(0,0,W,H);
+  if(nightK>.05){const sa=nightK*(1-ov);for(const s of stars){N.fillStyle=`rgba(255,250,235,${sa*(.45+.45*Math.sin(S.time*1.7+s.p))})`;N.beginPath();N.arc(s.x*W,s.y*H,s.r,0,2*Math.PI);N.fill()}}
+  const R=.045*Math.min(W,H),vis=1-ov;
+  if(h>5&&h<19.3&&vis>.05){const f=(h-5)/14.3,x=lerp(.08,.92,f)*W,y=H*(.42-.32*Math.sin(Math.PI*f));const sc=mix([255,248,228],[255,186,130],duskK);
+    const gl=N.createRadialGradient(x,y,0,x,y,H*.5);gl.addColorStop(0,rgb(sc,1,.85*vis));gl.addColorStop(.12,rgb(sc,1,.45*vis));gl.addColorStop(1,rgb(sc,1,0));N.fillStyle=gl;N.fillRect(0,0,W,H);
+    N.fillStyle=rgb(sc,1,.95*vis);N.beginPath();N.arc(x,y,R,0,2*Math.PI);N.fill()}
+  if((h>=18||h<6)&&vis>.05){const f=((h-18+24)%24)/12,x=lerp(.9,.1,f)*W,y=H*(.4-.3*Math.sin(Math.PI*f)),ma=nightK*vis;
+    const gl=N.createRadialGradient(x,y,0,x,y,R*5);gl.addColorStop(0,`rgba(230,236,255,${.35*ma})`);gl.addColorStop(1,'rgba(230,236,255,0)');N.fillStyle=gl;N.fillRect(x-R*5,y-R*5,R*10,R*10);
+    N.fillStyle=`rgba(250,246,226,${ma})`;N.beginPath();N.arc(x,y,R*.8,0,2*Math.PI);N.fill()}
+  if(rainbowK>.01){const cx=W*.5,cy=H*.95,rad=Math.min(W*.6,H*.85);N.lineWidth=Math.max(5,rad*.028);
+    ['#ff7f7f','#ffb46b','#ffe58a','#9be39b','#8cc8ff','#b39bff'].forEach((c,k)=>{N.strokeStyle=c;N.globalAlpha=.32*rainbowK*dayK;N.beginPath();N.arc(cx,cy,rad-k*N.lineWidth,Math.PI,2*Math.PI);N.stroke()});N.globalAlpha=1}
+}
+function birds(t){if(dayK<.2||rainK>.5)return;N.strokeStyle=`rgba(110,96,150,${.55*dayK})`;N.lineWidth=1.4;
+  for(let e=0;e<3;e++){const i=((hash(4.4*e)+t*(.018+.006*e))%1.2-.1)*S.width,o=S.height*(.14+.3*hash(8.2*e))+8*Math.sin(.7*t+e),a=3*Math.sin(6*t+2*e),n=5+e;
+    N.beginPath();N.moveTo(i-n,o-a);N.quadraticCurveTo(i-.4*n,o-.4*n,i,o);N.quadraticCurveTo(i+.4*n,o-.4*n,i+n,o-a);N.stroke()}}
+function precip(){
+  const W=S.width,H=S.height;
+  if(rainK>.02){N.strokeStyle=`rgba(220,230,250,${.45*rainK})`;N.lineWidth=1;N.beginPath();for(const d of drops){const y=(d.y*H+S.time*H*.9*d.v)%H,x=(d.x*W+y*.12)%W;N.moveTo(x,y);N.lineTo(x-2,y+12)}N.stroke()}
+  if(snowK>.02){N.fillStyle=`rgba(255,255,255,${.85*snowK})`;for(const d of drops.slice(0,110)){const y=(d.y*H+S.time*H*.07*d.v)%H,x=(d.x*W+Math.sin(S.time*.8+d.x*20)*14+W)%W;N.beginPath();N.arc(x,y,1.2+1.6*d.v,0,2*Math.PI);N.fill()}}
+}
+function bunting(){
+  if(festK<.02)return;const pts=[[6.5,9.5],[9.5,9.5],[9.5,12.5],[6.5,12.5]];
+  for(let k=0;k<4;k++){const a=pts[k],b=pts[(k+1)%4],pa=project([a[0],a[1],1.6*festK]),pb=project([b[0],b[1],1.6*festK]),mid=project([(a[0]+b[0])/2,(a[1]+b[1])/2,1.25*festK]);
+    const cx=2*mid[0]-(pa[0]+pb[0])/2,cy=2*mid[1]-(pa[1]+pb[1])/2;
+    N.strokeStyle=`rgba(120,100,140,${.7*festK})`;N.lineWidth=1;N.beginPath();N.moveTo(pa[0],pa[1]);N.quadraticCurveTo(cx,cy,pb[0],pb[1]);N.stroke();
+    for(let j=1;j<8;j++){const t=j/8,x=(1-t)*(1-t)*pa[0]+2*t*(1-t)*cx+t*t*pb[0],y=(1-t)*(1-t)*pa[1]+2*t*(1-t)*cy+t*t*pb[1],s=cam.scale*.13;
+      N.globalAlpha=festK;N.fillStyle=['#ef8a80','#f5c66b','#8fd0b0','#9fb6f0'][(j+k)%4];
+      if(nightK>.4){const g=N.createRadialGradient(x,y,0,x,y,s*1.8);g.addColorStop(0,'rgba(255,230,160,0.8)');g.addColorStop(1,'rgba(255,230,160,0)');N.fillStyle=g;N.fillRect(x-s*2,y-s*2,s*4,s*4);N.fillStyle='#ffe6a0';N.beginPath();N.arc(x,y,s*.35,0,2*Math.PI);N.fill()}
+      else{N.beginPath();N.moveTo(x-s*.6,y);N.lineTo(x+s*.6,y);N.lineTo(x,y+s*1.1);N.fill()}N.globalAlpha=1}}
+}
+function updateLight(dt){
+  const h=clock.hour;
+  dayK=smooth((h-5)/2.2)*(1-smooth((h-17.6)/2.2));
+  const bump=c=>smooth(1-Math.abs(h-c)/1.7);duskK=Math.max(bump(6.2),bump(18.6))*.9;
+  nightK=1-dayK;
+  const k=1-Math.exp(-dt*.8);
+  rainK=lerp(rainK,weather.kind==='rain'?1:0,k);snowK=lerp(snowK,weather.kind==='snow'?1:0,k);
+  rainbowK=lerp(rainbowK,clock.sim<weather.rainbowUntil?1:0,k*.6);festK=lerp(festK,clock.sim<weather.festUntil?1:0,k*1.5);
+  ambOut=mix(mix([.4,.45,.7],[1,1,1],dayK),[1.04,.84,.76],duskK*.6);
+  const ov=Math.max(rainK,snowK*.5);ambOut=[ambOut[0]*lerp(1,.76,ov),ambOut[1]*lerp(1,.79,ov),ambOut[2]*lerp(1,.88,ov)];amb=ambOut;
+  for(const id in houses){const hs=houses[id],awake=hs.residents.some(w=>!(w.act&&w.act.id==='sleep'&&!w.link));hs.lights=(nightK>.3||rainK>.5)&&awake;hs.glow=lerp(hs.glow,hs.lights?Math.max(nightK,rainK*.6):0,1-Math.exp(-dt*2));
+    hs.bathing=walkers.some(w=>w.act&&w.act.id==='bath'&&(w.act.hs||w.house)===hs&&!w.link)}
+}
+function updateWeather(sdt){
+  const dtH=sdt/HR;
+  if(weather.kind!=='clear'&&clock.sim>weather.until){const was=weather.kind;weather.kind='clear';log(was==='rain'?J('雨があがった','The rain stopped.'):J('雪がやんだ','The snow stopped.'));if(was==='rain'&&Math.random()<.45&&dayK>.5){weather.rainbowUntil=clock.sim+1.5*HR;log(J('空に虹がかかった','A rainbow appeared in the sky!'))}}
+  if(weather.plan&&clock.hour>=weather.plan.at&&clock.hour<weather.plan.at+1&&weather.kind==='clear'){setWeather(weather.plan.kind,weather.plan.hours);log(weather.plan.kind==='rain'?J('雨が降りはじめた','It started to rain.'):J('雪が降りはじめた','It started to snow.'));weather.plan=null}
+  if(weather.kind==='snow')snowCover=clamp(snowCover+.12*dtH,0,1);else snowCover=clamp(snowCover-(weather.kind==='rain'?.3:.12)*dtH,0,1);
+}
+
+// ================= layout =================
+const hudTop=document.getElementById('hudTop'),controls=document.getElementById('controls'),logEl=document.getElementById('log');
+function fit(){
+  let x0=1/0,y0=1/0,x1=-1/0,y1=-1/0,sx=0,sy=0,sz=0,n=0;
+  boxes.forEach(b=>{for(let h=0;h<8;h++){const f=corner(b.lo,b.hi,h),d=isoProj(f);x0=Math.min(x0,d[0]);x1=Math.max(x1,d[0]);y0=Math.min(y0,d[1]);y1=Math.max(y1,d[1]);sx+=f[0];sy+=f[1];sz+=f[2];n++}});
+  y0-=.8;
+  const top=hudTop.getBoundingClientRect().bottom+4,narrow=S.width<=640;
+  const botEl=Math.min(controls.getBoundingClientRect().top,narrow&&!logEl.hidden?logEl.getBoundingClientRect().top:1e9);
+  const bot=S.height-botEl+4;
+  const availH=Math.max(160,S.height-top-bot);
+  const B=cam.base;B.scale=Math.min(S.width*.97/(x1-x0),availH*.99/(y1-y0));
+  B.center=[sx/n,sy/n,sz/n];const b=isoProj(B.center);
+  B.cx=S.width/2+(b[0]-(x0+x1)/2)*B.scale;B.cy=top+availH/2+(b[1]-(y0+y1)/2)*B.scale;
+  B.areaX=S.width/2;B.areaY=top+availH/2;
+  if(!cam.inited){cam.inited=true;cam.scale=B.scale;cam.center=B.center.slice();cam.cx=B.cx;cam.cy=B.cy}
+}
+function resize(){const r=cv.getBoundingClientRect();S.width=r.width;S.height=r.height;S.dpr=Math.min(2,window.devicePixelRatio||1);cv.width=Math.max(1,Math.round(S.width*S.dpr));cv.height=Math.max(1,Math.round(S.height*S.dpr));fit()}
+function updateCamera(dt,dragging){
+  const k=1-Math.exp(-dt*(dragging?14:3));cam.az=lerp(cam.az,cam.taz,k);cam.el=lerp(cam.el,cam.tel,k);basis();
+  cam.zoom=lerp(cam.zoom,cam.tzoom,1-Math.exp(-dt*6));
+  const B=cam.base,f=cam.follow||null,kc=1-Math.exp(-dt*3);
+  const tc=f?(()=>{const p=walkerPos(f);return[p[0],p[1],p[2]+.5]})():B.center;
+  cam.center=mix(cam.center,tc,kc);cam.scale=B.scale*cam.zoom;
+  let ox=B.cx-B.areaX,oy=B.cy-B.areaY;
+  if(!f){let x0=1/0,x1=-1/0,y0=1/0,y1=-1/0;for(const X of[-.5,MW-.5])for(const Y of[-.5,MH-.5])for(const Z of[-2.5,WALL_H+.8]){const e=[X-B.center[0],Y-B.center[1],Z-B.center[2]],sx=B.scale*dot(e,cam.r),sy=-B.scale*dot(e,cam.u);x0=Math.min(x0,sx);x1=Math.max(x1,sx);y0=Math.min(y0,sy);y1=Math.max(y1,sy)}ox=-(x0+x1)/2;oy=-(y0+y1)/2}
+  cam.cx=lerp(cam.cx,f?B.areaX:B.areaX+ox*cam.zoom,kc);cam.cy=lerp(cam.cy,f?B.areaY:B.areaY+oy*cam.zoom,kc);
+}
+
+// ================= HUD =================
+const hhmm=h=>{const hh=Math.floor(h),mm=Math.floor((h-hh)*6)*10;return`${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`};
+const logs=[];
+function log(p,cls){logs.push({t:hhmm(clock.hour),p,cls});if(logs.length>40)logs.shift();renderLog()}
+function renderLog(){logEl.replaceChildren(...logs.slice(-3).map(l=>{const li=document.createElement('li');const tm=document.createElement('time');tm.textContent=l.t;li.append(tm,document.createTextNode(tr(l.p)));
+  if(L==='en'&&l.p.ja&&l.p.en){const s=document.createElement('span');s.className='sub';s.textContent=l.p.ja;li.append(s)}if(l.cls)li.className=l.cls;li.title=tr(l.p);return li}))}
+const $=id=>document.getElementById(id);
+const rosterEl=$('roster'),dayEl=$('day'),timeEl=$('time'),periodEl=$('period'),wxEl=$('wx');
+walkers.forEach(w=>{const li=document.createElement('li'),b=document.createElement('button');b.type='button';b.setAttribute('aria-pressed','false');
+  const d=document.createElement('span');d.className='dot';d.style.background=rgb(w.cloak);const nm=document.createElement('span');b.append(d,nm);w.nameEl=nm;
+  b.addEventListener('click',()=>select(selected===w?null:w));li.appendChild(b);rosterEl.appendChild(li);w.btn=b});
+const card=$('card'),cName=$('cName'),cDot=$('cDot'),cMood=$('cMood'),cPersona=$('cPersona'),cStatus=$('cStatus'),cStatusJa=$('cStatusJa'),cNeeds=$('cNeeds'),cThink=$('cThink'),cFollow=$('cFollow'),cThought=$('cThought'),cSay=$('cSay');
+const wordCard=$('wordCard');
+let selected=null,thought=null;
+function select(w){
+  if(fpv.on){if(w&&w!==fpv.w)setControl(w);return}
+  selected=w;walkers.forEach(o=>o.btn.setAttribute('aria-pressed',String(o===w)));
+  if(w){wordCard.hidden=true;curWord=null}
+  card.hidden=!w;logEl.hidden=!!w||!wordCard.hidden;thought=null;cThought.hidden=true;
+  if(!w){cam.follow=null;cFollow.setAttribute('aria-pressed','false');return}
+  if(!interior&&w.tile.indoor){interior=true;$('roofBtn').textContent=tr(UI.roofOn)}
+  cDot.style.background=rgb(w.cloak);
+  cNeeds.replaceChildren();cNeeds.hidden=!w.needs;
+  if(w.needs)for(const k in NEED_T){const lab=document.createElement('span');lab.dataset.k=k;lab.className='nlab';const bar=document.createElement('span');bar.className='bar';const i=document.createElement('i');i.style.background=NEED_T[k][1];i.dataset.k=k;bar.append(i);cNeeds.append(lab,bar)}
+  if(cam.follow)cam.follow=w;
+  cFollow.setAttribute('aria-pressed',String(cam.follow===w));
+  updateCard();
+}
+function updateCard(){if(!selected)return;const w=selected;const st=statusOf(w);const wi=typeof grow!=='undefined'&&grow.wishes[w.name];$('cWish').hidden=!wi;if(wi)$('cWish').textContent=`${tr(TUI.wish)}: ${tr(wi)}`;
+  cName.textContent=nameOf(w);cPersona.textContent=tr(w.persona);
+  cStatus.textContent=L==='en'?cap(st.en):st.ja;cStatusJa.textContent=L==='en'?st.ja:'';cStatusJa.hidden=L!=='en';cSay.hidden=L!=='en'||!canSpeak;
+  cMood.textContent=w.needs?tr(MOOD_T[moodOf(w)]):'';
+  cNeeds.querySelectorAll('.nlab').forEach(s=>{s.textContent=tr(NEED_T[s.dataset.k][0])});
+  cNeeds.querySelectorAll('i').forEach(i=>{i.style.width=Math.round(w.needs[i.dataset.k]*100)+'%'});
+  if(thought){cThought.hidden=false;cThought.replaceChildren();if(thought.wait){cThought.textContent=tr(UI.listening)}else{const a=document.createElement('span');a.textContent=L==='en'?(thought.en||thought.ja):(thought.ja||thought.en);cThought.append(a);
+    if(L==='en'&&thought.ja&&thought.en){const s=document.createElement('span');s.className='ja-sub';s.textContent=thought.ja;cThought.append(s);if(canSpeak){const b=document.createElement('button');b.className='say-btn';b.type='button';b.textContent='🔊';b.style.marginTop='6px';b.onclick=()=>speak(thought.en);cThought.append(b)}}}}
+}
+$('cClose').addEventListener('click',()=>select(null));
+cSay.addEventListener('click',()=>{if(selected)speak(cap(statusOf(selected).en))});
+cFollow.addEventListener('click',()=>{if(!selected)return;if(cam.follow===selected){cam.follow=null;cam.tzoom=1}else{cam.follow=selected;cam.tzoom=Math.max(cam.tzoom,2.2)}cFollow.setAttribute('aria-pressed',String(cam.follow===selected))});
+let curWord=null;
+function openWord(v){select(null);curWord=v;wordCard.hidden=false;logEl.hidden=true;$('wWord').textContent=v.word;$('wJa').textContent=v.ja;$('wEx').textContent=v.ex;$('wExJa').textContent=v.exja;$('wSay').hidden=!canSpeak;$('wExSay').hidden=!canSpeak;addPhrase({en:v.ex,ja:v.exja});if(L==='en')speak(v.word)}
+$('wClose').addEventListener('click',()=>{wordCard.hidden=true;logEl.hidden=false;curWord=null});
+$('wSay').addEventListener('click',()=>curWord&&speak(curWord.word));$('wExSay').addEventListener('click',()=>curWord&&speak(curWord.ex));
+let book=[];try{const s=JSON.parse(localStorage.getItem('hakoniwa-book')||'[]');if(Array.isArray(s))book=s.filter(p=>p&&p.en&&p.ja).slice(0,300)}catch(e){}
+let bookDirty=false;
+function addPhrase(p){if(!p||!p.en||!p.ja)return;const i=book.findIndex(b=>b.en===p.en);if(i>=0){if(i>0){const[b]=book.splice(i,1);book.unshift(b)}return}book.unshift({en:p.en,ja:p.ja});if(book.length>300)book.pop();bookDirty=true;$('bookN').textContent=book.length;if(!$('book').hidden)renderBook()}
+setInterval(()=>{if(bookDirty){bookDirty=false;try{localStorage.setItem('hakoniwa-book',JSON.stringify(book))}catch(e){}}},3000);
+function renderBook(){const ul=$('bookList');ul.replaceChildren();if(!book.length){const li=document.createElement('li');li.textContent=tr(UI.bookEmpty);ul.append(li);return}
+  book.forEach(p=>{const li=document.createElement('li'),d=document.createElement('div'),b=document.createElement('b'),s=document.createElement('span');b.textContent=p.en;s.textContent=p.ja;d.append(b,s);li.append(d);
+    if(canSpeak){const btn=document.createElement('button');btn.className='say-btn';btn.type='button';btn.textContent='🔊';btn.setAttribute('aria-label','Listen');btn.onclick=()=>speak(p.en);li.append(btn)}ul.append(li)})}
+$('bookBtn').addEventListener('click',()=>{const bk=$('book');bk.hidden=!bk.hidden;if(!bk.hidden)renderBook()});
+$('bookClose').addEventListener('click',()=>{$('book').hidden=true});
+$('bookN').textContent=book.length;
+
+function updateHud(){
+  const h=clock.hour;dayEl.textContent=L==='en'?`Day ${clock.day}`:`${clock.day}日目`;timeEl.textContent=hhmm(h);
+  periodEl.textContent=tr(h<4.5?J('夜','Night'):h<10?J('朝','Morning'):h<16?J('昼','Daytime'):h<19?J('夕方','Evening'):J('夜','Night'));
+  wxEl.textContent=(clock.sim<weather.festUntil?tr(J('お祭り・','Festival · ')):'')+tr(WX_T[weather.kind]);
+  updateCard();
+}
+const speeds=[1,3,8];let speedI=0;const speedBtn=$('speed');
+let sample=null,godBusy=false;
+function applyLang(){
+  document.documentElement.lang=L;
+  $('langBtn').textContent=tr(UI.lang);const lb=$('labelBtn');lb.hidden=L!=='en';lb.textContent=showLabels?'Labels: On':'Labels: Off';lb.setAttribute('aria-pressed',String(showLabels));$('bookLbl').textContent=tr(UI.book);$('bookTitle').textContent=tr(UI.book);$('bookNote').textContent=tr(UI.bookNote);
+  $('godLbl').textContent=tr(UI.god);$('godInput').placeholder=tr(UI.ph);if(!godBusy)$('godSend').textContent=tr(UI.send);
+  $('hint').textContent=tr(UI.hint);cThink.textContent=tr(UI.think);$('cPlay').textContent=tr(UI.play);if(fpv.on)applyFpvLang();cFollow.textContent=tr(UI.follow);$('wExSay').textContent=tr(UI.exSay);
+  $('roofBtn').textContent=tr(interior?UI.roofOn:UI.roofOff);speedBtn.textContent=`${tr(UI.speed)} ×${clock.speed}`;$('reset').textContent=tr(UI.reset);
+  walkers.forEach(w=>{w.nameEl.textContent=nameOf(w)});
+  renderLog();updateHud();if(!$('book').hidden)renderBook();if(typeof renderTown==='function')renderTown();
+  try{localStorage.setItem('hakoniwa-lang',L)}catch(e){}
+  requestAnimationFrame(()=>fit());
+}
+$('labelBtn').addEventListener('click',()=>{showLabels=!showLabels;try{localStorage.setItem('hakoniwa-labels',showLabels?'1':'0')}catch(e){}applyLang()});
+$('langBtn').addEventListener('click',()=>{L=L==='ja'?'en':'ja';applyLang()});
+speedBtn.addEventListener('click',()=>{speedI=(speedI+1)%speeds.length;clock.speed=speeds[speedI];speedBtn.textContent=`${tr(UI.speed)} ×${clock.speed}`});
+$('roofBtn').addEventListener('click',()=>{interior=!interior;$('roofBtn').textContent=tr(interior?UI.roofOn:UI.roofOff);if(!interior&&selected&&selected.tile.indoor)select(null)});
+$('reset').addEventListener('click',()=>{cam.taz=ISO_AZ;cam.tel=ISO_EL;cam.tzoom=1;cam.follow=null;cFollow.setAttribute('aria-pressed','false')});
+$('zoomIn').addEventListener('click',()=>{cam.tzoom=clamp(cam.tzoom*1.35,.7,3.5)});
+$('zoomOut').addEventListener('click',()=>{cam.tzoom=clamp(cam.tzoom/1.35,.7,3.5)});
+
+// ================= Claude: god's voice & inner voice =================
+if(window.claude&&window.claude.use)window.claude.use('sample').then(s=>{sample=s}).catch(()=>{});
+const godForm=$('godForm'),godInput=$('godInput'),godSend=$('godSend');
+const GOAL_IDS=[...ACT_IDS,'home','none'];
+const MOODS=['happy','excited','calm','sad','scared','angry'];
+function worldSummary(){
+  return people.map(w=>{const n=w.needs;return`- ${w.name} (${w.en}) ${w.persona.en}${w.kid?' [child]':''} mood:${moodOf(w)} energy${n.energy.toFixed(1)} food${n.food.toFixed(1)} social${n.social.toFixed(1)} fun${n.fun.toFixed(1)} bladder${n.bladder.toFixed(1)} clean${n.hygiene.toFixed(1)} now:${statusOf(w).en} (${w.tile.indoor?'at home':'outside'})`}).join('\n')+`\n- タマ (Tama) the cat. now:${statusOf(cat).en}`;
+}
+function godPrompt(text){
+  return `You interpret the "Voice of God" in a cozy village life simulation. The player (God) spoke to the village from the sky. Decide how each villager reacts, based on personality and state. The player is learning English, so every line you write comes in simple everyday English (CEFR A2) AND natural Japanese.
+
+Voice of God: "${text}"
+
+Now: day ${clock.day}, ${hhmm(clock.hour)}, weather: ${weather.kind}${clock.sim<weather.festUntil?' (festival)':''}
+Villagers:
+${worldSummary()}
+
+Built structures (id: name at cell):
+${structSummary()}
+Landmarks for placing things: ${Object.keys(LANDMARKS).join(', ')}.
+
+Goal IDs. At home: sleep (go to bed), toilet, bath, brush (brush teeth), wash (wash face), cook, eat (at the dining table), snack (drink from the fridge), dishes, tv, rest (sofa), home (stay indoors). Outside: field, fish, well, nap (under a tree), chat, flower, bench, stall, play (tag), walk, plaza, dance. none = carry on.
+
+Reply with JSON only, in this shape:
+{"narration_en":"one short sentence describing the village","narration_ja":"同じ内容の日本語","weather":"clear|rain|snow|rainbow|null","event":"festival|null","timeSkipTo":null,"build":null,"remove":null,"villagers":[{"name":"ハナ","say_en":"short line in simple English","say_ja":"そのセリフの自然な日本語","mood":"happy|excited|calm|sad|scared|angry","goal":"goal ID","hours":2,"needs":{"energy":0,"food":0,"social":0,"fun":0,"bladder":0,"hygiene":0}}]}
+
+Rules: include all 6 villagers plus Tama (use the Japanese name as listed). Named villagers react strongly. Someone may hesitate or choose differently if the order doesn't fit them. Set weather only if the voice changes it, else null. If the voice moves time forward, set timeSkipTo to an hour 0-23, else null. needs are changes from -0.5 to 0.5. hours 0.5-6. Each say_en is at most 10 words of natural spoken English. Tama only makes cat sounds ("Meow!" / 「にゃー」).
+If the voice asks to build, create, place or plant anything (a building, statue, fountain, tower, shrine, garden, playground, anything at all), set build to a clear English design brief: what it is, its style, main colors, rough size in cells (1-4 wide), and where (near which landmark). Villagers react to it with excitement or surprise. If the voice asks to remove or destroy a built structure, set remove to its id. Otherwise both are null.`;
+}
+function offlineInterpret(text){
+  const t=text.toLowerCase();const has=(...k)=>k.some(x=>t.includes(x));
+  const r={narration_ja:`空から「${text.slice(0,24)}」という声が響いた`,narration_en:`A voice from the sky said: "${text.slice(0,40)}"`,weather:null,event:null,timeSkipTo:null,villagers:[]};
+  if(has('雨','rain'))r.weather='rain';if(has('雪','snow'))r.weather='snow';if(has('晴','sunny','clear'))r.weather='clear';if(has('虹','rainbow'))r.weather='rainbow';
+  let goal=null,mood='excited',sayP=null;
+  const G=[[['祭','踊','パーティ','festival','party','dance'],'dance',J('お祭りだ！','It\'s a festival!')],[['集ま','広場','plaza','gather'],'plaza',J('広場に行こう！','Let\'s go to the plaza!')],
+    [['寝','sleep','bed'],'sleep',J('もう寝よう。','Time for bed.')],[['風呂','bath'],'bath',J('お風呂に入ろう。','Let\'s take a bath.')],[['トイレ','toilet','bathroom'],'toilet',J('トイレに行ってくる。','I\'ll go to the bathroom.')],
+    [['歯','teeth'],'brush',J('歯をみがこう。','Let\'s brush our teeth.')],[['料理','作','cook'],'cook',J('料理しよう！','Let\'s cook!')],[['食べ','ごはん','eat','dinner','lunch','breakfast'],'eat',J('ごはんにしよう！','Let\'s eat!')],
+    [['テレビ','tv'],'tv',J('テレビを見よう！','Let\'s watch TV!')],[['帰','家','home','house','inside'],'home',J('家に帰ろう。','Let\'s go home.')],[['畑','働','work','field'],'field',J('よし、ひと仕事だ。','OK, time to work.')],
+    [['釣','魚','fish'],'fish',J('釣りに行こう。','Let\'s go fishing.')],[['花','flower'],'flower',J('お花に水をあげなきゃ。','I need to water the flowers.')],[['話','仲良','おしゃべり','talk','chat','friend'],'chat',J('誰かと話したいな。','I want to talk with someone.')],
+    [['遊','走','鬼ごっこ','play','run'],'play',J('遊ぼう！','Let\'s play!')],[['買','店','屋台','shop','buy','stall'],'stall',J('屋台に行こう。','Let\'s go to the stall.')]];
+  if(has('建て','作って','つくって','置いて','たてて','建設','build','make a','create','place','put a'))r.build=text;
+  if(has('壊','撤去','なくして','remove','destroy','demolish')&&structures.length){const s2=structures.find(s=>text.includes(s.spec.name_ja)||t.includes(s.spec.name_en.toLowerCase()))||structures[structures.length-1];r.remove=s2.id;r.build=null}
+  if(!r.build&&!r.remove)for(const[keys,g,p]of G)if(has(...keys)){goal=g;sayP=p;if(g==='dance')r.event='festival';if(g==='sleep'||g==='home')mood='calm';break}
+  if(!goal&&has('怒','雷','罰','angry','thunder')){mood='scared';sayP=J('ひえっ！','Yikes!')}
+  if(has('夜','night'))r.timeSkipTo=20;else if(has('朝','morning'))r.timeSkipTo=7;else if(has('昼','noon'))r.timeSkipTo=12;
+  const named=people.filter(w=>text.includes(w.name)||t.includes(w.en.toLowerCase()));
+  walkers.forEach(w=>{const target=!named.length||named.includes(w);const p=w.kind==='cat'?J('にゃ？','Meow?'):target&&sayP?sayP:pick([J('いまの声は…？','What was that voice?'),J('空から声が！','A voice from the sky!'),J('なんだろう？','What is it?')]);
+    r.villagers.push({name:w.name,say_en:p.en,say_ja:p.ja,mood:target?mood:'calm',goal:target?goal:null,hours:2.5})});
+  return r;
+}
+function applyDivine(r,text){
+  if(!r||typeof r!=='object')return;
+  if(r.narration_en||r.narration_ja)log(J(String(r.narration_ja||r.narration_en).slice(0,70),String(r.narration_en||r.narration_ja).slice(0,90)),'god-line');
+  const skip=Number(r.timeSkipTo);if(r.timeSkipTo!==null&&r.timeSkipTo!==undefined&&r.timeSkipTo!==''&&isFinite(skip)){const d=((clamp(Math.round(skip),0,23)-clock.hour)%24+24)%24;if(d>.2){clock.sim+=d*HR;tickClock()}}
+  if(r.weather==='rain'){setWeather('rain',3);log(J('雨が降りはじめた','It started to rain.'))}else if(r.weather==='snow'){setWeather('snow',4);log(J('雪が降りはじめた','It started to snow.'))}
+  else if(r.weather==='clear'){weather.kind='clear'}else if(r.weather==='rainbow'){weather.kind='clear';weather.rainbowUntil=clock.sim+2*HR}
+  if(r.build)buildFromVoice(String(r.build).slice(0,400),text);
+  if(r.remove){const st=removeStructure(String(r.remove));if(st)log(J(`${st.spec.name_ja}がなくなった`,`The ${st.spec.name_en} is gone.`),'god-line')}
+  if(r.event==='festival'){weather.festUntil=clock.sim+8*HR;log(J('広場にお祭りの飾りが立った','Festival decorations went up in the plaza.'))}
+  (Array.isArray(r.villagers)?r.villagers:[]).forEach(v=>{
+    const w=byName(String(v.name||''));if(!w)return;
+    const se=String(v.say_en||'').slice(0,80),sj=String(v.say_ja||'').slice(0,40);
+    if(se||sj)say(w,{en:se||sj,ja:sj||se},8);
+    if(w.player)return;
+    if(w.needs){
+      if(MOODS.includes(v.mood)){w.mood=v.mood;w.moodUntil=clock.sim+3*HR}
+      if(v.needs&&typeof v.needs==='object')for(const k in w.needs){const d=Number(v.needs[k]);if(isFinite(d))w.needs[k]=clamp(w.needs[k]+clamp(d,-.5,.5),0,1)}
+      remember(w,`神の声「${text.slice(0,20)}」を聞いた`);
+      const g=String(v.goal||'none'),hrs=clamp(Number(v.hours)||2,.5,6);
+      if((ACTS[g]||g==='home')&&g!=='none'){
+        w.directive={goal:g,until:clock.sim+hrs*HR};
+        if(g==='home'){const p=planAct(w,pick(['tv','rest','snack']));if(p)w.forced=p}
+        else if(g==='chat'){if(!w.link){w.act&&finishAct(w,true);w.path=[];w.goal=null;w.wait=0}}
+        else{const p=planAct(w,g);if(p)w.forced=p}
+      }
+    }else if(w.kind==='cat'&&(v.goal==='home'||v.goal==='sleep')){w.forced={goal:{id:'catsleep',dur:[1,2]},target:houses.A.spots.sofa[0]}}
+  });
+}
+godForm.addEventListener('submit',async e=>{
+  e.preventDefault();const text=godInput.value.trim();if(!text||godBusy)return;
+  godInput.value='';godBusy=true;godSend.disabled=true;log(J(`神の声「${text}」`,`Voice of God: "${text}"`),'god-line');
+  let r=null;
+  if(sample){
+    godSend.textContent=tr(UI.sending);
+    try{r=await sample.json(godPrompt(text),{modelTier:'quick',cache:false})}
+    catch(err){const c=err&&err.code;
+      if(c==='not_granted'||c==='sampling_disabled'||c==='not_declared'||c==='capability_disabled'){sample=null;log(J('Claudeが使えないため、簡易解釈で動かします','Claude is not available, so a simple keyword reading was used.'))}
+      else if(c==='rate_limited')log(J('声が届きにくいようです。少し待ってからもう一度','The voice could not get through. Wait a moment and try again.'));
+      else log(J('うまく届かなかったので簡易解釈で反映しました','Something went wrong, so a simple keyword reading was used.'));
+      if(c!=='rate_limited')r=offlineInterpret(text)}
+  }else r=offlineInterpret(text);
+  applyDivine(r,text);
+  godBusy=false;godSend.disabled=false;godSend.textContent=tr(UI.send);
+});
+const TEMPLATE_THOUGHT={happy:J('今日はいい日だなあ。','What a nice day today.'),sad:J('なんだか元気が出ないな…','I feel a little down...'),tired:J('もうくたくた。早く休みたい。','I\'m so tired. I want to rest.'),calm:J('のんびりした一日だ。','It\'s a relaxing day.'),excited:J('わくわくしてきた！','I\'m so excited!'),scared:J('さっきの声、なんだったんだろう…','What was that voice just now...?'),angry:J('もう、ぷんぷんだよ！','I\'m really upset!')};
+cThink.addEventListener('click',async()=>{
+  const w=selected;if(!w)return;
+  if(!sample){thought=w.kind==='cat'?J('（にゃーん。ごはんはまだかにゃ）','(Meow. Is it dinner time yet?)'):TEMPLATE_THOUGHT[moodOf(w)];addPhrase(thought);updateCard();return}
+  thought={wait:true};updateCard();cThink.disabled=true;
+  const n=w.needs,best=w.rel?Object.entries(w.rel).sort((a,b)=>b[1]-a[1])[0][0]:'';
+  const prompt=w.kind==='cat'?`Write the inner voice of Tama, the village cat, right now. Now: ${statusOf(w).en}, ${hhmm(clock.hour)}, weather ${weather.kind}. Reply with JSON only: {"en":"1-2 short sentences in simple English, cat-like","ja":"同じ内容の自然な日本語、猫らしい語尾"}`
+    :`Write the inner voice (first person, what they are thinking right now) of ${w.en} (${w.name}), a villager in a cozy village sim. The reader is learning everyday English, so use simple, natural spoken English (CEFR A2), 1-2 short sentences about this moment of daily life.
+Personality: ${w.persona.en}${w.kid?' (a child)':''}
+Time: day ${clock.day}, ${hhmm(clock.hour)}, weather ${weather.kind}${clock.sim<weather.festUntil?', festival':''}
+Doing now: ${statusOf(w).en} (${w.tile.indoor?'at home, in the '+ROOMS[w.tile.room].en:'outside'})
+Mood: ${moodOf(w)} (energy ${n.energy.toFixed(1)}, full ${n.food.toFixed(1)}, social ${n.social.toFixed(1)}, fun ${n.fun.toFixed(1)}, bladder ${n.bladder.toFixed(1)}, clean ${n.hygiene.toFixed(1)}; 0-1)
+Recent memories: ${w.memory.slice(-5).join(' / ')||'nothing special'}
+Best friend: ${best}
+Reply with JSON only: {"en":"the inner voice in English","ja":"同じ内容の自然な日本語"}`;
+  try{const r=await sample.json(prompt,{modelTier:'quick',cache:false});if(selected===w){thought={en:String(r.en||''),ja:String(r.ja||'')};addPhrase(thought)}}
+  catch(err){const c=err&&err.code;if(c==='not_granted'||c==='sampling_disabled')sample=null;if(selected===w)thought=c==='rate_limited'?J('いまは聞き取れない…少し待ってからもう一度。','I can\'t hear it right now. Try again in a moment.'):(w.kind==='cat'?J('（にゃーん）','(Meow.)'):TEMPLATE_THOUGHT[moodOf(w)])}
+  cThink.disabled=false;updateCard();
+});
+
+// ================= input =================
+const pointers=new Map();let drag=null,pinch=null;
+const hiddenW=w=>!interior&&(w.tile.indoor||(w.link&&w.link.to.indoor));
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size===2){const[a,b]=[...pointers.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),z:cam.tzoom};drag=null}
+  else drag={x:e.clientX,y:e.clientY,az:cam.taz,el:cam.tel,moved:false}});
+cv.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pinch&&pointers.size>=2){const[a,b]=[...pointers.values()];cam.tzoom=clamp(pinch.z*Math.hypot(a.x-b.x,a.y-b.y)/pinch.d,.7,3.5);cam.zoom=cam.tzoom;return}
+  if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!drag.moved&&Math.hypot(dx,dy)>6)drag.moved=true;if(drag.moved){cam.taz=drag.az+.006*dx;cam.tel=clamp(drag.el+.005*dy,.25,1.1)}});
+function endPointer(e){pointers.delete(e.pointerId);if(pointers.size<2)pinch=null;
+  if(drag&&!drag.moved&&e.type==='pointerup'){const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let best=null,bd=Math.max(18,.75*cam.scale);
+    walkers.forEach(w=>{if(hiddenW(w))return;const hp=headPoint(w),p=project(walkerPos(w)),cy=(hp[1]+p[1])/2+.15*cam.scale,d=Math.hypot(hp[0]-x,cy-y);if(d<bd){bd=d;best=w}});
+    if(best)select(best);
+    else{let bv=null,bvd=Math.max(16,.6*cam.scale);VOCAB.forEach(v=>{if(v.house&&!interior)return;if(v.exterior&&interior)return;if(v.mirror&&dot([0,-1,0],cam.d)>.02)return;const p=project(v.pos),d=Math.hypot(p[0]-x,p[1]-y);if(d<bvd){bvd=d;bv=v}});
+      if(bv)openWord(bv);else{select(null);wordCard.hidden=true;logEl.hidden=false}}}
+  drag=null}
+cv.addEventListener('pointerup',endPointer);cv.addEventListener('pointercancel',endPointer);
+cv.addEventListener('wheel',e=>{e.preventDefault();cam.tzoom=clamp(cam.tzoom*Math.exp(-e.deltaY*.0015),.7,3.5)},{passive:false});
+window.addEventListener('keydown',e=>{if(fpv.on||e.target.tagName==='INPUT')return;const k=e.key;
+  if(k==='ArrowLeft'||k==='ArrowRight'){cam.taz+=k==='ArrowLeft'?.15:-.15;e.preventDefault()}
+  else if(k==='ArrowUp'||k==='ArrowDown'){cam.tel=clamp(cam.tel+(k==='ArrowUp'?.08:-.08),.25,1.1);e.preventDefault()}
+  else if(k==='+'||k==='=')cam.tzoom=clamp(cam.tzoom*1.25,.7,3.5);else if(k==='-')cam.tzoom=clamp(cam.tzoom/1.25,.7,3.5)});
+window.addEventListener('resize',resize);
+
+// ================= clock =================
+function tickClock(){
+  const total=START_H+clock.sim/HR;clock.hour=total%24;clock.day=1+Math.floor(total/24);
+  if(clock.day!==clock.lastDay){clock.lastDay=clock.day;const roll=Math.random();weather.plan=roll<.22?{kind:'rain',at:9+Math.random()*7,hours:2+Math.random()*2}:roll<.27&&clock.day%3===0?{kind:'snow',at:8+Math.random()*6,hours:3}:null}
+  const hi=Math.floor(clock.hour);if(hi!==clock.lastHourInt){clock.lastHourInt=hi;if(hi===6)log(J(`${clock.day}日目の朝。村が目をさました`,`Day ${clock.day}. Good morning, village!`));if(hi===23)log(J('夜がふけて、家の明かりが消えていく','It\'s late. The lights in the houses go out.'));if(typeof growthCheck==='function'&&started)growthCheck()}
+}
+
+// ================= chat lines =================
+const LINES={
+  base:[J('いい天気だね','Nice weather, isn\'t it?'),J('今日は何してたの？','What did you do today?'),J('そうなんだ！','Oh, really?'),J('おなかすいたね','I\'m getting hungry.'),J('ほんとに？','Are you serious?'),J('なるほどね','I see.'),J('また遊ぼうね','Let\'s hang out again.'),J('聞いてよ、それがさ…','Listen, guess what...'),J('それ面白いね','That sounds fun.'),J('元気だった？','How have you been?'),J('またね！','See you later!')],
+  home:[J('今日の夕ごはん何？','What\'s for dinner tonight?'),J('先にお風呂入っていい？','Can I take a bath first?'),J('テレビつけていい？','Can I turn on the TV?'),J('部屋が散らかってるよ','Your room is messy.'),J('電気消してね','Please turn off the light.')],
+  rain:[J('よく降るね','It\'s raining a lot.'),J('傘を持っていきなよ','Take an umbrella with you.')],snow:[J('雪だるま作ろうよ','Let\'s make a snowman!'),J('さむいね〜','It\'s so cold!')],
+  night:[J('星がきれいだね','The stars are beautiful.'),J('そろそろ眠いな','I\'m getting sleepy.')],morning:[J('おはよう！','Good morning!'),J('よく眠れた？','Did you sleep well?')],fest:[J('お祭り楽しいね！','The festival is so fun!'),J('一緒に踊ろう！','Let\'s dance together!')]};
+function chatLine(w,o){
+  const h=clock.hour;let pool=LINES.base.slice();
+  if(w.tile.indoor)pool=pool.concat(LINES.home,LINES.home);
+  if(weather.kind==='rain')pool=pool.concat(LINES.rain,LINES.rain);if(weather.kind==='snow')pool=pool.concat(LINES.snow,LINES.snow);
+  if(h>=19||h<5)pool=pool.concat(LINES.night);if(h>=5&&h<9)pool=pool.concat(LINES.morning);if(clock.sim<weather.festUntil)pool=pool.concat(LINES.fest,LINES.fest);
+  if(Math.random()<.2)pool.push(J(`${o.name}、最近どう？`,`Hey ${o.en}, how's it going?`));
+  if(w.memory&&w.memory.length&&Math.random()<.25){const m=w.memory[w.memory.length-1];if(m.includes('釣'))pool.push(J('さっき魚が釣れたんだ','I caught a fish earlier.'));if(m.includes('神の声'))pool.push(J('さっきの空の声、聞いた？','Did you hear that voice from the sky?'))}
+  return pick(pool);
+}
+
+// ================= frame =================
+let hudT=0;
+function frame(dt){
+  const sdt=dt*clock.speed;clock.sim+=sdt;tickClock();
+  updateWeather(sdt);updateLight(dt);
+  updateCamera(dt,!!drag);
+  walkers.forEach(w=>updateWalker(w,sdt));
+  people.forEach(w=>{const a=w.act;if(!a||a.id!=='chat'||!a.lead||w.link)return;const p=a.partner;if(!p.act||p.act.id!=='chat'||p.act.partner!==w||p.link)return;
+    w.chatT-=dt;if(w.chatT<=0){const sp=w.turn%2?p:w;w.turn++;say(sp,chatLine(sp,sp===w?p:w),2.8);w.chatT=3.3}});
+
+  if(fpv.on){fpvFrame(dt);hudT-=dt;if(hudT<=0){updateHud();hudT=.25}return}
+  N.setTransform(S.dpr,0,0,S.dpr,0,0);
+  drawSky();clouds.forEach(c=>{if(!c.front)cloud(c,S.time)});birds(S.time);
+  boxes.forEach(prepBox);
+  const items=boxes.filter(b=>!b.skip);
+  props.forEach(p=>{prepItem(p,p.lo,p.hi);items.push(p)});
+  structures.forEach(st=>{if(st.k<1)st.k=Math.min(1,st.k+dt/1.4)});genPolys.forEach(p=>{prepPoly(p);items.push(p)});
+  walkers.forEach(w=>{if(hiddenW(w))return;const e=walkerPos(w);let z=e[2];if(w.link)z=Math.max(w.tile.pos[2],w.link.to.pos[2]);w.item=w.item||{kind:'walker',w};
+    const post=w.kind==='person'?postureOf(w):'stand';
+    if(post==='lie'||post==='bath'){const f=w.tile.furn;prepItem(w.item,[f.lo[0],f.lo[1],z+.001],[f.hi[0],f.hi[1],z+(post==='lie'?.2:.35)])}
+    else prepItem(w.item,[e[0]-.04,e[1]-.04,z+.001],[e[0]+.04,e[1]+.04,z+(w.kind==='cat'?.4:.75)]);items.push(w.item)});
+  const isBase=t=>t.kind==='box'&&t.whi[2]<=.2&&(t.whi[0]-t.wlo[0])*(t.whi[1]-t.wlo[1])>=2.5;
+  const baseI=items.filter(isBase),restI=items.filter(t=>!isBase(t));
+  for(const t of topo(baseI).concat(topo(restI))){if(t.kind==='box')drawBox(t);else if(t.kind==='walker'){t.w.kind==='cat'?drawCat(t.w):drawPerson(t.w)}else if(t.kind==='poly')drawPoly(t);else drawProp(t)}
+
+  if(interior)for(const id in houses){const hs=houses[id];
+    if(hs.tvOn){const p=project(hs.tvP),r=cam.scale*1.6;const g=N.createRadialGradient(p[0],p[1],0,p[0],p[1],r);const a=.12+.2*nightK;g.addColorStop(0,`rgba(140,190,255,${a+.05*Math.sin(S.time*7)})`);g.addColorStop(1,'rgba(140,190,255,0)');N.fillStyle=g;N.fillRect(p[0]-r,p[1]-r,2*r,2*r)}
+    if(hs.cooking&&Math.random()<dt*6)steam.push({p:[hs.stoveP[0]-.2+Math.random()*.1,hs.stoveP[1]-.1,hs.stoveP[2]+.1],life:1})}
+  for(let i=steam.length-1;i>=0;i--){const s=steam[i];s.life-=dt/1.6;s.p[2]+=.4*dt;if(s.life<=0||!interior){steam.splice(i,1);continue}const q=project(s.p);N.fillStyle=`rgba(255,255,255,${.5*s.life})`;N.beginPath();N.arc(q[0]+Math.sin(S.time*3+i)*2,q[1],cam.scale*(.06+.12*(1-s.life)),0,2*Math.PI);N.fill()}
+  if(!interior)for(const id in houses){const hs=houses[id];hs.smokeT=(hs.smokeT||0)-sdt;if(hs.smokeT<=0){smoke.push({p:hs.chimney.slice(),life:1,s:.7+Math.random()*.6});hs.smokeT=(.6+Math.random()*.6)/(hs.cooking?2.2:.35)}}
+  for(let i=smoke.length-1;i>=0;i--){const s=smoke[i];s.life-=dt/5;s.p[2]+=.45*dt;s.p[0]+=.12*dt;s.p[1]-=.06*dt;if(s.life<=0||interior){smoke.splice(i,1);continue}
+    const q=project(s.p);N.fillStyle=rgb(mix(A([244,240,246]),[150,150,180],nightK*.4),1,.4*s.life);N.beginPath();N.arc(q[0],q[1],cam.scale*(.12+.3*(1-s.life))*s.s,0,2*Math.PI);N.fill()}
+  if(nightK>.3&&rainK<.5)flies.forEach(f=>{const p=[f.b[0]+.4*Math.sin(S.time*.6+f.p),f.b[1]+.4*Math.cos(S.time*.5+f.p*1.3),.4+.25*Math.sin(S.time*1.1+f.p)];const q=project(p),a=(nightK-.3)*(.5+.5*Math.sin(S.time*3+f.p*4));
+    const g=N.createRadialGradient(q[0],q[1],0,q[0],q[1],7);g.addColorStop(0,`rgba(230,255,160,${a})`);g.addColorStop(1,'rgba(230,255,160,0)');N.fillStyle=g;N.fillRect(q[0]-7,q[1]-7,14,14)});
+  bunting();precip();
+  clouds.forEach(c=>{if(c.front)cloud(c,S.time)});
+
+  if(L==='en'){
+    if(showLabels&&interior&&cam.zoom>=1.3)for(const id in houses){const hs=houses[id];for(const k in hs.roomCenters){const p=project(hs.roomCenters[k]);tag(p[0],p[1],ROOMS[k].en,'room')}}
+    if(showLabels&&cam.zoom>=1.3)VOCAB.forEach(v=>{if(v.house&&!interior)return;if(v.exterior&&interior)return;if(v.mirror&&dot([0,-1,0],cam.d)>.02)return;if(v.word==='tree'&&!v.showLabel)return;const p=project(v.pos);if(p[0]<-40||p[0]>S.width+40||p[1]<-20||p[1]>S.height+20)return;tag(p[0],p[1]-10,v.word,'obj')});
+  }
+  const sayText=w=>L==='en'?(w.say.en||w.say.ja):(w.say.ja||w.say.en);
+  walkers.forEach(w=>{if(hiddenW(w)||w===selected||(w.say&&S.time<w.say.until))return;if(w.act&&!w.link&&ACTS[w.act.id]&&ACTS[w.act.id].glyph&&w.act.id!=='chat'){const p=headPoint(w);bubble(p[0],p[1],ACTS[w.act.id].glyph,'glyph')}else if(w.act&&w.act.id==='catsleep'&&!w.link){const p=headPoint(w);bubble(p[0],p[1],'z','glyph')}});
+  walkers.forEach(w=>{if(hiddenW(w)||!w.say||S.time>=w.say.until)return;const p=headPoint(w);bubble(p[0],p[1],w===selected?`${nameOf(w)}: ${sayText(w)}`:sayText(w),'say')});
+  if(selected&&!hiddenW(selected)&&!(selected.say&&S.time<selected.say.until)){const p=headPoint(selected);bubble(p[0],p[1],nameOf(selected),'sel')}
+
+  hudT-=dt;if(hudT<=0){updateHud();hudT=.25}
+}
+
+// ================= generated buildings (voice of God) =================
+const structures=[];const genPolys=[];let structSeq=1;
+const LANDMARKS={plaza:[8,11],pond:[15.2,12.3],field:[1.5,13],houseA:[3.5,3.5],houseB:[12.5,3.5],well:[16,3],stall:[8,3],bench:[6,13],center:[8.5,8],north:[8,1],south:[8,14.5],east:[16.5,8],west:[.5,8]};
+const hexC=(s,fb)=>{const m=/^#?([0-9a-f]{6})$/i.exec(String(s||'').trim());if(!m)return fb;const v=parseInt(m[1],16);return[(v>>16)&255,(v>>8)&255,v&255]};
+const PATTERNS=new Set(['windows','door','bricks','stripes','planks','tiles','glass','water','grass','dots','roof']);
+function drawPattern(pat,b,f,W,H,c){
+  if(!pat||pat==='none')return;
+  const lite=rgb(c,1.12),dark=rgb(c,.82);
+  switch(pat){
+    case'windows':{const g=mix(A(P.glass),[255,206,126],nightK*.85);for(let v=.35;v+.45<=H;v+=.9)for(let u=.35;u+.3<=W;u+=.75){N.fillStyle=rgbA(P.wallTrim);N.fillRect(u-.04,v-.04,.38,.53);N.fillStyle=rgb(g,1,.9);N.fillRect(u,v,.3,.45);N.fillStyle=rgbA(P.wallTrim,1,.8);N.fillRect(u+.135,v,.03,.45)}break}
+    case'door':{if(f.key!=='py'&&f.key!=='px'){drawPattern('windows',b,f,W,H,c);break}const dw=Math.min(.6,W*.5),dh=Math.min(1.05,H*.8);N.fillStyle=rgbA(P.wallTrim);N.beginPath();arch(W/2,0,dw+.12,dh+.08);N.fill();N.fillStyle=rgbA(mix(P.coral,[120,70,90],.35));N.beginPath();arch(W/2,0,dw,dh);N.fill();N.fillStyle=rgbA(P.gold);N.fillRect(W/2+dw*.25,dh*.42,.06,.06);break}
+    case'bricks':{N.fillStyle=dark;for(let v=0,row=0;v<H;v+=.18,row++){N.fillRect(0,v,W,.025);for(let u=(row%2)*.2;u<W;u+=.4)N.fillRect(u,v,.025,.18)}break}
+    case'stripes':{N.fillStyle=lite;for(let u=0;u<W;u+=.4)N.fillRect(u,0,.2,H);break}
+    case'planks':{N.fillStyle=dark;for(let v=.2;v<H;v+=.2)N.fillRect(0,v,W,.025);break}
+    case'tiles':{N.fillStyle=dark;for(let v=0;v<H;v+=.25)N.fillRect(0,v,W,.02);for(let u=0;u<W;u+=.25)N.fillRect(u,0,.02,H);break}
+    case'glass':{N.fillStyle=rgb(mix(c,[190,220,245],.6));N.fillRect(.04,.04,W-.08,H-.08);N.strokeStyle='rgba(255,255,255,0.6)';N.lineWidth=.05;N.beginPath();N.moveTo(W*.2,H*.2);N.lineTo(W*.45,H*.75);N.stroke();break}
+    case'water':{N.fillStyle=rgbA(mix(P.water,[60,80,140],nightK*.3));N.fillRect(.06,.06,W-.12,H-.12);N.strokeStyle=rgbA([226,244,252],1,.7);N.lineWidth=.035;for(let k=0;k<3;k++){const ph=(S.time*.4+k/3)%1;N.globalAlpha=1-ph;N.beginPath();N.ellipse(W/2,H/2,(.1+ph*.4)*W/1.2,(.1+ph*.4)*H/1.2,0,0,2*Math.PI);N.stroke()}N.globalAlpha=1;break}
+    case'grass':{N.fillStyle=rgbA(P.grass);N.fillRect(0,0,W,H);N.fillStyle=rgbA([150,200,140]);for(let k=0;k<W*H*12;k++){N.beginPath();N.arc(hash(k*1.3+b.id)*W,hash(k*2.1+b.id)*H,.05,0,2*Math.PI);N.fill()}break}
+    case'dots':{N.fillStyle=lite;for(let v=.2;v<H;v+=.35)for(let u=.2+((v*10|0)%2)*.17;u<W;u+=.35){N.beginPath();N.arc(u,v,.07,0,2*Math.PI);N.fill()}break}
+    case'roof':{N.fillStyle=dark;for(let u=.2;u<W;u+=.35)N.fillRect(u,0,.04,H);break}
+  }
+}
+// convex shapes as faces
+function polyFaces(shape,lo,hi,axis){
+  const[x0,y0,z0]=lo,[x1,y1,z1]=hi,cx=(x0+x1)/2,cy=(y0+y1)/2,F=[];
+  if(shape==='prism'){
+    const ax=axis==='y'?'y':axis==='x'?'x':(x1-x0>=y1-y0?'x':'y');
+    if(ax==='x'){F.push([[x0,y0,z0],[x1,y0,z0],[x1,cy,z1],[x0,cy,z1]],[[x1,y1,z0],[x0,y1,z0],[x0,cy,z1],[x1,cy,z1]],[[x0,y1,z0],[x0,y0,z0],[x0,cy,z1]],[[x1,y0,z0],[x1,y1,z0],[x1,cy,z1]])}
+    else{F.push([[x1,y0,z0],[x1,y1,z0],[cx,y1,z1],[cx,y0,z1]],[[x0,y1,z0],[x0,y0,z0],[cx,y0,z1],[cx,y1,z1]],[[x0,y0,z0],[x1,y0,z0],[cx,y0,z1]],[[x1,y1,z0],[x0,y1,z0],[cx,y1,z1]])}
+  }else{
+    const n=12,rx=(x1-x0)/2,ry=(y1-y0)/2,ring=z=>Array.from({length:n},(_,i)=>{const a=i/n*Math.PI*2;return[cx+Math.cos(a)*rx,cy+Math.sin(a)*ry,z]});
+    const b=ring(z0);
+    if(shape==='cone'){for(let i=0;i<n;i++)F.push([b[i],b[(i+1)%n],[cx,cy,z1]])}
+    else{const t=ring(z1);for(let i=0;i<n;i++)F.push([b[i],b[(i+1)%n],t[(i+1)%n],t[i]]);F.push(t.slice())}
+  }
+  const c=[cx,cy,(z0+z1)/2];
+  return F.map(pts=>{let n=norm(cross([pts[1][0]-pts[0][0],pts[1][1]-pts[0][1],pts[1][2]-pts[0][2]],[pts[2][0]-pts[0][0],pts[2][1]-pts[0][1],pts[2][2]-pts[0][2]]));
+    const m=pts.reduce((a,p)=>[a[0]+p[0]/pts.length,a[1]+p[1]/pts.length,a[2]+p[2]/pts.length],[0,0,0]);if(dot(n,[m[0]-c[0],m[1]-c[1],m[2]-c[2]])<0){n=n.map(v=>-v);pts=pts.slice().reverse()}return{pts,n}});
+}
+function drawPoly(p){
+  const k=p.st.k;amb=ambOut;
+  for(const f of p.faces){if(dot(f.n,cam.d)<=.001)continue;const top=f.n[2]>.7;let col=top?p.top:p.col;if(top){snowOn=true;col=snowy(col);snowOn=false}
+    const c=rgb(shade(col,f.n));N.fillStyle=c;N.strokeStyle=c;N.lineWidth=.8;N.beginPath();f.pts.forEach((q,i)=>{const s=project([q[0],q[1],q[2]*k]);i?N.lineTo(s[0],s[1]):N.moveTo(s[0],s[1])});N.closePath();N.fill();N.stroke();
+    if(p.pattern==='roof'&&!top&&cam.scale>8){N.strokeStyle=rgb(shade(col,f.n),.85);N.lineWidth=1;const a=f.pts[0],b=f.pts[1],d=f.pts[f.pts.length-1];for(let t=.25;t<1;t+=.25){const s1=project([a[0]+(d[0]-a[0])*t,a[1]+(d[1]-a[1])*t,(a[2]+(d[2]-a[2])*t)*k]),s2=project([b[0]+(f.pts[2][0]-b[0])*t,b[1]+(f.pts[2][1]-b[1])*t,(b[2]+(f.pts[2][2]-b[2])*t)*k]);N.beginPath();N.moveTo(s1[0],s1[1]);N.lineTo(s2[0],s2[1]);N.stroke()}}}
+}
+function prepPoly(p){const k=p.st.k;prepItem(p,p.lo,[p.hi[0],p.hi[1],Math.max(p.lo[2]+.01,p.hi[2]*k)])}
+// validation
+function sanitizeSpec(sp){
+  if(!sp||typeof sp!=='object'||!Array.isArray(sp.parts))return null;
+  const w=clamp(Math.round(Number(sp.footprint&&sp.footprint[0])||2),1,4),d=clamp(Math.round(Number(sp.footprint&&sp.footprint[1])||2),1,4);
+  const parts=[];
+  for(const q of sp.parts.slice(0,60)){if(!q||!Array.isArray(q.from)||!Array.isArray(q.to))continue;
+    const a=q.from.map(Number),b=q.to.map(Number);if(a.length<3||b.length<3||[...a,...b].some(v=>!isFinite(v)))continue;
+    const lo=[clamp(Math.min(a[0],b[0]),0,w),clamp(Math.min(a[1],b[1]),0,d),clamp(Math.min(a[2],b[2]),0,5)],hi=[clamp(Math.max(a[0],b[0]),0,w),clamp(Math.max(a[1],b[1]),0,d),clamp(Math.max(a[2],b[2]),0,5)];
+    if(hi[0]-lo[0]<.03||hi[1]-lo[1]<.03||hi[2]-lo[2]<.01)continue;
+    const shape=['box','prism','cylinder','cone'].includes(q.shape)?q.shape:'box';
+    parts.push({shape,lo,hi,color:hexC(q.color,[230,200,180]),top:hexC(q.top,null),pattern:PATTERNS.has(q.pattern)?q.pattern:'none',topPattern:PATTERNS.has(q.topPattern)?q.topPattern:'none',axis:q.axis})}
+  if(!parts.length)return null;
+  const s=v=>String(v||'').slice(0,60);
+  let act=null;if(sp.activity&&typeof sp.activity==='object'&&sp.activity.label_en){const a=sp.activity,g={};['fun','energy','social','food','hygiene'].forEach(k=>{const v=Number(a.gain&&a.gain[k]);if(isFinite(v)&&v)g[k]=clamp(v,-.3,.8)});if(!Object.keys(g).length)g.fun=.3;
+    act={label_en:s(a.label_en),label_ja:s(a.label_ja||a.label_en),use_en:s(a.use_en||a.label_en),use_ja:s(a.use_ja||a.label_ja),phrase_en:String(a.phrase_en||'').slice(0,90),phrase_ja:String(a.phrase_ja||'').slice(0,60),gain:g}}
+  return{name_en:s(sp.name_en)||'building',name_ja:s(sp.name_ja)||s(sp.name_en)||'建物',example_en:String(sp.example_en||'').slice(0,100),example_ja:String(sp.example_ja||'').slice(0,70),
+    footprint:[w,d],walkable:!!sp.walkable,near:LANDMARKS[sp.near]?sp.near:'center',parts,activity:act};
+}
+// placement
+function canPlace(cx,cy,w,d,walkable){
+  for(let x=cx;x<cx+w;x++)for(let y=cy;y<cy+d;y++){const t=T(x,y);if(!t||t.tag!=='ground'||t.gen)return false}
+  if(walkable)return true;
+  const cells=new Set();for(let x=cx;x<cx+w;x++)for(let y=cy;y<cy+d;y++)cells.add(key(x,y));
+  const start=T(...houses.A.door[1]);if(!start||cells.has(key(...houses.A.door[1])))return false;
+  const reach=skip=>{const seen=new Set([start]),q=[start];while(q.length){const o=q.shift();for(const l of o.links){const t=l.to;if(t.tag!=='ground'||seen.has(t)||(skip&&skip.has(key(t.pos[0],t.pos[1]))))continue;seen.add(t);q.push(t)}}return seen};
+  const before=reach(null);let lost=0;before.forEach(t=>{if(cells.has(key(t.pos[0],t.pos[1])))lost++});
+  return reach(cells).size===before.size-lost;
+}
+function findSpot(spec){
+  const[w,d]=spec.footprint,tgt=LANDMARKS[spec.near]||LANDMARKS.center,c=[];
+  for(let x=0;x<=MW-w;x++)for(let y=0;y<=MH-d;y++){let pen=0;for(let i=x;i<x+w;i++)for(let j=y;j<y+d;j++){const k=key(i,j);if(pathSet.has(k)||plazaSet.has(k))pen+=spec.walkable?0:2.5}
+    c.push({x,y,s:Math.hypot(x+(w-1)/2-tgt[0],y+(d-1)/2-tgt[1])+pen})}
+  c.sort((a,b)=>a.s-b.s);
+  for(const k of c.slice(0,160))if(canPlace(k.x,k.y,w,d,spec.walkable))return k;
+  return null;
+}
+function relink(t){t.links=[];for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const o=T(t.pos[0]+dx,t.pos[1]+dy);if(!o)continue;const dz=o.pos[2]-t.pos[2];if(Math.abs(dz)>.55||!edgeOK(t,o)||(t.stop&&o.stop))continue;t.links.push({to:o,dir:[dx,dy],dz})}}
+function removeTileRefs(t){
+  const gi=ground.indexOf(t);if(gi>=0)ground.splice(gi,1);
+  for(const k in SPOTS){const a=SPOTS[k],i=a.indexOf(t);if(i>=0)a.splice(i,1)}
+  if(typeof SPOTREG!=='undefined')SPOTREG.delete(t);
+}
+function placeStructure(spec,pos,id,animate){
+  const st={id:id||('b'+(structSeq++)),spec,cx:pos.x,cy:pos.y,k:animate?0:1,boxes:[],polys:[],cells:[]};
+  const ox=pos.x-.5,oy=pos.y-.5;
+  for(const q of spec.parts){
+    const lo=[q.lo[0]+ox,q.lo[1]+oy,q.lo[2]],hi=[q.hi[0]+ox,q.hi[1]+oy,q.hi[2]];
+    if(q.shape==='box'){const deco={};if(q.pattern!=='none')['px','py','nx','ny'].forEach(k=>deco[k]='gen');if(q.topPattern!=='none')deco.top='genTop';
+      const b=box(lo,hi,{side:q.color,top:q.top||mix(q.color,[255,255,255],.15),deco,genSide:q.pattern,genTop:q.topPattern,sid:st.id,st});st.boxes.push(b)}
+    else{const p={kind:'poly',faces:polyFaces(q.shape,lo,hi,q.axis),lo,hi,col:q.color,top:q.top||q.color,pattern:q.pattern,st,sid:st.id};st.polys.push(p);genPolys.push(p)}
+  }
+  const[w,d]=spec.footprint;
+  for(let x=pos.x;x<pos.x+w;x++)for(let y=pos.y;y<pos.y+d;y++){const t=T(x,y);if(!t)continue;st.cells.push([x,y]);
+    if(spec.walkable){t.gen=st.id;continue}
+    walkers.forEach(o=>{if(o.tile===t||(o.link&&o.link.to===t)){const nb=ground.find(g=>g!==t&&Math.abs(g.pos[0]-x)+Math.abs(g.pos[1]-y)<=2&&!(g.pos[0]>=pos.x&&g.pos[0]<pos.x+w&&g.pos[1]>=pos.y&&g.pos[1]<pos.y+d))||ground[0];o.link=null;o.tile=nb;if(o.player&&o.ppos)o.ppos=[nb.pos[0],nb.pos[1]];o.path=[];o.goal=null;o.target=null}});
+    removeTileRefs(t);tileAt.delete(key(x,y));
+    for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const o=T(x+dx,y+dy);if(o)o.links=o.links.filter(l=>l.to!==t)}}
+  walkers.forEach(o=>{if(o.path.length&&o.path.some(t=>!tileAt.has(key(t.pos[0],t.pos[1]))||T(t.pos[0],t.pos[1])!==t)){o.path=[];o.goal=null;o.target=null}});
+  // activity
+  if(spec.activity){const a=spec.activity,aid='g_'+st.id;st.actId=aid;
+    ACTS[aid]={label:J(a.label_ja,a.label_en),glyph:'♪',dur:[.6,1.3],gain:a.gain,created:clock.sim,gen:true,phrase:()=>a.phrase_en?J(a.phrase_ja||a.phrase_en,a.phrase_en):null};
+    ACT_IDS.push(aid);if(typeof USE_T!=='undefined')USE_T[aid]=J(a.use_ja,a.use_en);
+    refreshGenSpots(st)}
+  const top=Math.max(...spec.parts.map(q=>q.hi[2]));
+  st.vocab={word:spec.name_en,ja:spec.name_ja,ex:spec.example_en||`This is a ${spec.name_en}.`,exja:spec.example_ja||`これは${spec.name_ja}です。`,pos:[pos.x+w/2-.5,pos.y+d/2-.5,top+.15],sid:st.id};VOCAB.push(st.vocab);
+  structures.push(st);
+  if(typeof addStructGL==='function'&&gl)addStructGL(st);
+  return st;
+}
+function refreshGenSpots(st){
+  if(!st.actId)return;const[w,d]=st.spec.footprint,out=new Set();
+  if(st.spec.walkable){st.cells.forEach(([x,y])=>{const t=T(x,y);if(t)out.add(t)})}
+  else for(let x=st.cx-1;x<=st.cx+w;x++)for(let y=st.cy-1;y<=st.cy+d;y++){const inside=x>=st.cx&&x<st.cx+w&&y>=st.cy&&y<st.cy+d;if(inside)continue;const edge=(x>=st.cx&&x<st.cx+w)||(y>=st.cy&&y<st.cy+d);if(!edge)continue;const t=T(x,y);if(t&&t.tag==='ground')out.add(t)}
+  SPOTS[st.actId]=[...out];if(typeof regSpot==='function')SPOTS[st.actId].forEach(t=>regSpot(t,[st.actId]));
+}
+function removeStructure(id){
+  const i=structures.findIndex(s=>s.id===id);if(i<0)return null;const st=structures[i];structures.splice(i,1);
+  for(const b of st.boxes){const k=boxes.indexOf(b);if(k>=0)boxes.splice(k,1)}
+  for(const p of st.polys){const k=genPolys.indexOf(p);if(k>=0)genPolys.splice(k,1)}
+  const vi=VOCAB.indexOf(st.vocab);if(vi>=0)VOCAB.splice(vi,1);
+  if(st.actId){walkers.forEach(o=>{if(o.act&&o.act.id===st.actId){o.act=null;o.wait=0}if(o.goal&&o.goal.id===st.actId){o.goal=null;o.path=[];o.target=null}});
+    delete ACTS[st.actId];const ai=ACT_IDS.indexOf(st.actId);if(ai>=0)ACT_IDS.splice(ai,1);(SPOTS[st.actId]||[]).forEach(t=>{const s=SPOTREG&&SPOTREG.get(t);if(s){s.delete(st.actId);if(!s.size)SPOTREG.delete(t)}});delete SPOTS[st.actId]}
+  if(!st.spec.walkable)for(const[x,y]of st.cells){const t=tile(x,y,0,{tag:'ground'});ground.push(t);relink(t);for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const o=T(x+dx,y+dy);if(o&&o!==t)relink(o)}}
+  else st.cells.forEach(([x,y])=>{const t=T(x,y);if(t)delete t.gen});
+  structures.forEach(refreshGenSpots);
+  if(typeof removeStructGL==='function'&&gl)removeStructGL(st.id);
+  saveBuilds();return st;
+}
+function saveBuilds(){try{localStorage.setItem('hakoniwa-builds',JSON.stringify(structures.map(s=>({id:s.id,spec:s.spec,x:s.cx,y:s.cy,by:s.by,wish:s.wish}))))}catch(e){}}
+function loadBuilds(){try{const a=JSON.parse(localStorage.getItem('hakoniwa-builds')||'[]');if(!Array.isArray(a))return;
+  for(const r of a.slice(0,24)){const sp=r&&r.spec&&sanitizeSpec({...r.spec,parts:r.spec.parts.map(q=>({...q,from:q.lo,to:q.hi,color:toHex(q.color),top:q.top?toHex(q.top):null}))});if(!sp)continue;
+    if(!canPlace(r.x,r.y,sp.footprint[0],sp.footprint[1],sp.walkable))continue;const n=Number(String(r.id).slice(1));if(n>=structSeq)structSeq=n+1;{const st=placeStructure(sp,{x:r.x,y:r.y},r.id,false);if(r.by){st.by=String(r.by).slice(0,20);st.wish=String(r.wish||'').slice(0,80)}}}}catch(e){}}
+const toHex=c=>'#'+c.map(v=>Math.round(clamp(v,0,255)).toString(16).padStart(2,'0')).join('');
+function structSummary(){return structures.length?structures.map(s=>`${s.id}: ${s.spec.name_en} (${s.spec.name_ja}) at (${s.cx},${s.cy})`).join('\n'):'(none)'}
+
+function buildPrompt(desc,voice,note,who){
+  return `You design a small 3D structure for a cozy isometric village diorama (pastel, toy-like, like a dollhouse village).
+Request from ${who||'the village god'}: "${voice}"
+Design brief: ${desc}${note?`\n${note}`:''}
+
+Scale: 1 unit = one grid cell. A villager is about 1 unit tall. House walls are 1.6 high, a door is about 1.1 high and 0.6 wide, a tree is about 1.6 tall.
+Coordinates are local to the footprint: x from 0 to footprint width, y from 0 to footprint depth, z up from 0 (ground) to at most 5. Front faces face +x and +y.
+Shapes: "box" (axis-aligned), "prism" (gable roof filling its box, ridge along "axis" x or y), "cylinder" (12-sided, inscribed in its box), "cone" (inscribed in its box, apex at the top).
+Patterns for box sides: none, windows, door (door on the front face), bricks, stripes, planks, tiles, glass, water, grass, dots. topPattern for box tops (e.g. water for a pool, grass, tiles). "roof" pattern adds roof lines to prisms.
+Use soft pastel colors that fit a village of peach walls (#f6d6be), coral roofs (#ec8c84), teal (#78aab4), mint (#b2e2ce), cream (#fcf0de), wood (#c69678), lavender stone (#b6a4d6). Bright accents are fine when the request asks for them.
+Build it from 6-45 parts. Parts should touch rather than overlap (stack parts on top of each other, z of one = top of the one below). Make it recognizable and charming.
+"walkable": true only for flat things people walk on (z top ≤ 0.12, like a stage floor or mosaic); otherwise false.
+"near": where to put it, one of: ${Object.keys(LANDMARKS).join(', ')}.
+"activity": what villagers can do there (or null if nothing). gain values are per hour, 0.1-0.6, keys from fun, energy, social, food, hygiene.
+
+Reply with JSON only:
+{"name_en":"fountain","name_ja":"噴水","example_en":"Let's meet at the fountain.","example_ja":"噴水のところで会おう。","footprint":[2,2],"walkable":false,"near":"plaza",
+"parts":[{"shape":"cylinder","from":[0.1,0.1,0],"to":[1.9,1.9,0.3],"color":"#b6a4d6","top":"#88c2e2","pattern":"bricks","topPattern":"water"},{"shape":"cylinder","from":[0.8,0.8,0.3],"to":[1.2,1.2,1.0],"color":"#fcf0de"}],
+"activity":{"label_en":"resting by the fountain","label_ja":"噴水のそばで休憩","use_en":"Rest by the fountain","use_ja":"噴水のそばで休む","phrase_en":"The water sounds so nice.","phrase_ja":"水の音が気持ちいいね。","gain":{"fun":0.3,"energy":0.2}}}`;
+}
+function offlineSpec(text){
+  const t=text.toLowerCase(),has=(...k)=>k.some(x=>t.includes(x));
+  const C=(h)=>h;
+  if(has('噴水','fountain'))return{name_en:'fountain',name_ja:'噴水',example_en:'Let\'s meet at the fountain.',example_ja:'噴水のところで会おう。',footprint:[2,2],near:'plaza',parts:[{shape:'cylinder',from:[.1,.1,0],to:[1.9,1.9,.3],color:'#b6a4d6',top:'#88c2e2',pattern:'bricks',topPattern:'water'},{shape:'cylinder',from:[.75,.75,.3],to:[1.25,1.25,.9],color:'#fcf0de'},{shape:'cylinder',from:[.5,.5,.9],to:[1.5,1.5,1],color:'#fcf0de',top:'#88c2e2'},{shape:'cone',from:[.85,.85,1],to:[1.15,1.15,1.3],color:'#a8dcf0'}],activity:{label_en:'resting by the fountain',label_ja:'噴水のそばで休憩',use_en:'Rest by the fountain',use_ja:'噴水のそばで休む',phrase_en:'The water sounds so nice.',phrase_ja:'水の音が気持ちいいね。',gain:{fun:.3,energy:.2}}};
+  if(has('塔','タワー','tower'))return{name_en:'tower',name_ja:'塔',example_en:'You can see the whole village from the tower.',example_ja:'塔から村全体が見えるよ。',footprint:[2,2],near:'north',parts:[{shape:'cylinder',from:[.2,.2,0],to:[1.8,1.8,1.4],color:'#f6d6be',pattern:'bricks'},{shape:'cylinder',from:[.3,.3,1.4],to:[1.7,1.7,2.6],color:'#fcf0de',pattern:'windows'},{shape:'cylinder',from:[.15,.15,2.6],to:[1.85,1.85,2.75],color:'#ec8c84'},{shape:'cone',from:[.2,.2,2.75],to:[1.8,1.8,3.8],color:'#ec8c84'}],activity:null};
+  if(has('木','tree'))return{name_en:'big tree',name_ja:'大きな木',example_en:'Let\'s rest under the big tree.',example_ja:'大きな木の下で休もう。',footprint:[1,1],near:'center',parts:[{shape:'cylinder',from:[.4,.4,0],to:[.6,.6,.8],color:'#b98a76'},{shape:'cone',from:[.05,.05,.6],to:[.95,.95,1.6],color:'#8cc795'},{shape:'cone',from:[.15,.15,1.2],to:[.85,.85,2.1],color:'#a9dca8'}],activity:null};
+  const name=text.replace(/(を|の)?(建てて|作って|置いて|つくって|たてて).*/,'').slice(0,12)||'小屋';
+  return{name_en:'little house',name_ja:name,example_en:'Look at the little house!',example_ja:`${name}を見て！`,footprint:[2,2],near:'center',parts:[{shape:'box',from:[.2,.2,0],to:[1.8,1.8,1.1],color:'#f6d6be',pattern:'door'},{shape:'prism',from:[.1,.1,1.1],to:[1.9,1.9,1.8],color:'#ec8c84',pattern:'roof',axis:'x'}],activity:{label_en:'visiting the little house',label_ja:`${name}に遊びに行く`,use_en:'Look around',use_ja:'見てまわる',phrase_en:'What a cute little house!',phrase_ja:'かわいい建物だね！',gain:{fun:.3}}};
+}
+async function buildFromVoice(desc,voice){
+  log(J('建設中…','Building...'),'god-line');
+  let spec=null;
+  if(sample){try{const r=await sample.json(buildPrompt(desc,voice),{modelTier:'default',cache:false});spec=sanitizeSpec(r)}catch(err){const c=err&&err.code;if(c==='not_granted'||c==='sampling_disabled')sample=null;if(c==='rate_limited'){log(J('いまは建てられません。少し待ってからもう一度','Cannot build right now. Try again in a moment.'));return}}}
+  if(!spec)spec=sanitizeSpec(offlineSpec(voice));
+  if(!spec)return;
+  if(structures.length>=24){log(J('これ以上は建てられません。何か壊してから建ててください','There is no more room. Remove something first.'));return}
+  const pos=findSpot(spec);
+  if(!pos){log(J(`「${spec.name_ja}」を置ける場所がありませんでした`,`There was no room for the ${spec.name_en}.`));return}
+  const st=placeStructure(spec,pos,null,true);saveBuilds();
+  log(J(`${spec.name_ja}ができた！`,`A ${spec.name_en} appeared!`),'god-line');
+  const fans=people.filter(w=>!w.player&&!sleepTime(w)).sort(()=>Math.random()-.5).slice(0,3);
+  fans.forEach((w,i)=>{say(w,pick([J(`わあ、${spec.name_ja}だ！`,`Wow, a ${spec.name_en}!`),J('すごい！行ってみよう！','Amazing! Let\'s go see it!'),J(`${spec.name_ja}ができたね！`,`Look, a new ${spec.name_en}!`)]),5);
+    if(st.actId&&!w.tile.stop){const p=planAct(w,st.actId);if(p){w.forced=p}}});
+  if(!cam.follow&&!fpv.on){cam.tzoom=Math.max(cam.tzoom,1)}
+  return st;
+}
+
+// ================= first-person mode (built-in WebGL) =================
+const USE_T={sleep:J('ベッドで寝る','Go to bed'),toilet:J('トイレを使う','Use the toilet'),bath:J('お風呂に入る','Take a bath'),brush:J('歯をみがく','Brush your teeth'),wash:J('顔を洗う','Wash your face'),
+  cook:J('料理する','Cook a meal'),eat:J('ごはんを食べる','Eat a meal'),sit:J('いすに座る','Sit on the chair'),snack:J('飲み物を出す','Get a drink'),dishes:J('お皿を洗う','Do the dishes'),
+  tv:J('テレビを見る','Watch TV'),rest:J('ソファでくつろぐ','Relax on the sofa'),fish:J('釣りをする','Go fishing'),well:J('水をくむ','Get some water'),field:J('畑の手入れ','Work in the field'),
+  flower:J('花に水をやる','Water the flowers'),bench:J('ベンチで休む','Rest on the bench'),stall:J('果物を買う','Buy some fruit'),dance:J('踊る','Dance'),nap:J('昼寝する','Take a nap')};
+const FUI={exit:J('一人称をやめる','Exit'),talk:J('話しかける','Talk'),what:J('これは何？','What\'s this?'),busy:J('使用中です','Someone is using it.'),
+  hintDesk:J('WASD/矢印で移動・ドラッグで見回す・Eで行動・Tで話す・Escで戻る','WASD / arrows to move · drag to look · E to act · T to talk · Esc to exit'),
+  hintTouch:J('左下のスティックで移動・ドラッグで見回す','Stick to move · drag to look around'),
+  noGL:J('この端末では3D表示が使えません','3D view is not available on this device.'),send:J('送る','Send'),
+  talkPh:J('英語でも日本語でも話しかけてみよう','Say something in English (or Japanese)'),you:J('あなた','You')};
+const SPOTREG=new Map();
+function regSpot(t,ids){if(!t)return;let s=SPOTREG.get(t);if(!s){s=new Set();SPOTREG.set(t,s)}ids.forEach(i=>s.add(i))}
+for(const id in houses){const sp=houses[id].spots;sp.beds.forEach(t=>regSpot(t,['sleep']));regSpot(sp.toilet[0],['toilet']);regSpot(sp.tub[0],['bath']);regSpot(sp.basin[0],['brush','wash']);
+  regSpot(sp.stove[0],['cook']);regSpot(sp.fridge[0],['snack']);regSpot(sp.sink[0],['dishes']);sp.chairs.forEach(t=>regSpot(t,['eat']));sp.sofa.forEach(t=>regSpot(t,['tv','rest']))}
+['fish','well','field','nap','flower','bench','stall'].forEach(k=>SPOTS[k].forEach(t=>regSpot(t,[k])));SPOTS.plaza.forEach(t=>regSpot(t,['dance']));
+const fpvEl=$('fpv'),fpvHud=$('fpvHud'),fpvActs=$('fpvActs'),fpvSub=$('fpvSub'),fpvNeeds=$('fpvNeeds'),fpvName=$('fpvName'),fpvHint=$('fpvHint'),joy=$('joy'),joyKnob=$('joyKnob'),toastEl=$('toast');
+const coarse=window.matchMedia&&matchMedia('(pointer: coarse)').matches;
+document.body.classList.toggle('coarse',!!coarse);
+let gl=null,glc=null,ovl=null,ovc=null,prog=null,U={},whiteTex=null,statics=[],texFaces=[],spriteBuf=null,sprites=new Map(),propSprites=[],dynT=0,lampT=0,labelRects=[];
+function toast(p){toastEl.textContent=tr(p);toastEl.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>{toastEl.hidden=true},2200)}
+// --- matrices
+function persp(fy,a,n,f){const t=1/Math.tan(fy/2),nf=1/(n-f);return new Float32Array([t/a,0,0,0,0,t,0,0,0,0,(f+n)*nf,-1,0,0,2*f*n*nf,0])}
+function norm(v){const l=Math.hypot(v[0],v[1],v[2])||1;return[v[0]/l,v[1]/l,v[2]/l]}
+function lookAt(e,c,up){const f=norm([c[0]-e[0],c[1]-e[1],c[2]-e[2]]),s=norm(cross(f,up)),u=cross(s,f);return new Float32Array([s[0],u[0],-f[0],0,s[1],u[1],-f[1],0,s[2],u[2],-f[2],0,-dot(s,e),-dot(u,e),dot(f,e),1])}
+function mul(a,b){const o=new Float32Array(16);for(let i=0;i<4;i++)for(let j=0;j<4;j++){let s=0;for(let k=0;k<4;k++)s+=a[k*4+j]*b[i*4+k];o[i*4+j]=s}return o}
+let VP=null,EYE=[0,0,0],RIGHT=[1,0,0],FWD=[0,1,0];
+function toScreen(p){const x=p[0],y=p[1],z=p[2],m=VP;const cw=m[3]*x+m[7]*y+m[11]*z+m[15];if(cw<=.05)return null;const cx=m[0]*x+m[4]*y+m[8]*z+m[12],cy=m[1]*x+m[5]*y+m[9]*z+m[13];return[(cx/cw+1)/2*S.width,(1-cy/cw)/2*S.height,cw]}
+// --- GL setup
+function initGL(){
+  glc=document.createElement('canvas');glc.id='fpvCanvas';fpvEl.prepend(glc);
+  gl=glc.getContext('webgl',{antialias:true,alpha:false})||glc.getContext('experimental-webgl');if(!gl)return false;
+  ovl=$('fpvOverlay');ovc=ovl.getContext('2d');
+  const vs=`attribute vec3 aP;attribute vec2 aT;attribute vec3 aC;uniform mat4 uVP;varying vec2 vT;varying vec3 vC;varying vec3 vW;void main(){vT=aT;vC=aC;vW=aP;gl_Position=uVP*vec4(aP,1.0);}`;
+  const fs=`precision mediump float;varying vec2 vT;varying vec3 vC;varying vec3 vW;uniform sampler2D uTex;uniform vec3 uTint;uniform vec3 uFogC;uniform vec2 uFog;uniform vec3 uEye;
+    void main(){vec4 t=texture2D(uTex,vT);if(t.a<0.04)discard;vec3 c=t.rgb*vC*uTint;float d=distance(vW,uEye);float f=clamp((d-uFog.x)/(uFog.y-uFog.x),0.0,1.0);gl_FragColor=vec4(mix(c,uFogC,f),t.a);}`;
+  const sh=(t,s)=>{const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);return o};
+  prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,vs));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,fs));gl.linkProgram(prog);
+  if(!gl.getProgramParameter(prog,gl.LINK_STATUS))return false;
+  gl.useProgram(prog);
+  ['uVP','uTex','uTint','uFogC','uFog','uEye'].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
+  U.aP=gl.getAttribLocation(prog,'aP');U.aT=gl.getAttribLocation(prog,'aT');U.aC=gl.getAttribLocation(prog,'aC');
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+  whiteTex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,whiteTex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
+  spriteBuf=gl.createBuffer();
+  gl.enable(gl.DEPTH_TEST);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+  return true;
+}
+function mkTex(canvas){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);setTexParams();gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,canvas);return t}
+function setTexParams(){gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE)}
+function upTex(t,canvas){gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,canvas)}
+function mkBuf(arr){const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(arr),gl.STATIC_DRAW);return b}
+function bindAttribs(){gl.vertexAttribPointer(U.aP,3,gl.FLOAT,false,32,0);gl.vertexAttribPointer(U.aT,2,gl.FLOAT,false,32,12);gl.vertexAttribPointer(U.aC,3,gl.FLOAT,false,32,20);gl.enableVertexAttribArray(U.aP);gl.enableVertexAttribArray(U.aT);gl.enableVertexAttribArray(U.aC)}
+const quad=(o,u,v,r,col,arr)=>{const P_=[[o,0,0],[u,1,0],[r,1,1],[o,0,0],[r,1,1],[v,0,1]];for(const[p,s,t]of P_)arr.push(p[0],p[1],p[2],s,t,col[0],col[1],col[2])};
+const DYN=new Set(['screen','stoveTop','oven','tableTop','sinkTop','tubTop','wallOut','wallIn','mirror']);
+function bakeFace(it){
+  const{b,f,W,H,base,c}=it;
+  if(!it.canvas){const ppu=it.ppu;it.canvas=document.createElement('canvas');it.canvas.width=Math.max(4,Math.min(1024,Math.round(W*ppu)));it.canvas.height=Math.max(4,Math.min(1024,Math.round(H*ppu)))}
+  const cv2=it.canvas,ctx=cv2.getContext('2d'),pN=N,pA=amb;N=ctx;amb=[1,1,1];
+  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=rgb(c);ctx.fillRect(0,0,cv2.width,cv2.height);
+  ctx.setTransform(cv2.width/W,0,0,-cv2.height/H,0,cv2.height);
+  try{drawDeco(b,f,W,H,base,c)}catch(e){}
+  N=pN;amb=pA;
+  if(it.tex)upTex(it.tex,cv2);else it.tex=mkTex(cv2);
+}
+function buildWorld(){
+  const groups={out:[],A:[],B:[]},pA=amb;amb=[1,1,1];
+  const FACES6=[...FACES,{n:[0,0,-1],o:0,u:1,v:2,key:'bot'}];
+  for(const b of boxes){if(b.deco.py==='doorleaf'||b.sid)continue;b.cut=false;
+    for(const f of FACES6){if(f.key==='bot'&&b.lo[2]<.05)continue;
+      const o=corner(b.lo,b.hi,f.o),u=corner(b.lo,b.hi,f.u),v=corner(b.lo,b.hi,f.v),r=[u[0]+v[0]-o[0],u[1]+v[1]-o[1],u[2]+v[2]-o[2]];
+      const W=Math.hypot(u[0]-o[0],u[1]-o[1],u[2]-o[2]),H=Math.hypot(v[0]-o[0],v[1]-o[1],v[2]-o[2]);if(W<.005||H<.005)continue;
+      const grp=b.house&&(b.indoor||(b.wall&&f.key===b.wall.inner)||f.key==='bot')?b.house.id:'out';
+      const base=f.key==='bot'?(b.exteriorOnly&&b.house?P.cream:b.side):f.key==='top'?b.top:b.side;
+      const c=shade(base,f.key==='bot'?[0,0,1]:f.n);
+      if(b.deco[f.key]){const it={b,f,W,H,base,c,grp,ppu:b.deco.top==='ground'?48:110,dyn:DYN.has(b.deco[f.key])};bakeFace(it);
+        const arr=[];quad(o,u,v,r,[1,1,1],arr);it.buf=mkBuf(arr);texFaces.push(it)}
+      else quad(o,u,v,r,c.map(x=>clamp(x/255,0,1)),groups[grp]);
+    }}
+  for(const g in groups)if(groups[g].length)statics.push({buf:mkBuf(groups[g]),n:groups[g].length/8,grp:g});
+  structures.forEach(addStructGL);
+  amb=pA;
+  // props as billboards
+  props.forEach(e=>{if(e.kind==='falls'||e.kind==='pole')return;
+    const s=e.kind==='crop'?110:80;let w_=140,h_=180,by=15;
+    if(e.kind==='tree'||e.kind==='sakura'){const t=e.r*s;w_=Math.ceil(2.1*t);h_=Math.ceil(2.25*t)+by}
+    else if(e.kind==='lantern'){w_=140;h_=150;by=12}else if(e.kind==='crop'){w_=110;h_=60;by=10}
+    const sp={e,s,w:w_,h:h_,by,canvas:document.createElement('canvas')};sp.canvas.width=w_;sp.canvas.height=h_;propSprites.push(sp);bakeProp(sp,true)});
+}
+function withSpriteCtx(ctx,base,cx,cy,s,fn){
+  const pN=N,pS=cam.scale,pR=cam.r;N=ctx;cam.scale=s;cam.r=RIGHT;const fw=FWD;
+  projOverride=p=>{const d=[p[0]-base[0],p[1]-base[1],p[2]-base[2]];return[cx+dot(d,RIGHT)*s,cy-d[2]*s-dot(d,fw)*s*.35]};
+  ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height);
+  try{fn()}catch(e){}
+  projOverride=null;N=pN;cam.scale=pS;cam.r=pR;
+}
+function bakeProp(sp,neutral){const pA=amb;amb=neutral?[1,1,1]:ambOut;sp.lit=!neutral;
+  withSpriteCtx(sp.canvas.getContext('2d'),sp.e.local,sp.w/2,sp.h-sp.by,sp.s,()=>drawProp(sp.e));amb=pA;
+  if(sp.tex)upTex(sp.tex,sp.canvas);else sp.tex=mkTex(sp.canvas)}
+function spriteFor(w){let sp=sprites.get(w);if(!sp){sp={canvas:document.createElement('canvas'),w:220,h:210,by:30,s:100};sp.canvas.width=sp.w;sp.canvas.height=sp.h;sp.tex=mkTex(sp.canvas);sprites.set(w,sp)}return sp}
+function drawBillboard(tex,base,wu,hu,by,tint){
+  const bx=base[0],byy=base[1],bz=base[2]-by,R=RIGHT,hw=wu/2;
+  const a=[bx-R[0]*hw,byy-R[1]*hw,bz],b=[bx+R[0]*hw,byy+R[1]*hw,bz],c=[b[0],b[1],bz+hu],d=[a[0],a[1],bz+hu];
+  const arr=[];quad(a,b,d,c,[1,1,1],arr);
+  gl.bindBuffer(gl.ARRAY_BUFFER,spriteBuf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(arr),gl.DYNAMIC_DRAW);bindAttribs();
+  gl.uniform3fv(U.uTint,tint);gl.bindTexture(gl.TEXTURE_2D,tex);gl.drawArrays(gl.TRIANGLES,0,6);
+}
+function skyPal(){let pal=[0,1,2,3].map(i=>mix(mix(SKY.night[i],SKY.day[i],dayK),SKY.dusk[i],duskK));const ov=Math.max(rainK,snowK*.6)*.85;if(ov>0)pal=pal.map(c=>{const g=(c[0]+c[1]+c[2])/3;return mix(c,[g*.95,g,g*1.08],ov)});return pal}
+function fpvResize(){if(!gl)return;const d=Math.min(2,window.devicePixelRatio||1);glc.width=Math.round(S.width*d);glc.height=Math.round(S.height*d);ovl.width=glc.width;ovl.height=glc.height}
+
+// --- control
+const eyeH=w=>{const p=postureOf(w);if(w.kind==='cat')return .3;if(p==='lie')return .28;if(p==='bath')return .2;return(w.kid?.64:.8)-(p==='sit'?.26:0)};
+function setControl(w){
+  if(fpv.w&&fpv.w!==w)releaseControl(fpv.w);
+  fpv.w=w;w.player=true;
+  if(w.link){if(w.t>.5)w.tile=w.link.to;w.link=null;w.t=0}
+  w.path=[];w.goal=null;w.forced=null;w.target=null;w.directive=null;
+  if(w.act&&!w.tile.stop)finishAct(w,true);
+  if(w.tile.stop){const L=w.tile.links.find(l=>!l.to.stop);w.returnTile=L?L.to:null}else w.returnTile=null;
+  w.ppos=[w.tile.pos[0],w.tile.pos[1]];w.pz=w.tile.pos[2];
+  fpv.yaw=Math.atan2(w.lastDir[1],w.lastDir[0]);fpv.pitch=-.08;
+  fpvName.textContent=nameOf(w);$('fpvDot').style.background=rgb(w.cloak);
+  walkers.forEach(o=>o.btn.setAttribute('aria-pressed',String(o===w)));
+  buildNeeds();closeTalk();fpv.sig='';
+}
+function afterAct(w){if(w.returnTile){w.tile=w.returnTile;w.ppos=[w.tile.pos[0],w.tile.pos[1]];w.returnTile=null}}
+function releaseControl(w){
+  if(w.act)finishAct(w,true);afterAct(w);
+  if(w.tile.stop){const L=w.tile.links.find(l=>!l.to.stop);if(L)w.tile=L.to}
+  w.player=false;w.ppos=null;w.wait=0;w.path=[];w.goal=null;w.target=null;
+}
+function playerTick(w,sdt){
+  if(w.act&&w.wait>0){w.wait-=sdt;if(w.wait<=0){finishAct(w,false);afterAct(w)}}
+}
+async function enterFPV(w){
+  if(!w)return;
+  if(!gl){if(!initGL()){toast(FUI.noGL);gl=null;return}buildWorld()}
+  fpv.on=true;document.body.classList.add('fpv');fpvEl.hidden=false;fpvHud.hidden=false;
+  card.hidden=true;wordCard.hidden=true;cam.follow=null;selected=null;
+  fpvResize();setControl(w);applyFpvLang();
+}
+function exitFPV(){
+  if(!fpv.on)return;const w=fpv.w;releaseControl(w);fpv.w=null;fpv.on=false;fpv.keys.clear();fpv.joy=[0,0];
+  document.body.classList.remove('fpv');fpvEl.hidden=true;fpvHud.hidden=true;closeTalk();
+  select(w);
+}
+function applyFpvLang(){
+  $('fpvExit').textContent=tr(FUI.exit);fpvHint.textContent=tr(coarse?FUI.hintTouch:FUI.hintDesk);$('tSend').textContent=tr(FUI.send);$('tInput').placeholder=tr(FUI.talkPh);
+  $('fpvSpeed').textContent=`${tr(UI.speed)} ×${clock.speed}`;if(fpv.w)fpvName.textContent=nameOf(fpv.w);fpv.sig='';buildNeeds();renderTalk();
+}
+function buildNeeds(){fpvNeeds.replaceChildren();const w=fpv.w;if(!w||!w.needs)return;for(const k in NEED_T){const d=document.createElement('span');d.className='mini';d.title=tr(NEED_T[k][0]);const l=document.createElement('em');l.textContent=tr(NEED_T[k][0]);const b=document.createElement('span');b.className='bar';const i=document.createElement('i');i.style.background=NEED_T[k][1];i.dataset.k=k;b.append(i);d.append(l,b);fpvNeeds.append(d)}}
+
+// --- movement
+function fpvMove(dt){
+  const w=fpv.w,k=fpv.keys;let mx=fpv.joy[0],my=fpv.joy[1];
+  if(!fpv.typing){if(k.has('w')||k.has('arrowup'))my+=1;if(k.has('s')||k.has('arrowdown'))my-=1;if(k.has('a')||k.has('arrowleft'))mx-=1;if(k.has('d')||k.has('arrowright'))mx+=1}
+  const mag=Math.hypot(mx,my);fpv.moving=false;
+  w.pz=lerp(w.pz,w.tile.pos[2],1-Math.exp(-dt*12));
+  if(mag<.08)return;
+  if(w.act){finishAct(w,true);afterAct(w)}else if(w.tile.stop)afterAct(w);
+  const sp=(k.has('shift')?3.3:2)*(w.kind==='cat'?1.3:w.kid?1.1:1)*Math.min(1,mag),n=Math.max(1,mag);
+  const fx=Math.cos(fpv.yaw),fy=Math.sin(fpv.yaw),rx=Math.sin(fpv.yaw),ry=-Math.cos(fpv.yaw);
+  const vx=(mx*rx+my*fx)/n,vy=(mx*ry+my*fy)/n;
+  stepAxis(w,0,vx*sp*dt);stepAxis(w,1,vy*sp*dt);
+  if(Math.abs(vx)>.3||Math.abs(vy)>.3)w.lastDir=Math.abs(vx)>Math.abs(vy)?[Math.sign(vx),0]:[0,Math.sign(vy)];
+  w.phase+=9*dt*Math.min(1,mag);fpv.moving=true;
+}
+function stepAxis(w,ax,d){
+  if(!d)return;const p=w.ppos.slice();p[ax]+=d;const cur=[w.tile.pos[0],w.tile.pos[1]],cell=[Math.round(p[0]),Math.round(p[1])];
+  const linkTo=(x,y)=>w.tile.links.find(l=>l.to.pos[0]===x&&l.to.pos[1]===y&&!l.to.stop);
+  if(cell[0]===cur[0]&&cell[1]===cur[1]){const off=p[ax]-cur[ax];if(Math.abs(off)>.34){const nb=ax===0?[cur[0]+Math.sign(off),cur[1]]:[cur[0],cur[1]+Math.sign(off)];if(!linkTo(...nb))p[ax]=cur[ax]+Math.sign(off)*.34}w.ppos=p;return}
+  const L=linkTo(cell[0],cell[1]);
+  if(L){w.tile=L.to;w.ppos=p}else{p[ax]=cur[ax]+Math.sign(p[ax]-cur[ax])*.34;w.ppos=p}
+}
+
+// --- interaction candidates
+function fpvCands(){
+  const w=fpv.w,p=w.ppos,f=[Math.cos(fpv.yaw),Math.sin(fpv.yaw)];const out={acts:[],npc:null,word:null};
+  if(w.kind!=='cat'){let best=null,bs=1e9;
+    SPOTREG.forEach((ids,t)=>{const dx=t.pos[0]-p[0],dy=t.pos[1]-p[1],d=Math.hypot(dx,dy);if(d>1.25)return;const face=d>.01?(dx*f[0]+dy*f[1])/d:1;
+      let ok=t.stop?(d<.7||(d<1.2&&face>.25)):d<.62;if(!ok)return;const sc=d-face*.3;if(sc<bs){bs=sc;best=t}});
+    if(best){const ids=[...SPOTREG.get(best)].map(id=>id==='eat'&&!(best.house&&best.house.mealReady>clock.sim)?'sit':id).filter(id=>id!=='dance'||clock.sim<weather.festUntil);
+      out.acts=ids.slice(0,2).map(id=>({id,tile:best}))}}
+  let bn=null,bd=1.8;walkers.forEach(o=>{if(o===w)return;const q=walkerPos(o),dx=q[0]-p[0],dy=q[1]-p[1],d=Math.hypot(dx,dy);if(d>bd)return;const face=d>.01?(dx*f[0]+dy*f[1])/d:1;if(face<.35)return;bd=d;bn=o});out.npc=bn;
+  const inH=w.tile.indoor?w.tile.house:null;let bv=null,bvd=2.3;VOCAB.forEach(v=>{if((v.house||null)!==inH)return;const dx=v.pos[0]-p[0],dy=v.pos[1]-p[1],d=Math.hypot(dx,dy);if(d>bvd)return;const face=d>.01?(dx*f[0]+dy*f[1])/d:1;if(face<.55)return;bvd=d;bv=v});out.word=bv;
+  return out;
+}
+function fpvDoAct(id,tile){
+  const w=fpv.w;if(tile!==w.tile&&taken(w).has(tile)){toast(FUI.busy);return}
+  if(w.act){finishAct(w,true);afterAct(w)}
+  w.returnTile=tile.stop?(w.tile.stop?w.returnTile:w.tile):null;
+  w.tile=tile;w.ppos=[tile.pos[0],tile.pos[1]];
+  const a=ACTS[id];startAct(w,{id,dur:a.dur,hs:tile.house||w.house});
+  if(tile.furn&&tile.furn.face){fpv.yaw=Math.atan2(tile.furn.face[1],tile.furn.face[0]);fpv.pitch=id==='sleep'?.55:-.12}
+  else{const t2=SPOTREG.get(tile);if(id==='fish'){const d=[POND.x-tile.pos[0],POND.y-tile.pos[1]];fpv.yaw=Math.atan2(d[1],d[0])}}
+  fpv.sig='';
+}
+function renderActs(c){
+  const w=fpv.w;const parts=[];
+  c.acts.forEach((a,i)=>parts.push('a'+a.id+a.tile.id));if(c.npc)parts.push('n'+c.npc.name);if(c.word)parts.push('v'+c.word.word);parts.push(L,w.act?w.act.id:'-');
+  const sig=parts.join('|');if(sig===fpv.sig)return;fpv.sig=sig;fpvActs.replaceChildren();
+  const mk=(label,key,fn,cls)=>{const b=document.createElement('button');b.type='button';if(cls)b.className=cls;b.textContent=label;if(key&&!coarse){const k=document.createElement('kbd');k.textContent=key;b.append(k)}b.addEventListener('click',fn);fpvActs.append(b);return b};
+  c.acts.forEach((a,i)=>{const active=w.act&&w.act.id===a.id&&w.tile===a.tile;mk(tr(USE_T[a.id]||labelOf(w,a.id)),i===0?'E':'F',()=>{if(active){finishAct(w,true);afterAct(w);fpv.sig=''}else fpvDoAct(a.id,a.tile)},active?'on':'main')});
+  if(c.npc)mk(`${tr(FUI.talk)}: ${nameOf(c.npc)}`,'T',()=>openTalk(c.npc));
+  if(c.word)mk(`${tr(FUI.what)} ${L==='en'?c.word.word:c.word.ja}`,'Q',()=>openWord(c.word));
+}
+
+function addStructGL(st){
+  const pA=amb;amb=[1,1,1];const arr=[];
+  const FACES6=[...FACES,{n:[0,0,-1],o:0,u:1,v:2,key:'bot'}];
+  for(const b of st.boxes)for(const f of FACES6){if(f.key==='bot'&&b.lo[2]<.05)continue;
+    const o=corner(b.lo,b.hi,f.o),u=corner(b.lo,b.hi,f.u),v=corner(b.lo,b.hi,f.v),r=[u[0]+v[0]-o[0],u[1]+v[1]-o[1],u[2]+v[2]-o[2]];
+    const W=Math.hypot(u[0]-o[0],u[1]-o[1],u[2]-o[2]),H=Math.hypot(v[0]-o[0],v[1]-o[1],v[2]-o[2]);if(W<.005||H<.005)continue;
+    const base=f.key==='top'?b.top:b.side,c=shade(base,f.key==='bot'?[0,0,1]:f.n);
+    if(b.deco[f.key]){const it={b,f,W,H,base,c,grp:'out',ppu:110,dyn:true,sid:st.id};bakeFace(it);const a2=[];quad(o,u,v,r,[1,1,1],a2);it.buf=mkBuf(a2);texFaces.push(it)}
+    else quad(o,u,v,r,c.map(x=>clamp(x/255,0,1)),arr)}
+  for(const p of st.polys)for(const f of p.faces){const top=f.n[2]>.7,c=shade(top?p.top:p.col,f.n).map(x=>clamp(x/255,0,1));
+    for(let i=1;i<f.pts.length-1;i++)for(const q of[f.pts[0],f.pts[i],f.pts[i+1]])arr.push(q[0],q[1],q[2],0,0,c[0],c[1],c[2])}
+  if(arr.length)statics.push({buf:mkBuf(arr),n:arr.length/8,grp:'out',sid:st.id});
+  amb=pA;
+}
+function removeStructGL(id){statics=statics.filter(x=>{if(x.sid===id){gl.deleteBuffer(x.buf);return false}return true});texFaces=texFaces.filter(x=>{if(x.sid===id){gl.deleteBuffer(x.buf);gl.deleteTexture(x.tex);return false}return true})}
+let candT=0,curC={acts:[],npc:null,word:null};
+
+// --- talk
+const talkEl=$('talk'),tList=$('tList'),tForm=$('tForm'),tInput=$('tInput'),tChips=$('tChips');
+let talk=null;
+const QUICK=[J('こんにちは！','Hello!'),J('元気？','How are you?'),J('何してるの？','What are you doing?'),J('一緒に釣りに行こう！','Let\'s go fishing together!'),J('おなかすいた？','Are you hungry?'),J('おやすみ！','Good night!')];
+function openTalk(npc){
+  const me=fpv.w;talk={npc,turns:[],busy:false};talkEl.hidden=false;
+  if(npc.kind==='person'&&!npc.tile.stop&&!npc.link&&!npc.player){if(npc.act)finishAct(npc,true);npc.path=[];npc.goal=null;npc.target=null;npc.forced=null;npc.act={id:'chat',partner:me,dur:[.4,.6]};npc.wait=.8*HR}
+  const g=npc.kind==='cat'?J('にゃー！','Meow!'):pick([J(`やあ、${me.name}！`,`Hi, ${me.en}!`),J(`あ、${me.name}。どうしたの？`,`Oh, hi ${me.en}. What's up?`),J(`${me.name}、こんにちは！`,`Hello, ${me.en}!`)]);
+  talk.turns.push({who:'npc',en:g.en,ja:g.ja});say(npc,g,5);renderTalk();
+  if(!coarse)setTimeout(()=>tInput.focus(),30);
+}
+function closeTalk(){talk=null;talkEl.hidden=true;fpv.typing=false}
+function renderTalk(){if(!talk)return;const npc=talk.npc;$('tName').textContent=nameOf(npc);$('tDot').style.background=rgb(npc.cloak);
+  tList.replaceChildren(...talk.turns.map(t=>{const li=document.createElement('li');li.className=t.who;const b=document.createElement('b');b.textContent=t.who==='me'?t.text:(L==='en'?t.en:t.ja);li.append(b);
+    if(t.who==='npc'){if(L==='en'){const s=document.createElement('span');s.textContent=t.ja;li.append(s)}if(canSpeak&&t.en){const btn=document.createElement('button');btn.type='button';btn.className='say-btn';btn.textContent='🔊';btn.onclick=()=>speak(t.en);li.append(btn)}}
+    if(t.tip){const d=document.createElement('div');d.className='tip';d.textContent=t.tip;li.append(d)}
+    if(t.wait){b.textContent='…'}return li}));
+  tList.scrollTop=tList.scrollHeight;
+  tChips.replaceChildren(...QUICK.map(q=>{const b=document.createElement('button');b.type='button';b.textContent=q.en;b.title=q.ja;b.onclick=()=>sendTalk(q.en);return b}));
+}
+function cannedReply(npc,msg){
+  const m=msg.toLowerCase(),me=fpv.w;
+  if(npc.kind==='cat')return{en:pick(['Meow!','Purr...','Meow meow!']),ja:pick(['にゃー！','ごろごろ…','にゃにゃ！']),tip:''};
+  if(/hello|hi\b|hey|こんにち|やあ/.test(m))return{...pick([J('やあ！会えてうれしいよ。','Hi! Nice to see you.'),J('こんにちは！今日もいい日だね。','Hello! It\'s a nice day.')]),tip:''};
+  if(/how are you|元気/.test(m))return{...pick([J('元気だよ、ありがとう。きみは？','I\'m good, thanks. And you?'),J('ちょっと疲れてるけど、元気だよ。','A little tired, but I\'m OK.')]),tip:''};
+  if(/what are you doing|何して/.test(m)){const s=statusOf(npc);return{en:`I'm ${s.en==='chatting with '+me.en?'talking with you':s.en}.`,ja:`${s.ja}ところだよ。`,tip:''}}
+  if(/hungry|おなか/.test(m))return{...J('うん、おなかペコペコ！','Yes, I\'m starving!'),tip:''};
+  if(/night|おやすみ/.test(m))return{...J('おやすみ！また明日ね。','Good night! See you tomorrow.'),tip:''};
+  if(/fish|釣り/.test(m))return{...J('いいね、行こう！','Sounds good. Let\'s go!'),tip:'',goal:'fish'};
+  return{...chatLine(npc,me),tip:''};
+}
+function talkPrompt(npc,msg){
+  const me=fpv.w,n=npc.needs,hist=talk.turns.filter(t=>!t.wait).slice(-8).map(t=>t.who==='me'?`${me.en}: ${t.text}`:`${npc.en}: ${t.en}`).join('\n');
+  return `You are ${npc.en} (${npc.name}), a villager in a cozy village life sim. ${npc.persona.en}${npc.kid?' You are a child.':''}
+You are talking face to face with ${me.en} (${me.name}), another villager, who is controlled by a human learning everyday English.
+Now: day ${clock.day}, ${hhmm(clock.hour)}, weather ${weather.kind}${clock.sim<weather.festUntil?', festival day':''}. You are ${statusOf(npc).en} (${npc.tile.indoor?'at home, in the '+ROOMS[npc.tile.room].en:'outside'}). Mood: ${moodOf(npc)}. Energy ${n.energy.toFixed(1)}, full ${n.food.toFixed(1)}, bladder ${n.bladder.toFixed(1)} (0-1).
+Recent memories: ${npc.memory.slice(-4).join(' / ')||'nothing special'}
+Conversation so far:
+${hist}
+${me.en}: ${msg}
+
+Reply in character with 1-2 short sentences of natural, simple spoken English (CEFR A2) about everyday life, and give a natural Japanese translation.
+"tip": if ${me.en}'s last message has an English mistake or sounds unnatural, write one short, kind correction in Japanese like 「◯◯ より △△ が自然だよ」. If they wrote in Japanese, show how to say it in English in Japanese, like 「英語では "…" と言えるよ」. Otherwise "".
+"goal": if they invite you to do something together right now and you agree, one of: fish, walk, plaza, stall, bench, field, flower, eat, cook, tv, bath, sleep, play, dance. Otherwise null.
+Reply with JSON only: {"en":"…","ja":"…","tip":"…","goal":null}`;
+}
+async function sendTalk(text){
+  if(!talk||talk.busy)return;text=String(text||'').trim();if(!text)return;
+  const npc=talk.npc,me=fpv.w;talk.turns.push({who:'me',text});tInput.value='';
+  if(/[a-z]/i.test(text)&&!/[぀-ヿ一-鿿]/.test(text))me.say={en:text,ja:text,until:S.time+4};
+  if(npc.act&&npc.act.id==='chat')npc.wait=Math.max(npc.wait,.6*HR);
+  const wait={who:'npc',wait:true};talk.turns.push(wait);talk.busy=true;renderTalk();
+  let r=null;
+  if(sample&&npc.kind==='person'){try{r=await sample.json(talkPrompt(npc,text),{modelTier:'quick',cache:false})}catch(err){const c=err&&err.code;if(c==='not_granted'||c==='sampling_disabled')sample=null;r=null}}
+  if(!r||!r.en)r=cannedReply(npc,text);
+  if(!talk||talk.npc!==npc)return;
+  const i=talk.turns.indexOf(wait);const tt={who:'npc',en:String(r.en||'').slice(0,160),ja:String(r.ja||'').slice(0,100)};if(i>=0)talk.turns.splice(i,1);talk.turns.push(tt);
+  if(r.tip)talk.turns[talk.turns.length-2]&&(talk.turns.filter(t=>t.who==='me').slice(-1)[0].tip=String(r.tip).slice(0,120));
+  talk.busy=false;say(npc,{en:tt.en,ja:tt.ja},6);addPhrase({en:tt.en,ja:tt.ja});renderTalk();
+  if(r.goal&&ACTS[r.goal]&&npc.kind==='person'){npc.wait=0;const p=planAct(npc,r.goal);if(p){npc.directive={goal:r.goal,until:clock.sim+2*HR};npc.forced=p;toast(J(`${npc.name}が「${tr(labelOf(npc,r.goal))}」に向かった`,`${npc.en} is heading off: ${labelOf(npc,r.goal).en}`))}}
+}
+tForm.addEventListener('submit',e=>{e.preventDefault();sendTalk(tInput.value)});
+tInput.addEventListener('focus',()=>{fpv.typing=true;fpv.keys.clear()});tInput.addEventListener('blur',()=>{fpv.typing=false});
+$('tClose').addEventListener('click',closeTalk);
+
+// --- render
+function fpvFrame(dt){
+  const w=fpv.w;if(!w||!gl){exitFPV();return}
+  fpvMove(dt);
+  const p=walkerPos(w),bob=fpv.moving?Math.sin(w.phase)*.012:0;
+  EYE=[p[0],p[1],p[2]+eyeH(w)+bob];
+  const cp=Math.cos(fpv.pitch);FWD=[Math.cos(fpv.yaw),Math.sin(fpv.yaw),0];RIGHT=[Math.sin(fpv.yaw),-Math.cos(fpv.yaw),0];
+  const dir=[cp*FWD[0],cp*FWD[1],Math.sin(fpv.pitch)];
+  VP=mul(persp(1.3,S.width/S.height,.03,70),lookAt(EYE,[EYE[0]+dir[0],EYE[1]+dir[1],EYE[2]+dir[2]],[0,0,1]));
+  const pal=skyPal();skyMid=pal[1];
+  const fogC=(w.tile.indoor?mix(pal[1],[40,36,50],.3):mix(pal[1],pal[2],.4)).map(v=>v/255);
+  gl.viewport(0,0,glc.width,glc.height);gl.clearColor(fogC[0],fogC[1],fogC[2],1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  gl.useProgram(prog);gl.uniformMatrix4fv(U.uVP,false,VP);gl.uniform3fv(U.uFogC,fogC);gl.uniform2f(U.uFog,14,40);gl.uniform3fv(U.uEye,EYE);gl.uniform1i(U.uTex,0);gl.activeTexture(gl.TEXTURE0);
+  const tint={out:ambOut,A:houseAmb(houses.A),B:houseAmb(houses.B)};
+  gl.disable(gl.BLEND);gl.depthMask(true);
+  for(const s of statics){gl.bindBuffer(gl.ARRAY_BUFFER,s.buf);bindAttribs();gl.uniform3fv(U.uTint,tint[s.grp]);gl.bindTexture(gl.TEXTURE_2D,whiteTex);gl.drawArrays(gl.TRIANGLES,0,s.n)}
+  dynT-=dt;const re=dynT<=0;if(re)dynT=.35;
+  for(const it of texFaces){if(re&&it.dyn)bakeFace(it);gl.bindBuffer(gl.ARRAY_BUFFER,it.buf);bindAttribs();gl.uniform3fv(U.uTint,tint[it.grp]);gl.bindTexture(gl.TEXTURE_2D,it.tex);gl.drawArrays(gl.TRIANGLES,0,6)}
+  // billboards (far to near)
+  gl.enable(gl.BLEND);
+  const bb=[];
+  lampT-=dt;const reLamp=lampT<=0;if(reLamp)lampT=1;
+  for(const sp of propSprites){const d=Math.hypot(sp.e.local[0]-EYE[0],sp.e.local[1]-EYE[1]);if(d>38)continue;if(sp.e.kind==='lantern'&&reLamp)bakeProp(sp,false);bb.push({d,sp,base:sp.e.local,tint:sp.lit?[1,1,1]:ambOut})}
+  for(const o of walkers){if(o===w)continue;const q=walkerPos(o),d=Math.hypot(q[0]-EYE[0],q[1]-EYE[1]);if(d>30)continue;const sp=spriteFor(o);
+    if(d<16||(S.time*10|0)%6===0){withSpriteCtx(sp.canvas.getContext('2d'),q,sp.w/2,sp.h-sp.by,sp.s,()=>{o.kind==='cat'?drawCat(o):drawPerson(o)});upTex(sp.tex,sp.canvas)}
+    bb.push({d,sp,base:q,tint:[1,1,1]})}
+  bb.sort((a,b)=>b.d-a.d);
+  for(const x of bb){const sp=x.sp;drawBillboard(sp.tex,x.base,sp.w/sp.s,sp.h/sp.s,sp.by/sp.s,x.tint)}
+  // overlay
+  const d=glc.width/S.width,pN=N;N=ovc;ovc.setTransform(1,0,0,1,0,0);ovc.clearRect(0,0,ovl.width,ovl.height);ovc.setTransform(d,0,0,d,0,0);
+  labelRects=[];
+  const inH=w.tile.indoor?w.tile.house:null;
+  if(L==='en'&&showLabels&&curC.word){const v=curC.word,s=toScreen(v.pos);if(s){tag(s[0],s[1],v.word,'obj');labelRects.push({x:s[0],y:s[1],v})}}
+  if(false)VOCAB.forEach(v=>{if((v.house||null)!==inH)return;const dd=Math.hypot(v.pos[0]-EYE[0],v.pos[1]-EYE[1]);if(dd>4.5)return;const s=toScreen(v.pos);if(!s)return;tag(s[0],s[1],v.word,'obj');labelRects.push({x:s[0],y:s[1],v})});
+  const sayText=o=>L==='en'?(o.say.en||o.say.ja):(o.say.ja||o.say.en);
+  for(const o of walkers){if(o===w)continue;const q=walkerPos(o);if(Math.hypot(q[0]-EYE[0],q[1]-EYE[1])>11)continue;const post=o.kind==='person'?postureOf(o):'stand';
+    const hh=o.kind==='cat'?.5:post==='lie'?.45:post==='bath'?.45:post==='sit'?.82:(o.kid?.86:1.02);const s=toScreen([q[0],q[1],q[2]+hh]);if(!s)continue;
+    if(o.say&&S.time<o.say.until)bubble(s[0],s[1],sayText(o),'say');
+    else if(o.act&&!o.link&&ACTS[o.act.id]&&ACTS[o.act.id].glyph&&o.act.id!=='chat')bubble(s[0],s[1],ACTS[o.act.id].glyph,'glyph');
+    else if(talk&&talk.npc===o)bubble(s[0],s[1],nameOf(o),'sel')}
+  precip();
+  ovc.fillStyle='rgba(255,255,255,0.85)';ovc.beginPath();ovc.arc(S.width/2,S.height/2,2.5,0,2*Math.PI);ovc.fill();
+  N=pN;
+  // HUD
+  candT-=dt;if(candT<=0){candT=.15;curC=fpvCands();renderActs(curC);
+    const sy=w.say&&S.time<w.say.until?w.say:null;
+    if(sy){fpvSub.hidden=false;fpvSub.replaceChildren();const b=document.createElement('b');b.textContent=L==='en'?sy.en:sy.ja;fpvSub.append(b);if(L==='en'&&sy.ja!==sy.en){const s=document.createElement('span');s.textContent=sy.ja;fpvSub.append(s)}}
+    else{const st=statusOf(w);fpvSub.hidden=!w.act;if(w.act){fpvSub.replaceChildren();const b=document.createElement('b');b.textContent=L==='en'?cap(st.en):st.ja;fpvSub.append(b);if(L==='en'){const s=document.createElement('span');s.textContent=st.ja;fpvSub.append(s)}}}
+    fpvNeeds.querySelectorAll('i').forEach(i=>{i.style.width=Math.round(w.needs[i.dataset.k]*100)+'%'});
+    $('fpvSpeed').textContent=`${tr(UI.speed)} ×${clock.speed}`;
+    if(talk&&Math.hypot(walkerPos(talk.npc)[0]-w.ppos[0],walkerPos(talk.npc)[1]-w.ppos[1])>3)closeTalk();
+  }
+}
+
+// --- input
+let look=null;
+fpvEl.addEventListener('pointerdown',e=>{if(e.target!==glc)return;glc.setPointerCapture(e.pointerId);look={touch:e.pointerType!=='mouse',x:e.clientX,y:e.clientY,yaw:fpv.yaw,pitch:fpv.pitch,moved:false,id:e.pointerId}});
+fpvEl.addEventListener('pointermove',e=>{if(!look||e.pointerId!==look.id)return;const dx=e.clientX-look.x,dy=e.clientY-look.y;if(Math.hypot(dx,dy)>5)look.moved=true;fpv.yaw=look.yaw+(look.touch?1:-1)*dx*.0055;fpv.pitch=clamp(look.pitch-dy*.0045,-1.2,1.2)});
+fpvEl.addEventListener('pointerup',e=>{if(!look||e.pointerId!==look.id)return;if(!look.moved){const r=glc.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let hit=null;labelRects.forEach(l=>{if(Math.abs(l.x-x)<45&&Math.abs(l.y-y)<12)hit=l});if(hit)openWord(hit.v)}look=null});
+fpvEl.addEventListener('pointercancel',()=>{look=null});
+fpvEl.addEventListener('wheel',e=>e.preventDefault(),{passive:false});
+let joyId=null;
+joy.addEventListener('pointerdown',e=>{joyId=e.pointerId;joy.setPointerCapture(e.pointerId);joyMove(e)});
+joy.addEventListener('pointermove',e=>{if(e.pointerId===joyId)joyMove(e)});
+const joyEnd=e=>{if(e.pointerId!==joyId)return;joyId=null;fpv.joy=[0,0];joyKnob.style.transform='translate(-50%,-50%)'};
+joy.addEventListener('pointerup',joyEnd);joy.addEventListener('pointercancel',joyEnd);
+function joyMove(e){const r=joy.getBoundingClientRect(),R=r.width/2,dx=e.clientX-(r.left+R),dy=e.clientY-(r.top+R),l=Math.hypot(dx,dy),k=l>R?R/l:1;fpv.joy=[dx*k/R,-dy*k/R];joyKnob.style.transform=`translate(calc(-50% + ${dx*k}px),calc(-50% + ${dy*k}px))`}
+window.addEventListener('keydown',e=>{if(!fpv.on)return;const t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')){if(e.key==='Escape')t.blur();return}
+  const k=e.key.toLowerCase();
+  if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','shift'].includes(k)){fpv.keys.add(k);e.preventDefault()}
+  else if(k==='e'&&curC.acts[0])fpvActs.querySelector('button')?.click();
+  else if(k==='f'&&curC.acts[1])fpvActs.querySelectorAll('button')[1]?.click();
+  else if(k==='t'&&curC.npc){e.preventDefault();openTalk(curC.npc)}
+  else if(k==='q'&&curC.word)openWord(curC.word);
+  else if(k==='escape'){if(talk)closeTalk();else if(!wordCard.hidden)wordCard.hidden=true;else exitFPV()}},true);
+window.addEventListener('keyup',e=>{fpv.keys.delete(e.key.toLowerCase())});
+window.addEventListener('blur',()=>fpv.keys.clear());
+window.addEventListener('resize',()=>{if(fpv.on)fpvResize()});
+$('fpvExit').addEventListener('click',exitFPV);
+$('fpvSpeed').addEventListener('click',()=>{speedBtn.click();$('fpvSpeed').textContent=`${tr(UI.speed)} ×${clock.speed}`});
+$('cPlay').addEventListener('click',()=>{if(selected)enterFPV(selected)});
+
+// ================= save / restore + growing town =================
+const SAVE_KEY='hakoniwa-save-v1';
+const grow={log:[],lastAt:-10*HR,busy:false,wishes:{},evSeen:''};
+const TUI={btn:J('町','Town'),title:J('町の保存と歩み','Town: save & history'),save:J('今すぐ保存','Save now'),reset:J('最初からやり直す','Start over'),reset2:J('もう一度押すと町が消えます','Press again to erase the town'),
+  note:J('この町は自動でこのブラウザに保存されます。住人の願いやできごとに応じて、物が少しずつ増えたり変わったりします。','Your town is saved in this browser automatically. Objects slowly appear and change as villagers wish and things happen.'),
+  saved:J('保存しました','Saved'),last:J('最終保存','Last saved'),none:J('まだ変化はありません','Nothing has changed yet.'),resumed:J('前回の町を再開しました','Resumed your saved town.'),
+  wish:J('願い','Wish'),fail:J('このブラウザでは保存できません','Saving is not available here.')};
+let lastSaveAt=0,saveErr=false;
+function snapshot(){
+  const n=clock.sim;
+  return{v:1,at:Date.now(),sim:n,
+    weather:{kind:weather.kind,left:Math.max(0,weather.until-n),fest:Math.max(0,weather.festUntil-n),rb:Math.max(0,weather.rainbowUntil-n)},
+    walkers:walkers.map(w=>({n:w.name,pos:w.tile.pos.slice(),needs:w.needs?{...w.needs}:null,rel:w.rel&&w.kind==='person'?{...w.rel}:null,mem:(w.memory||[]).slice(-8),mood:w.mood||null,moodLeft:Math.max(0,(w.moodUntil||0)-n)})),
+    growth:{log:grow.log.slice(-40),since:n-grow.lastAt,wishes:grow.wishes}};
+}
+function saveTown(manual){
+  try{localStorage.setItem(SAVE_KEY,JSON.stringify(snapshot()));saveBuilds();lastSaveAt=Date.now();saveErr=false;if(manual)toast(TUI.saved);renderTown();return true}
+  catch(e){saveErr=true;if(manual)toast(TUI.fail);return false}
+}
+function readSave(){try{const s=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');return s&&s.v===1&&isFinite(s.sim)?s:null}catch(e){return null}}
+function findTile(p){if(!Array.isArray(p))return null;return tiles.find(t=>Math.abs(t.pos[0]-p[0])<.01&&Math.abs(t.pos[1]-p[1])<.01&&Math.abs(t.pos[2]-p[2])<.01&&t.links.length&&(t.indoor||tileAt.get(key(t.pos[0],t.pos[1]))===t))||null}
+function restoreTown(s){
+  clock.sim=Math.max(0,Number(s.sim)||0);tickClock();clock.lastDay=clock.day;clock.lastHourInt=Math.floor(clock.hour);
+  const wx=s.weather||{};weather.kind=['clear','rain','snow'].includes(wx.kind)?wx.kind:'clear';weather.until=clock.sim+(Number(wx.left)||0);weather.festUntil=clock.sim+(Number(wx.fest)||0);weather.rainbowUntil=clock.sim+(Number(wx.rb)||0);weather.plan=null;
+  (s.walkers||[]).forEach(r=>{const w=byName(String(r.n));if(!w)return;
+    const t=findTile(r.pos);if(t){w.tile=t;w.link=null;w.path=[];w.goal=null;w.target=null;w.act=null;w.forced=null;w.wait=.05*HR;w.t=0}
+    if(w.needs&&r.needs)for(const k in w.needs){const v=Number(r.needs[k]);if(isFinite(v))w.needs[k]=clamp(v,0,1)}
+    if(w.rel&&r.rel)for(const k in w.rel){const v=Number(r.rel[k]);if(isFinite(v))w.rel[k]=clamp(v,0,1)}
+    if(Array.isArray(r.mem)&&w.memory)w.memory=r.mem.map(String).slice(-8);
+    if(r.mood&&MOODS.includes(r.mood)){w.mood=r.mood;w.moodUntil=clock.sim+(Number(r.moodLeft)||0)}});
+  const g=s.growth||{};grow.log=Array.isArray(g.log)?g.log.filter(x=>x&&x.ja&&x.en).map(x=>({day:Number(x.day)||1,ja:String(x.ja).slice(0,90),en:String(x.en).slice(0,110)})):[];
+  grow.lastAt=clock.sim-(Number(g.since)||0);grow.wishes=g.wishes&&typeof g.wishes==='object'?g.wishes:{};
+  lastSaveAt=Number(s.at)||0;
+}
+function renderTown(){
+  if(!$('town'))return;
+  $('townBtn').textContent=tr(TUI.btn);$('townTitle').textContent=tr(TUI.title);$('townSave').textContent=tr(TUI.save);$('townNote').textContent=tr(TUI.note);
+  $('townReset').textContent=tr(resetArmed?TUI.reset2:TUI.reset);
+  const t=lastSaveAt?new Date(lastSaveAt):null;$('townStamp').textContent=saveErr?tr(TUI.fail):t?`${tr(TUI.last)}: ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`:'';
+  const ul=$('townList');ul.replaceChildren();
+  if(!grow.log.length){const li=document.createElement('li');li.textContent=tr(TUI.none);ul.append(li);return}
+  grow.log.slice().reverse().forEach(e=>{const li=document.createElement('li'),d=document.createElement('div'),b=document.createElement('b'),s=document.createElement('span');
+    b.textContent=L==='en'?e.en:e.ja;s.textContent=(L==='en'?`Day ${e.day}`:`${e.day}日目`)+(L==='en'?'  '+e.ja:'  '+e.en);d.append(b,s);li.append(d);ul.append(li)})
+}
+let resetArmed=false,resetT=0;
+$('townBtn').addEventListener('click',()=>{const p=$('town');p.hidden=!p.hidden;if(!p.hidden){$('book').hidden=true;renderTown()}});
+$('bookBtn').addEventListener('click',()=>{if(!$('book').hidden)$('town').hidden=true});
+$('townClose').addEventListener('click',()=>{$('town').hidden=true});
+$('townSave').addEventListener('click',()=>saveTown(true));
+$('townReset').addEventListener('click',()=>{
+  if(!resetArmed){resetArmed=true;renderTown();clearTimeout(resetT);resetT=setTimeout(()=>{resetArmed=false;renderTown()},4000);return}
+  window.__noSave=true;try{localStorage.removeItem(SAVE_KEY);localStorage.removeItem('hakoniwa-builds')}catch(e){}location.reload()});
+setInterval(()=>{if(!window.__noSave)saveTown(false)},10000);
+addEventListener('pagehide',()=>{if(!window.__noSave)saveTown(false)});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&!window.__noSave)saveTown(false)});
+
+// ---- growth: villagers' wishes and events slowly change the town
+const SMALLS={
+  swing:{name_en:'swing',name_ja:'ブランコ',footprint:[2,1],near:'plaza',wish:J('ブランコがほしいな。','I wish we had a swing.'),ex:['Let\'s play on the swing!','ブランコで遊ぼう！'],
+    parts:[{shape:'box',from:[.1,.35,0],to:[.2,.65,1.3],color:'#c69678'},{shape:'box',from:[1.8,.35,0],to:[1.9,.65,1.3],color:'#c69678'},{shape:'box',from:[.1,.35,1.3],to:[1.9,.65,1.4],color:'#ec8c84'},{shape:'box',from:[.8,.45,.35],to:[1.2,.55,.42],color:'#fcf0de'}],
+    act:{label_en:'playing on the swing',label_ja:'ブランコで遊ぶ',use_en:'Play on the swing',use_ja:'ブランコで遊ぶ',phrase_en:'Wheee! Higher!',phrase_ja:'わーい！もっと高く！',gain:{fun:.45,energy:-.1}}},
+  lantern:{name_en:'lantern post',name_ja:'ちょうちん灯',footprint:[1,1],near:'plaza',wish:J('夜も明るいと楽しいのにな。','It would be nice to have light at night.'),ex:['The lantern is so pretty.','ちょうちんがきれいだね。'],
+    parts:[{shape:'cylinder',from:[.45,.45,0],to:[.55,.55,1.2],color:'#8a7a9a'},{shape:'box',from:[.3,.3,1.2],to:[.7,.7,1.55],color:'#ffe39a',pattern:'windows'},{shape:'cone',from:[.25,.25,1.55],to:[.75,.75,1.8],color:'#ec8c84'}],act:null},
+  flowerbed:{name_en:'flower bed',name_ja:'花だん',footprint:[2,1],near:'houseA',wish:J('もっと花が見たいな。','I want to see more flowers.'),ex:['The flower bed is beautiful.','花だんがきれいだね。'],
+    parts:[{shape:'box',from:[.05,.1,0],to:[1.95,.9,.25],color:'#c69678',top:'#8cc795',topPattern:'grass'},{shape:'box',from:[.3,.3,.25],to:[.5,.5,.45],color:'#f2a0b8'},{shape:'box',from:[.85,.5,.25],to:[1.05,.7,.45],color:'#ffe39a'},{shape:'box',from:[1.4,.3,.25],to:[1.6,.5,.45],color:'#c9b3ee'}],
+    act:{label_en:'enjoying the flowers',label_ja:'花をながめる',use_en:'Enjoy the flowers',use_ja:'花をながめる',phrase_en:'They smell so nice.',phrase_ja:'いい香りだね。',gain:{fun:.25,energy:.1}}},
+  readnook:{name_en:'reading bench',name_ja:'読書ベンチ',footprint:[2,1],near:'bench',wish:J('静かに本が読める場所がほしい。','I want a quiet place to read.'),ex:['I read a book on the bench.','ベンチで本を読むよ。'],
+    parts:[{shape:'box',from:[.1,.2,0],to:[1.9,.7,.35],color:'#c69678',pattern:'planks'},{shape:'box',from:[.1,.65,.35],to:[1.9,.75,.85],color:'#c69678',pattern:'planks'},{shape:'box',from:[.4,.25,.35],to:[.6,.55,.5],color:'#78aab4'}],
+    act:{label_en:'reading a book',label_ja:'本を読む',use_en:'Read a book',use_ja:'本を読む',phrase_en:'This story is great.',phrase_ja:'この話、おもしろいな。',gain:{fun:.3,energy:.15}}},
+  scarecrow:{name_en:'scarecrow',name_ja:'かかし',footprint:[1,1],near:'field',wish:J('畑を守るかかしがほしい。','I want a scarecrow to guard the field.'),ex:['The scarecrow protects the crops.','かかしが作物を守るよ。'],
+    parts:[{shape:'box',from:[.45,.45,0],to:[.55,.55,1.3],color:'#c69678'},{shape:'box',from:[.1,.45,.9],to:[.9,.55,1],color:'#c69678'},{shape:'cylinder',from:[.35,.35,1.3],to:[.65,.65,1.6],color:'#fcf0de'},{shape:'cone',from:[.25,.25,1.6],to:[.75,.75,1.95],color:'#e8c070'}],act:null},
+  picnic:{name_en:'picnic table',name_ja:'ピクニックテーブル',footprint:[2,2],near:'plaza',wish:J('みんなで外ごはんを食べたいな。','I want to eat outside with everyone.'),ex:['Let\'s have lunch at the picnic table.','ピクニックテーブルでお昼にしよう。'],
+    parts:[{shape:'box',from:[.2,.6,.45],to:[1.8,1.4,.55],color:'#c69678',pattern:'planks'},{shape:'box',from:[.3,.7,0],to:[.4,.8,.45],color:'#a97d62'},{shape:'box',from:[1.6,.7,0],to:[1.7,.8,.45],color:'#a97d62'},{shape:'box',from:[.3,1.2,0],to:[.4,1.3,.45],color:'#a97d62'},{shape:'box',from:[1.6,1.2,0],to:[1.7,1.3,.45],color:'#a97d62'},{shape:'box',from:[.2,.1,0],to:[1.8,.5,.3],color:'#c69678',pattern:'planks'},{shape:'box',from:[.2,1.5,0],to:[1.8,1.9,.3],color:'#c69678',pattern:'planks'}],
+    act:{label_en:'having a picnic',label_ja:'ピクニックをする',use_en:'Have a picnic',use_ja:'ピクニックをする',phrase_en:'Eating outside is the best!',phrase_ja:'外で食べるのは最高！',gain:{food:.35,social:.4,fun:.15}}},
+  birdbath:{name_en:'bird bath',name_ja:'水のみ場',footprint:[1,1],near:'center',wish:J('小鳥が遊びに来るといいな。','I hope little birds come to visit.'),ex:['Look! A bird at the bird bath.','見て！水のみ場に小鳥がいるよ。'],
+    parts:[{shape:'cylinder',from:[.3,.3,0],to:[.7,.7,.5],color:'#b6a4d6'},{shape:'cylinder',from:[.1,.1,.5],to:[.9,.9,.62],color:'#b6a4d6',top:'#88c2e2',topPattern:'water'}],
+    act:{label_en:'watching the birds',label_ja:'小鳥を見る',use_en:'Watch the birds',use_ja:'小鳥を見る',phrase_en:'So cute!',phrase_ja:'かわいい！',gain:{fun:.25,energy:.1}}}
+};
+const growStructs=()=>structures.filter(s=>s.by);
+function smallSpec(k){const d=SMALLS[k];return sanitizeSpec({name_en:d.name_en,name_ja:d.name_ja,example_en:d.ex[0],example_ja:d.ex[1],footprint:d.footprint,near:d.near,parts:d.parts,activity:d.act})}
+function growEvent(){return clock.sim<weather.rainbowUntil?'rainbow':clock.sim<weather.festUntil?'festival':weather.kind==='rain'?'rain':weather.kind==='snow'?'snow':null}
+function offlinePlan(){
+  const cand=people.filter(w=>!w.player&&!sleepTime(w));if(!cand.length)return null;const ev=growEvent();
+  const have=new Set(structures.map(s=>s.spec.name_en));let best=null,bs=-1;
+  for(const w of cand){const n=w.needs;for(const k in SMALLS){if(have.has(SMALLS[k].name_en))continue;let s=Math.random()*.8;
+    if(k==='swing')s+=(w.kid?2.5:0)+(w.likes.play||0)+(1-n.fun)*1.2;
+    if(k==='lantern')s+=(ev==='festival'?2.2:0)+(clock.hour>16?.6:0);
+    if(k==='flowerbed')s+=(w.likes.flower||0)*2+(ev==='rainbow'?1.8:0);
+    if(k==='readnook')s+=(w.likes.bench||0)*2.2;
+    if(k==='scarecrow')s+=(w.likes.field||0)*2.4;
+    if(k==='picnic')s+=(1-n.social)*2+(1-n.food)*1.2+(ev==='festival'?1.2:0);
+    if(k==='birdbath')s+=(w.likes.nap||0)+(w.likes.fish||0)*.8+(1-n.energy)*.6;
+    if(s>bs){bs=s;best={k,w}}}}
+  if(!best)return null;const d=SMALLS[best.k];
+  return{action:'add',wisher:best.w.name,wish:d.wish,key:best.k,reason:ev};
+}
+function growPrompt(ev){
+  const recent=logs.slice(-8).map(l=>`${l.t} ${l.p.en||tr(l.p)}`).join('\n')||'(quiet)';
+  const wishes=people.map(w=>`- ${w.name} (${w.en}): likes ${Object.entries(w.likes).filter(([,v])=>v>.3).map(([k])=>k).join(', ')||'-'}; memories: ${(w.memory||[]).slice(-3).map(m=>m.replace(/^\d\d:\d\d /,'')).join(' / ')||'-'}${grow.wishes[w.name]?`; last wish: ${grow.wishes[w.name].en}`:''}`).join('\n');
+  const made=structures.length?structures.map(s=>`${s.id}: ${s.spec.name_en}${s.by?` (made for ${s.by})`:''}`).join('\n'):'(none)';
+  return `You are the gentle spirit of a cozy village diorama. The village grows slowly: small objects appear or change because villagers wish for them or because of what happened. Decide ONE small change right now, or none.
+
+Now: day ${clock.day}, ${hhmm(clock.hour)}, weather ${weather.kind}${ev?`, event: ${ev}`:''}
+Villagers:
+${worldSummary()}
+Their tastes and memories:
+${wishes}
+Recent happenings:
+${recent}
+Existing structures (id: name):
+${made}
+Landmarks: ${Object.keys(LANDMARKS).join(', ')}.
+
+Rules: Keep changes small and charming (bench, swing, lamp, flower bed, scarecrow, sign, shrine, stall decoration, banner, garden furniture, a small pond ornament, mailbox...). Tie it to a real villager's wish, need, or the recent event, and do not repeat things that already exist. "add" = a new object (max 2x2 cells). "upgrade" = improve or redecorate one existing structure from the list (target = its id), e.g. new colors for the season, flowers, a lantern added, a bigger roof. Use "none" if nothing fits.
+Reply with JSON only:
+{"action":"add|upgrade|none","wisher":"ミノリ","wish_en":"I wish I had a quiet place to read.","wish_ja":"静かに本が読める場所がほしい。","brief":"English design brief: what, style, colors, size in cells (1-2), near which landmark","target":null,"log_en":"Minori's wish came true: a reading bench.","log_ja":"ミノリの願いで読書ベンチができた。"}`;
+}
+function specJSON(sp){return{name_en:sp.name_en,name_ja:sp.name_ja,example_en:sp.example_en,example_ja:sp.example_ja,footprint:sp.footprint,walkable:sp.walkable,near:sp.near,
+  parts:sp.parts.map(q=>({shape:q.shape,from:q.lo.map(v=>+v.toFixed(2)),to:q.hi.map(v=>+v.toFixed(2)),color:toHex(q.color),top:q.top?toHex(q.top):undefined,pattern:q.pattern!=='none'?q.pattern:undefined,topPattern:q.topPattern!=='none'?q.topPattern:undefined,axis:q.axis})),activity:sp.activity}}
+function revisePrompt(st,brief,wish){
+  return buildPrompt(brief,wish,`This is an UPGRADE of an existing structure. Keep the same footprint ${st.spec.footprint.join('x')}, the same general identity and position, and make only a modest, charming change. Current design JSON:\n${JSON.stringify(specJSON(st.spec))}\nReturn the complete revised design in the same JSON format (all parts).`,'a villager');
+}
+async function growthStep(){
+  if(grow.busy)return;grow.busy=true;
+  try{
+    const ev=growEvent();let plan=null,spec=null,usedAI=false;
+    if(sample){try{const r=await sample.json(growPrompt(ev),{modelTier:'default',cache:false});if(r&&typeof r==='object')plan=r,usedAI=true}catch(err){const c=err&&err.code;if(c==='not_granted'||c==='sampling_disabled')sample=null;if(c==='rate_limited'){grow.lastAt=clock.sim-12*HR;return}}}
+    if(plan){if(!['add','upgrade','none'].includes(plan.action))plan=null;else if(plan.action==='none'){grow.lastAt=clock.sim-9*HR;return}}
+    if(!plan){plan=offlinePlan();if(!plan){grow.lastAt=clock.sim-9*HR;return}}
+    const w=byName(String(plan.wisher||''))||pick(people.filter(p=>!p.player));
+    const wish=plan.key?plan.wish:J(String(plan.wish_ja||plan.wish_en||'').slice(0,60)||'何か変えたいな。',String(plan.wish_en||plan.wish_ja||'').slice(0,90)||'I want something new.');
+    grow.wishes[w.name]={ja:wish.ja,en:wish.en,day:clock.day};say(w,wish,7);
+    const gen=growStructs().length;
+    if(plan.action==='upgrade'){
+      const st=structures.find(s=>s.id===String(plan.target));
+      if(st&&usedAI&&sample){
+        let ns=null;try{ns=sanitizeSpec(await sample.json(revisePrompt(st,String(plan.brief||'').slice(0,300),wish.en),{modelTier:'default',cache:false}))}catch(err){}
+        if(ns&&ns.footprint[0]===st.spec.footprint[0]&&ns.footprint[1]===st.spec.footprint[1]){
+          const{cx,cy,id,by}=st,oldName=st.spec.name_ja;removeStructure(id);ns.near=st.spec.near;const ns2=placeStructure(ns,{x:cx,y:cy},id,true);ns2.by=by||w.name;ns2.wish=wish.ja;saveBuilds();
+          finishGrowth(w,ns2,J(String(plan.log_ja||`${w.name}の願いで${oldName}が変わった`).slice(0,80),String(plan.log_en||`${w.en}'s wish changed the ${ns.name_en}.`).slice(0,100)),false);return}}
+      plan.action='add'}
+    if(plan.action==='add'){
+      if(structures.length>=24||gen>=14){grow.lastAt=clock.sim;return}
+      if(plan.key)spec=smallSpec(plan.key);
+      else if(sample&&usedAI){try{spec=sanitizeSpec(await sample.json(buildPrompt(String(plan.brief||'').slice(0,300),wish.en,'Keep it small: footprint at most 2x2 cells and 6-20 parts.','a villager'),{modelTier:'default',cache:false}))}catch(err){}}
+      if(!spec){plan=offlinePlan();if(!plan)return;spec=smallSpec(plan.key)}
+      if(spec.footprint[0]>2||spec.footprint[1]>2)spec.footprint=[Math.min(2,spec.footprint[0]),Math.min(2,spec.footprint[1])];
+      const pos=findSpot(spec);if(!pos){grow.lastAt=clock.sim-6*HR;return}
+      const st=placeStructure(spec,pos,null,true);st.by=w.name;st.wish=wish.ja;saveBuilds();
+      finishGrowth(w,st,J(String(plan.log_ja||`${w.name}の願いで${spec.name_ja}ができた`).slice(0,80),String(plan.log_en||`${w.en}'s wish came true: a ${spec.name_en}.`).slice(0,100)),true)}
+  }catch(e){}finally{grow.busy=false}
+}
+function finishGrowth(w,st,msg,isNew){
+  grow.lastAt=clock.sim;grow.log.push({day:clock.day,ja:msg.ja,en:msg.en});if(grow.log.length>40)grow.log.shift();
+  log(msg,'god-line');remember(w,'願いがかなった');
+  const thanks=pick([J('わあ、ありがとう！','Thank you so much!'),J('うれしい！','I\'m so happy!'),J('ずっとほしかったんだ。','I wanted this for so long.')]);
+  setTimeout(()=>{say(w,thanks,5);if(st.actId&&!w.tile.stop&&!w.player){const p=planAct(w,st.actId);if(p)w.forced=p}},2500);
+  people.filter(o=>o!==w&&!o.player&&!sleepTime(o)).sort(()=>Math.random()-.5).slice(0,2).forEach(o=>say(o,J(`${st.spec.name_ja}だ！いいね！`,`A ${st.spec.name_en}! Nice!`),4));
+  saveTown(false);renderTown();
+}
+function growthCheck(){
+  if(grow.busy)return;
+  const h=clock.hour;if(h<8||h>20)return;
+  const ev=growEvent();const gap=(ev==='festival'||ev==='rainbow')?7*HR:18*HR;
+  if(clock.sim-grow.lastAt<gap||Math.random()<.35)return;
+  growthStep();
+}
+
+loadBuilds();
+let started=false;
+const _sv=readSave();if(_sv){restoreTown(_sv)}
+let last=performance.now();
+function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;S.time+=dt;frame(dt);requestAnimationFrame(loop)}
+resize();basis();tickClock();applyLang();if(_sv){log(TUI.resumed)}else log(J('1日目の朝。村の一日がはじまる','Day 1. A new day begins in the village.'));started=true;
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(resize);
+requestAnimationFrame(loop);
+})();
+</script>
