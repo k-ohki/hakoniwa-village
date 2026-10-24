@@ -19,6 +19,7 @@ function select(w){
   card.hidden=!w;logEl.hidden=!!w||!wordCard.hidden;thought=null;cThought.hidden=true;
   if(!w){cam.follow=null;cFollow.setAttribute('aria-pressed','false');return}
   if(!interior&&w.tile.indoor){interior=true;$('roofBtn').textContent=tr(UI.roofOn)}
+  if(w.tile.indoor&&w.tile.bld&&w.tile.bld.floors>1)setViewFloor(w.tile.level);
   cDot.style.background=rgb(w.cloak);
   cNeeds.replaceChildren();cNeeds.hidden=!w.needs;
   if(w.needs)for(const k in NEED_T){const lab=document.createElement('span');lab.dataset.k=k;lab.className='nlab';const bar=document.createElement('span');bar.className='bar';const i=document.createElement('i');i.style.background=NEED_T[k][1];i.dataset.k=k;bar.append(i);cNeeds.append(lab,bar)}
@@ -66,7 +67,7 @@ function applyLang(){
   $('langBtn').textContent=tr(UI.lang);const lb=$('labelBtn');lb.hidden=L!=='en';lb.textContent=showLabels?'Labels: On':'Labels: Off';lb.setAttribute('aria-pressed',String(showLabels));$('bookLbl').textContent=tr(UI.book);$('bookTitle').textContent=tr(UI.book);$('bookNote').textContent=tr(UI.bookNote);
   $('godLbl').textContent=tr(UI.god);$('godInput').placeholder=tr(UI.ph);if(!godBusy)$('godSend').textContent=tr(UI.send);
   $('hint').textContent=tr(UI.hint);cThink.textContent=tr(UI.think);$('cPlay').textContent=tr(UI.play);if(fpv.on)applyFpvLang();cFollow.textContent=tr(UI.follow);$('wExSay').textContent=tr(UI.exSay);
-  $('roofBtn').textContent=tr(interior?UI.roofOn:UI.roofOff);speedBtn.textContent=`${tr(UI.speed)} ×${clock.speed}`;$('reset').textContent=tr(UI.reset);
+  $('roofBtn').textContent=tr(interior?UI.roofOn:UI.roofOff);updateFloorBtn();speedBtn.textContent=`${tr(UI.speed)} ×${clock.speed}`;$('reset').textContent=tr(UI.reset);
   walkers.forEach(w=>{w.nameEl.textContent=nameOf(w)});
   renderLog();updateHud();if(!$('book').hidden)renderBook();if(typeof renderTown==='function')renderTown();
   try{localStorage.setItem('hakoniwa-lang',L)}catch(e){}
@@ -75,7 +76,12 @@ function applyLang(){
 $('labelBtn').addEventListener('click',()=>{showLabels=!showLabels;try{localStorage.setItem('hakoniwa-labels',showLabels?'1':'0')}catch(e){}applyLang()});
 $('langBtn').addEventListener('click',()=>{L=L==='ja'?'en':'ja';applyLang()});
 speedBtn.addEventListener('click',()=>{speedI=(speedI+1)%speeds.length;clock.speed=speeds[speedI];speedBtn.textContent=`${tr(UI.speed)} ×${clock.speed}`});
-$('roofBtn').addEventListener('click',()=>{interior=!interior;$('roofBtn').textContent=tr(interior?UI.roofOn:UI.roofOff);if(!interior&&selected&&selected.tile.indoor)select(null)});
+$('roofBtn').addEventListener('click',()=>{interior=!interior;$('roofBtn').textContent=tr(interior?UI.roofOn:UI.roofOff);if(!interior&&selected&&selected.tile.indoor)select(null);updateFloorBtn()});
+// 2階建て以上の建物がある時だけ、内観で見る階を切りかえるボタンを出す
+const maxFloors=()=>Math.max(1,...buildings.map(b=>b.floors));
+function setViewFloor(n){viewFloor=clamp(n,0,maxFloors()-1);updateFloorBtn()}
+function updateFloorBtn(){const b=$('floorBtn'),m=maxFloors();if(viewFloor>m-1)viewFloor=m-1;b.hidden=!interior||m<2;b.textContent=tr(UI.floor(viewFloor+1))}
+$('floorBtn').addEventListener('click',()=>setViewFloor((viewFloor+1)%maxFloors()));
 $('reset').addEventListener('click',()=>{cam.taz=ISO_AZ;cam.tel=ISO_EL;cam.tzoom=1;cam.follow=null;cFollow.setAttribute('aria-pressed','false')});
 $('zoomIn').addEventListener('click',()=>{cam.tzoom=clamp(cam.tzoom*1.35,.7,3.5)});
 $('zoomOut').addEventListener('click',()=>{cam.tzoom=clamp(cam.tzoom/1.35,.7,3.5)});

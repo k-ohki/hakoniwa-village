@@ -3,7 +3,7 @@ const godForm=$('godForm'),godInput=$('godInput'),godSend=$('godSend');
 const GOAL_IDS=[...ACT_IDS,'home','none'];
 const MOODS=['happy','excited','calm','sad','scared','angry'];
 function worldSummary(){
-  return people.map(w=>{const n=w.needs;return`- ${w.name} (${w.en}) ${w.persona.en}${w.kid?' [child]':''} mood:${moodOf(w)} energy${n.energy.toFixed(1)} food${n.food.toFixed(1)} social${n.social.toFixed(1)} fun${n.fun.toFixed(1)} bladder${n.bladder.toFixed(1)} clean${n.hygiene.toFixed(1)} now:${statusOf(w).en} (${w.tile.indoor?'at home':'outside'})`}).join('\n')+`\n- タマ (Tama) the cat. now:${statusOf(cat).en}`;
+  return people.map(w=>{const n=w.needs;return`- ${w.name} (${w.en}) ${w.persona.en}${w.kid?' [child]':''} mood:${moodOf(w)} energy${n.energy.toFixed(1)} food${n.food.toFixed(1)} social${n.social.toFixed(1)} fun${n.fun.toFixed(1)} bladder${n.bladder.toFixed(1)} clean${n.hygiene.toFixed(1)} now:${statusOf(w).en} (${placeOf(w)})`}).join('\n')+`\n- タマ (Tama) the cat. now:${statusOf(cat).en}`;
 }
 function godPrompt(text){
   return `You interpret the "Voice of God" in a cozy village life simulation. The player (God) spoke to the village from the sky. Decide how each villager reacts, based on personality and state. The player is learning English, so every line you write comes in simple everyday English (CEFR A2) AND natural Japanese.
@@ -38,7 +38,7 @@ function offlineInterpret(text){
     [['釣','魚','fish'],'fish',J('釣りに行こう。','Let\'s go fishing.')],[['花','flower'],'flower',J('お花に水をあげなきゃ。','I need to water the flowers.')],[['話','仲良','おしゃべり','talk','chat','friend'],'chat',J('誰かと話したいな。','I want to talk with someone.')],
     [['遊','走','鬼ごっこ','play','run'],'play',J('遊ぼう！','Let\'s play!')],[['買','店','屋台','shop','buy','stall'],'stall',J('屋台に行こう。','Let\'s go to the stall.')]];
   if(has('建て','作って','つくって','置いて','たてて','建設','build','make a','create','place','put a'))r.build=text;
-  if(has('壊','撤去','なくして','remove','destroy','demolish')&&structures.length){const s2=structures.find(s=>text.includes(s.spec.name_ja)||t.includes(s.spec.name_en.toLowerCase()))||structures[structures.length-1];r.remove=s2.id;r.build=null}
+  if(has('壊','撤去','なくして','remove','destroy','demolish')&&genBuildings().length){const s2=genBuildings().find(s=>text.includes(s.spec.name_ja)||t.includes(s.spec.name_en.toLowerCase()))||genBuildings().slice(-1)[0];r.remove=s2.id;r.build=null}
   if(!r.build&&!r.remove)for(const[keys,g,p]of G)if(has(...keys)){goal=g;sayP=p;if(g==='dance')r.event='festival';if(g==='sleep'||g==='home')mood='calm';break}
   if(!goal&&has('怒','雷','罰','angry','thunder')){mood='scared';sayP=J('ひえっ！','Yikes!')}
   if(has('夜','night'))r.timeSkipTo=20;else if(has('朝','morning'))r.timeSkipTo=7;else if(has('昼','noon'))r.timeSkipTo=12;
@@ -54,7 +54,7 @@ function applyDivine(r,text){
   if(r.weather==='rain'){setWeather('rain',3);log(J('雨が降りはじめた','It started to rain.'))}else if(r.weather==='snow'){setWeather('snow',4);log(J('雪が降りはじめた','It started to snow.'))}
   else if(r.weather==='clear'){weather.kind='clear'}else if(r.weather==='rainbow'){weather.kind='clear';weather.rainbowUntil=clock.sim+2*HR}
   if(r.build)buildFromVoice(String(r.build).slice(0,400),text);
-  if(r.remove){const st=removeStructure(String(r.remove));if(st)log(J(`${st.spec.name_ja}がなくなった`,`The ${st.spec.name_en} is gone.`),'god-line')}
+  if(r.remove){const st=removeBuilding(String(r.remove));if(st)log(J(`${st.spec.name_ja}がなくなった`,`The ${st.spec.name_en} is gone.`),'god-line')}
   if(r.event==='festival'){weather.festUntil=clock.sim+8*HR;log(J('広場にお祭りの飾りが立った','Festival decorations went up in the plaza.'))}
   (Array.isArray(r.villagers)?r.villagers:[]).forEach(v=>{
     const w=byName(String(v.name||''));if(!w)return;
@@ -72,7 +72,7 @@ function applyDivine(r,text){
         else if(g==='chat'){if(!w.link){w.act&&finishAct(w,true);w.path=[];w.goal=null;w.wait=0}}
         else{const p=planAct(w,g);if(p)w.forced=p}
       }
-    }else if(w.kind==='cat'&&(v.goal==='home'||v.goal==='sleep')){w.forced={goal:{id:'catsleep',dur:[1,2]},target:houses.A.spots.sofa[0]}}
+    }else if(w.kind==='cat'&&(v.goal==='home'||v.goal==='sleep')){w.forced={goal:{id:'catsleep',dur:[1,2]},target:(homes()[0].spots.rest||homes()[0].floor)[0]}}
   });
 }
 godForm.addEventListener('submit',async e=>{
@@ -101,7 +101,7 @@ cThink.addEventListener('click',async()=>{
     :`Write the inner voice (first person, what they are thinking right now) of ${w.en} (${w.name}), a villager in a cozy village sim. The reader is learning everyday English, so use simple, natural spoken English (CEFR A2), 1-2 short sentences about this moment of daily life.
 Personality: ${w.persona.en}${w.kid?' (a child)':''}
 Time: day ${clock.day}, ${hhmm(clock.hour)}, weather ${weather.kind}${clock.sim<weather.festUntil?', festival':''}
-Doing now: ${statusOf(w).en} (${w.tile.indoor?'at home, in the '+ROOMS[w.tile.room].en:'outside'})
+Doing now: ${statusOf(w).en} (${placeOf(w)})
 Mood: ${moodOf(w)} (energy ${n.energy.toFixed(1)}, full ${n.food.toFixed(1)}, social ${n.social.toFixed(1)}, fun ${n.fun.toFixed(1)}, bladder ${n.bladder.toFixed(1)}, clean ${n.hygiene.toFixed(1)}; 0-1)
 Recent memories: ${w.memory.slice(-5).join(' / ')||'nothing special'}
 Best friend: ${best}

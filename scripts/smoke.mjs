@@ -58,6 +58,15 @@ else {
   if (!JSON.parse(apiCalls[0].postData()).model) problems.push('model がありません');
 }
 const logText = await page.evaluate(() => document.body.innerText);
+// 一人称モード（WebGL）に入って少し歩き、戻る
+await page.click('#roster button');
+await page.click('#cPlay');
+await page.waitForTimeout(300);
+await page.keyboard.down('w');
+await page.waitForTimeout(600);
+await page.keyboard.up('w');
+if (await page.isHidden('#fpv')) problems.push('一人称モードに入れません');
+await page.click('#fpvExit');
 if (!logText.includes('モックの返事') && !logText.includes('Mock reply')) problems.push('API の返答が村に反映されていません');
 
 await browser.close();

@@ -1,4 +1,6 @@
 // ================= host =================
+// テスト用フック（scripts/ のテストが読み込み前に window.__HAKONIWA_TEST__ を置いた時だけ有効）
+const TEST=window.__HAKONIWA_TEST__||null;
 const cv=document.getElementById('scene');let N=cv.getContext('2d');
 const S={width:0,height:0,dpr:1,time:0};
 const cam={az:ISO_AZ,el:ISO_EL,taz:ISO_AZ,tel:ISO_EL,d:null,r:null,u:null,scale:30,cx:0,cy:0,center:[8.5,7.5,0],

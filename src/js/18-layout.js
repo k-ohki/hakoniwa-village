@@ -22,7 +22,7 @@ function updateCamera(dt,dragging){
   const tc=f?(()=>{const p=walkerPos(f);return[p[0],p[1],p[2]+.5]})():B.center;
   cam.center=mix(cam.center,tc,kc);cam.scale=B.scale*cam.zoom;
   let ox=B.cx-B.areaX,oy=B.cy-B.areaY;
-  if(!f){let x0=1/0,x1=-1/0,y0=1/0,y1=-1/0;for(const X of[-.5,MW-.5])for(const Y of[-.5,MH-.5])for(const Z of[-2.5,WALL_H+.8]){const e=[X-B.center[0],Y-B.center[1],Z-B.center[2]],sx=B.scale*dot(e,cam.r),sy=-B.scale*dot(e,cam.u);x0=Math.min(x0,sx);x1=Math.max(x1,sx);y0=Math.min(y0,sy);y1=Math.max(y1,sy)}ox=-(x0+x1)/2;oy=-(y0+y1)/2}
+  if(!f){let x0=1/0,x1=-1/0,y0=1/0,y1=-1/0;for(const X of[-.5,MW-.5])for(const Y of[-.5,MH-.5])for(const Z of[-2.5,worldTopZ()]){const e=[X-B.center[0],Y-B.center[1],Z-B.center[2]],sx=B.scale*dot(e,cam.r),sy=-B.scale*dot(e,cam.u);x0=Math.min(x0,sx);x1=Math.max(x1,sx);y0=Math.min(y0,sy);y1=Math.max(y1,sy)}ox=-(x0+x1)/2;oy=-(y0+y1)/2}
   cam.cx=lerp(cam.cx,f?B.areaX:B.areaX+ox*cam.zoom,kc);cam.cy=lerp(cam.cy,f?B.areaY:B.areaY+oy*cam.zoom,kc);
 }
 

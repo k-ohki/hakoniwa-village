@@ -13,3 +13,14 @@ jobs:
         with:
           node-version: 22
       - run: npm run check
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # テスト専用。アプリ本体は外部パッケージに依存しない
+      - run: npm install --no-save playwright@1.63.0
+      - run: npx playwright install --with-deps chromium
+      - run: npm run smoke && npm run sim && npm run test:build

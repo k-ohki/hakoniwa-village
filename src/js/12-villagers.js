@@ -6,7 +6,7 @@ const PEOPLE=[
   {name:'ソラ',en:'Sora',home:'B',bed:0,cloak:[86,170,168],cap:[244,196,110],persona:J('のんびり屋の釣り好き。昼寝の名人。','Easygoing and loves fishing. A champion napper.'),likes:{fish:.7,nap:.5,rest:.3,field:-.2},wake:7.2,sleep:22.5,speed:1.2,at:[13,9]},
   {name:'ミノリ',en:'Minori',home:'B',bed:1,cloak:[150,122,196],cap:[252,236,222],persona:J('物静かな読書家。きれい好きで皆の相談役。','A quiet bookworm. Tidy, and everyone asks her for advice.'),likes:{bench:.7,bath:.4,flower:.2,cook:.4},wake:6.3,sleep:22.8,speed:1.25,at:[12,5]},
   {name:'ユイ',en:'Yui',home:'B',bed:2,cloak:[236,150,180],cap:[255,240,214],persona:J('明るい商売人。屋台を切り盛りしていて噂話が好き。','A bright shopkeeper who runs the stall and loves gossip.'),likes:{stall:.6,chat:.4,tv:.2},wake:6,sleep:22,speed:1.4,keeper:true,at:[8,4]}];
-const walkers=PEOPLE.map((p,i)=>{const h=houses[p.home];const w={...p,kind:'person',house:h,tile:T(...p.at)||ground[0],
+const walkers=PEOPLE.map((p,i)=>{const h=bldById(p.home);const w={...p,kind:'person',house:h,tile:T(...p.at)||ground[0],
   link:null,t:0,phase:i*1.3,wait:.05*HR*i,path:[],goal:null,target:null,act:null,lastDir:[0,1],lastAct:null,
   needs:{energy:.8,food:.35+.1*hash(i),social:.45+.3*hash(i+3),fun:.5+.3*hash(i+7),bladder:.35+.4*hash(i+11),hygiene:.55+.3*hash(i+13)},
   mood:null,moodUntil:0,say:null,forced:null,directive:null,memory:[],rel:{},chatT:0,turn:0,brushedAt:-99*HR,washedAt:-99*HR};h.residents.push(w);return w});
@@ -25,15 +25,14 @@ const taken=w=>{const s=new Set();walkers.forEach(o=>{if(o===w)return;if(o.targe
 const remember=(w,txt)=>{if(!w.memory)return;w.memory.push(`${hhmm(clock.hour)} ${txt}`);if(w.memory.length>8)w.memory.shift()};
 const say=(w,phrase,secs=4)=>{if(!phrase)return;w.say={...phrase,until:S.time+secs};addPhrase(phrase)};
 // villagers who start the day still in bed
-people.forEach(w=>{if(sleepTime(w)){w.tile=w.house.spots.beds[w.bed];w.act={id:'sleep'};w.wait=(((w.wake-clock.hour)%24+24)%24)*HR;w.lastDir=[0,1]}});
+people.forEach(w=>{if(sleepTime(w)){w.tile=w.house.spots.sleep[w.bed];w.act={id:'sleep'};w.wait=(((w.wake-clock.hour)%24+24)%24)*HR;w.lastDir=[0,1]}});
 
+// その行動ができる場所: 家の中の行動は自分の家の家具、それ以外は町中の場所（よその家の中は除く）
 function spotsFor(w,id){
-  const h=w.house;
-  switch(id){
-    case'sleep':return[h.spots.beds[w.bed]];case'toilet':return h.spots.toilet;case'bath':return h.spots.tub;case'brush':case'wash':return h.spots.basin;
-    case'cook':return h.spots.stove;case'eat':return h.spots.chairs;case'snack':return h.spots.fridge;case'dishes':return h.spots.sink;
-    case'tv':case'rest':return h.spots.sofa;case'stall':return w.keeper?SPOTS.keeper:SPOTS.stall;case'dance':return SPOTS.plaza;
-    default:return SPOTS[id]||[]}
+  const a=ACTS[id];if(!a)return[];
+  if(a.home){const s=(w.house&&w.house.spots[id])||[];return id==='sleep'?[s[w.bed]]:s}
+  if(id==='stall'&&w.keeper)return SPOTS.keeper||[];
+  return(SPOTS[id]||[]).filter(t=>!t.bld||!t.bld.private||t.bld===w.house);
 }
 function planAct(w,id){
   const a=ACTS[id];if(!a)return null;
@@ -44,6 +43,7 @@ function planAct(w,id){
   return{goal,target};
 }
 function setPlan(w,p){if(!p)return false;const path=bfs(w.tile,p.target);if(!path)return false;w.path=path;w.goal=p.goal;w.target=p.target;return true}
+const inHours=(h,[a,b])=>a<=b?h>=a&&h<b:h>=a||h<b;
 const mealWindow=h=>(h>=6.3&&h<9)||(h>=11.5&&h<13.5)||(h>=17.5&&h<20);
 
 function score(w,id){
@@ -60,7 +60,9 @@ function score(w,id){
     case'bath':s=(h>=17.5||h<1)&&n.hygiene<.65?1.7+(1-n.hygiene)*1.6:n.hygiene<.18?1.6:-2;break;
     case'tv':s=(h>=18?.8:-.1)+(1-n.fun)*.9;break;
     case'rest':s=(1-n.energy)*1.2-.3+(weather.kind!=='clear'?.4:0);break;
-    default:{for(const k in a.gain){const g=a.gain[k];s+=g>0?g*(1-n[k])*2.4:g*(1-n[k])*1.4}
+    default:{
+      if(a.gen){if(a.hours&&!inHours(h,a.hours))return-99;if((a.who==='kid'&&!w.kid)||(a.who==='adult'&&w.kid))return-99}
+      for(const k in a.gain){const g=a.gain[k];s+=g>0?g*(1-n[k])*2.4:g*(1-n[k])*1.4}
       if(id==='dance')s+=clock.sim<weather.festUntil||(directiveOn(w)&&w.directive.goal==='dance')?1.2:-99;
       if(id==='field'&&(h<6||h>17))s-=2;
       if(id==='fish'&&h>=14&&h<17)s+=.2;
@@ -68,8 +70,8 @@ function score(w,id){
       if(id==='stall'){if(w.keeper)s+=h>=8&&h<18?1.1:-2;else{const k=people.find(o=>o.keeper);s+=k&&k.act&&k.act.id==='stall'?.4:-.4}}
       if(id==='play'&&!w.kid)s-=.8;
       if((h>=19.5||h<5.5)&&!(id==='dance'&&clock.sim<weather.festUntil))s-=2.2;
-      if(weather.kind==='rain')s-=w.kid?.5:1.7;
-      if(weather.kind==='snow')s+=w.kid?.4:-.6;
+      if(!a.inside&&weather.kind==='rain')s-=w.kid?.5:1.7;
+      if(!a.inside&&weather.kind==='snow')s+=w.kid?.4:-.6;
       if(directiveOn(w)&&w.directive.goal==='home')s-=4;
       if(a.created!=null)s+=Math.max(0,1.6-(clock.sim-a.created)/(10*HR));
     }
@@ -91,10 +93,10 @@ function chatPartner(w){
 function startChat(w){
   const o=chatPartner(w);if(!o)return false;
   const busy=taken(w),mx=(w.tile.pos[0]+o.tile.pos[0])/2,my=(w.tile.pos[1]+o.tile.pos[1])/2;
-  const sameHouse=w.tile.house&&w.tile.house===o.tile.house;
-  const pool=(sameHouse?w.tile.house.spots.floor:ground).filter(t=>!busy.has(t));
+  const sameHouse=w.tile.bld&&w.tile.bld===o.tile.bld&&w.tile.level===o.tile.level;
+  const pool=(sameHouse?w.tile.bld.floorTiles[w.tile.level].filter(t=>!t.stop):ground).filter(t=>!busy.has(t));
   const cand=pool.sort((a,b)=>Math.hypot(a.pos[0]-mx,a.pos[1]-my)-Math.hypot(b.pos[0]-mx,b.pos[1]-my));
-  for(const t of cand.slice(0,30)){const nb=t.links.map(l=>l.to).find(n=>!n.stop&&n.house===t.house&&!busy.has(n));if(!nb)continue;
+  for(const t of cand.slice(0,30)){const nb=t.links.map(l=>l.to).find(n=>!n.stop&&n.bld===t.bld&&n.level===t.level&&!busy.has(n));if(!nb)continue;
     const g1={id:'chat',dur:ACTS.chat.dur,partner:o,lead:true},g2={id:'chat',dur:ACTS.chat.dur,partner:w};
     if(!setPlan(w,{goal:g1,target:t}))return false;o.forced={goal:g2,target:nb};return true}
   return false;
@@ -115,10 +117,10 @@ function chooseGoal(w){
   w.wait=.3*HR;
 }
 function catGoal(w){
-  const h=clock.hour,night=h>=21||h<6,hA=houses.A;
-  if(night){const t=hA.spots.sofa.find(t=>!taken(w).has(t))||pick(hA.spots.floor);setPlan(w,{goal:{id:'catsleep',dur:[2,4]},target:t});return}
-  if(weather.kind==='rain'){setPlan(w,{goal:{id:'cat',dur:[.5,1]},target:pick(hA.spots.floor)});return}
-  const pool=Math.random()<.25?pick([hA,houses.B]).spots.floor:ground;
+  const h=clock.hour,night=h>=21||h<6,hs=homes(),hA=hs[0];
+  if(night){const t=(hA.spots.rest||[]).find(t=>!taken(w).has(t))||pick(hA.floor);setPlan(w,{goal:{id:'catsleep',dur:[2,4]},target:t});return}
+  if(weather.kind==='rain'){setPlan(w,{goal:{id:'cat',dur:[.5,1]},target:pick(hA.floor)});return}
+  const pool=Math.random()<.25?pick(hs).floor:ground;
   setPlan(w,{goal:{id:'cat',dur:[.3,1]},target:pick(pool)});
 }
 
@@ -194,3 +196,6 @@ function statusOf(w){
   return J('ひと休み','taking a break');
 }
 
+// 今いる場所の英語の説明（Claude への説明文用）
+function placeOf(w){const t=w.tile;if(!t.indoor)return'outside';const b=t.bld,rc=t.room&&b.roomCenters[t.room];
+  return(b===w.house?'at home':'in the '+b.spec.name_en)+(b.floors>1?`, floor ${t.level+1}`:'')+(rc?', in the '+rc.name.en:'')}

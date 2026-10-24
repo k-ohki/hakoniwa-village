@@ -2,7 +2,7 @@
 const SKIN=[253,227,207];
 function postureOf(w){if(w.link||!w.tile.furn)return'stand';return w.tile.furn.type==='bed'?'lie':w.tile.furn.type==='tub'?'bath':'sit'}
 function drawPerson(w){
-  amb=w.tile.indoor?houseAmb(w.tile.house):ambOut;
+  amb=w.tile.indoor?houseAmb(w.tile.bld):ambOut;
   const post=postureOf(w),sc=1.35*cam.scale*(w.kid?.8:1),moving=!!w.link,face=faceOf(w),mood=moodOf(w),s=cam.scale;
   if(post==='lie'){const f=w.tile.furn,hp=project(f.head),fp=project(f.foot),mid=project([f.head[0]+(f.foot[0]-f.head[0])*.25,f.head[1]+(f.foot[1]-f.head[1])*.25,f.head[2]]);
     N.strokeStyle=rgbA(mix(w.cloak,[255,255,255],.25));N.lineCap='round';N.lineWidth=.42*s;N.beginPath();N.moveTo(mid[0],mid[1]-.06*s);N.lineTo(fp[0],fp[1]-.05*s);N.stroke();
@@ -59,7 +59,7 @@ function drawPerson(w){
   amb=ambOut;
 }
 function drawCat(w){
-  amb=w.tile.indoor?houseAmb(w.tile.house):ambOut;
+  amb=w.tile.indoor?houseAmb(w.tile.bld):ambOut;
   const l=project(walkerPos(w)),s=cam.scale,moving=!!w.link,face=faceOf(w),x=l[0],y=l[1];
   const sleeping=w.act&&w.act.id==='catsleep'&&!moving,b=moving?Math.abs(Math.sin(w.phase*1.3))*s*.03:0;
   if(w===selected){N.strokeStyle='rgba(255,255,255,0.9)';N.lineWidth=2;N.beginPath();N.ellipse(x,y,.28*s,.12*s,0,0,2*Math.PI);N.stroke()}

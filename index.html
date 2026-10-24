@@ -200,6 +200,7 @@ body.fpv.coarse .joy{display:block}
   <button id="zoomOut" type="button" aria-label="縮小">－</button>
   <button id="zoomIn" type="button" aria-label="拡大">＋</button>
   <button id="roofBtn" type="button">外観を見る</button>
+  <button id="floorBtn" type="button" hidden>1階</button>
   <button id="speed" type="button">早送り ×1</button>
   <button id="reset" type="button">視点を戻す</button>
 </div>
@@ -252,7 +253,7 @@ const UI={
   hint:J('ドラッグで回転・ホイールで拡大・住人や物をタップ','Drag to rotate · zoom in to see names · tap people and things to learn words'),
   think:J('心の声を聞く','Inner voice'),follow:J('この人を追う','Follow'),listening:J('耳をすましています…','Listening…'),
   roofOn:J('外観を見る','Show roofs'),roofOff:J('家の中を見る','Show inside'),
-  speed:J('早送り','Speed'),play:J('この人になる（一人称）','Play as this person'),reset:J('視点を戻す','Reset view'),exSay:J('🔊 例文を聞く','🔊 Example')};
+  speed:J('早送り','Speed'),floor:n=>J(`${n}階を表示中`,`Showing floor ${n}`),play:J('この人になる（一人称）','Play as this person'),reset:J('視点を戻す','Reset view'),exSay:J('🔊 例文を聞く','🔊 Example')};
 const MOOD_T={happy:J('ごきげん','happy'),excited:J('わくわく','excited'),calm:J('おだやか','calm'),sad:J('しょんぼり','sad'),scared:J('こわがり中','scared'),angry:J('ぷんぷん','angry'),tired:J('くたくた','tired')};
 const WX_T={clear:J('晴れ','Sunny'),rain:J('雨','Rainy'),snow:J('雪','Snowy')};
 const NEED_T={energy:[J('元気','Energy'),'#7fc7a0'],food:[J('満腹','Full'),'#a0b8e8'],social:[J('交流','Social'),'#e8a0b0'],fun:[J('楽しさ','Fun'),'#f0c070'],bladder:[J('トイレ','Bladder'),'#c9b3e8'],hygiene:[J('清潔','Clean'),'#8fd3e0']};
@@ -277,6 +278,8 @@ const snowy=c=>snowOn&&snowCover>0?mix(c,[244,246,252],snowCover*.85):c;
 function shade(c,n){const l=Math.max(0,dot(n,LIGHT)),i=.74+.3*l;return A(mix(c.map(v=>v*i),P.shadowTint,.2*(1-l)))}
 
 // ================= host =================
+// テスト用フック（scripts/ のテストが読み込み前に window.__HAKONIWA_TEST__ を置いた時だけ有効）
+const TEST=window.__HAKONIWA_TEST__||null;
 const cv=document.getElementById('scene');let N=cv.getContext('2d');
 const S={width:0,height:0,dpr:1,time:0};
 const cam={az:ISO_AZ,el:ISO_EL,taz:ISO_AZ,tel:ISO_EL,d:null,r:null,u:null,scale:30,cx:0,cy:0,center:[8.5,7.5,0],
@@ -285,182 +288,6 @@ function basis(){const c=Math.cos(cam.el);cam.d=[c*Math.cos(cam.az),c*Math.sin(c
 let projOverride=null;
 function project(p){if(projOverride)return projOverride(p);const e=[p[0]-cam.center[0],p[1]-cam.center[1],p[2]-cam.center[2]];return[cam.cx+cam.scale*dot(e,cam.r),cam.cy-cam.scale*dot(e,cam.u)]}
 const isoProj=t=>[.70710678*(t[0]-t[1]),.40824829*(t[0]+t[1])-.81649658*t[2]];
-
-// ================= world =================
-const boxes=[], tiles=[], tileAt=new Map(), VOCAB=[];
-const key=(x,y)=>x+','+y;
-const MW=18, MH=16, WALL_H=1.6, FLOOR=.12;
-function box(lo,hi,o={}){const b={...o,lo,hi,id:boxes.length,kind:'box'};b.top=o.top||o.side||P.wall;b.side=o.side||P.wall;b.deco=o.deco||{};boxes.push(b);return b}
-function tile(x,y,z,o={}){const t={...o,pos:[x,y,z],id:tiles.length,links:[]};tiles.push(t);tileAt.set(key(x,y),t);return t}
-const T=(x,y)=>tileAt.get(key(x,y));
-function vocab(word,ja,ex,exja,pos,o={}){VOCAB.push({word,ja,ex,exja,pos,...o})}
-
-const POND={x:15.2,y:12.3,rx:2.25,ry:1.7};
-const inPond=(x,y,m=0)=>((x-POND.x)/(POND.rx+m))**2+((y-POND.y)/(POND.ry+m))**2<1;
-const plazaCells=[];for(let x=7;x<=9;x++)for(let y=10;y<=12;y++)if(!(x===8&&y===11))plazaCells.push([x,y]);
-let pathCells=[];for(let x=0;x<MW;x++)pathCells.push([x,8]);[2,11].forEach(x=>pathCells.push([x,7]));for(let y=9;y<MH;y++){pathCells.push([5,y]);pathCells.push([12,y])}
-pathCells=pathCells.filter(([x,y])=>!inPond(x,y,.15));
-const fieldCells=[];for(let x=0;x<=3;x++)for(let y=12;y<=14;y++)fieldCells.push([x,y]);
-const bedCells=[[0,7],[1,7],[14,7],[15,7],[8,6],[8,7]];
-const pathSet=new Set(pathCells.map(([x,y])=>key(x,y))), plazaSet=new Set(plazaCells.map(([x,y])=>key(x,y))), fieldSet=new Set(fieldCells.map(([x,y])=>key(x,y))), bedSet=new Set(bedCells.map(([x,y])=>key(x,y)));
-const TREES=[[0,0,.85],[8,0,.7],[17,0,.78],[17,6,.7],[0,10,.62],[7,15,.62],[10,14,.6],[15,15,.6],[17,9,.55]];
-const LANTERNS=[[4,7],[6,9],[9,7],[13,7],[10,10],[10,13]];
-const blocked=new Set(), houseCells=new Set();
-const block=(x,y)=>blocked.add(key(x,y));
-TREES.forEach(([x,y])=>block(x,y));LANTERNS.forEach(([x,y])=>block(x,y));
-[[8,3],[16,3],[6,13],[8,11]].forEach(([x,y])=>block(x,y));
-fieldCells.forEach(([x,y])=>block(x,y));bedCells.forEach(([x,y])=>block(x,y));
-for(let x=0;x<MW;x++)for(let y=0;y<MH;y++)if(inPond(x,y,.1))block(x,y);
-
-// island
-box([-.5,-.5,-1],[MW-.5,MH-.5,0],{top:P.grass,side:P.rock,deco:{top:'ground',px:'strata',py:'strata',nx:'strata',ny:'strata'}});
-box([.3,.3,-2],[16.7,14.7,-1],{side:P.rock,deco:{px:'strata',py:'strata',nx:'strata',ny:'strata'}});
-box([2,1.8,-3],[14.5,13.5,-2],{side:P.rockDark,deco:{px:'strata',py:'strata',nx:'strata',ny:'strata'}});
-box([5,4.5,-3.8],[11.5,10,-3],{side:P.rockDark,deco:{px:'strata',py:'strata'}});
-box([7,6,-4.4],[9.5,8.5,-3.8],{side:P.rockDark});
-
-// ---------- houses (cutaway dollhouses) ----------
-const ROOMS={bed:J('寝室','bedroom'),bath:J('お風呂・トイレ','bathroom'),kitchen:J('キッチン','kitchen'),living:J('リビング','living room')};
-const roomOf=(c,r)=>r<=1?(c<=2?'bed':'bath'):(c<=2?'living':'kitchen');
-const houses={};
-function buildHouse(id,x0,y0,wallC,roofC,paperC,blanket){
-  const X=c=>x0+c, Y=r=>y0+r;
-  const h={id,x0,y0,blockedEdges:new Set(),spots:{},lights:false,glow:0,mealReady:0,mealName:null,dirty:false,cooking:null,tvOn:false,paper:paperC,
-    stoveP:[X(4),Y(2)-.05,.66],tvP:[X(0)-.2,Y(3),.66],chimney:[X(4),Y(2),WALL_H+1.25],residents:[]};
-  houses[id]=h;
-  for(let c=0;c<6;c++)for(let r=0;r<6;r++)houseCells.add(key(X(c),Y(r)));
-  const H=WALL_H, I={indoor:true,house:h};
-  box([x0-.5,y0-.5,0],[x0+5.5,y0+5.5,FLOOR],{...I,top:P.floorW,side:mix(wallC,[150,120,110],.3),deco:{top:'floor'}});
-  const opp={px:'nx',nx:'px',py:'ny',ny:'py'};
-  const wall=(lo,hi,n,wins,extra={})=>{const outer=n[0]>0?'px':n[0]<0?'nx':n[1]>0?'py':'ny';
-    return box(lo,hi,{side:wallC,top:P.wallTrim,house:h,cutN:n,wall:{wins,outer,inner:opp[outer]},deco:{[outer]:'wallOut',[opp[outer]]:'wallIn'},...extra})};
-  wall([x0-.5,y0-.5,FLOOR],[x0-.38,y0+5.5,H],[-1,0,0],[Y(1),Y(4.5)]);
-  wall([x0+5.38,y0-.5,FLOOR],[x0+5.5,y0+5.5,H],[1,0,0],[Y(3),Y(5)]);
-  wall([x0-.38,y0-.5,FLOOR],[x0+5.38,y0-.38,H],[0,-1,0],[X(1),X(4)]);
-  wall([x0-.38,y0+5.38,FLOOR],[x0+.55,y0+5.5,H],[0,1,0],[]);
-  wall([x0+.55,y0+5.38,1.3],[x0+1.45,y0+5.5,H],[0,1,0],[]);
-  wall([x0+1.45,y0+5.38,FLOOR],[x0+5.38,y0+5.5,H],[0,1,0],[X(3),X(4.6)]);
-  box([x0+.58,y0+5.41,FLOOR],[x0+1.42,y0+5.47,1.3],{side:mix(P.coral,[120,70,90],.3),house:h,exteriorOnly:true,deco:{py:'doorleaf'}});
-  const part=(lo,hi)=>box(lo,[hi[0],hi[1],.6],{...I,side:paperC,top:P.wallTrim});
-  part([x0-.38,y0+1.44,FLOOR],[x0+.5,y0+1.56]);part([x0+1.5,y0+1.44,FLOOR],[x0+5.38,y0+1.56]);
-  part([x0+2.44,y0-.38,FLOOR],[x0+2.56,y0+.5]);part([x0+2.44,y0+1.56,FLOOR],[x0+2.56,y0+3.5]);
-  const be=(a,b)=>{h.blockedEdges.add(key(...a)+'|'+key(...b));h.blockedEdges.add(key(...b)+'|'+key(...a))};
-  [0,2,3,4,5].forEach(c=>be([X(c),Y(1)],[X(c),Y(2)]));
-  be([X(2),Y(0)],[X(3),Y(0)]);be([X(2),Y(2)],[X(3),Y(2)]);be([X(2),Y(3)],[X(3),Y(3)]);
-  h.door=[[X(1),Y(5)],[X(1),Y(6)]];
-  const solid=new Set(), use=new Map(), F={...I};
-  const seat=(c,r,z,type,face,extra={})=>use.set(key(X(c),Y(r)),{z,furn:{type,face,...extra}});
-  // bedroom
-  for(let c=0;c<3;c++){const cx=X(c),cy=Y(0);
-    box([cx-.36,cy-.36,FLOOR],[cx+.36,cy-.28,.72],{...F,side:P.wood,top:P.woodL});
-    box([cx-.36,cy-.28,FLOOR],[cx+.36,cy+.45,.34],{...F,side:P.woodL,top:P.white,deco:{top:'bedTop'},blanket:blanket[c]});
-    seat(c,0,.34,'bed',[0,1],{head:[cx,cy-.12,.34],foot:[cx,cy+.42,.34],lo:[cx-.36,cy-.28],hi:[cx+.36,cy+.45]});
-    if(c===1)vocab('bed','ベッド','I go to bed at ten.','10時に寝ます。',[cx,cy+.1,.4],{house:h})}
-  // bathroom
-  {const cx=X(3),cy=Y(0);box([cx-.2,cy-.36,FLOOR],[cx+.2,cy-.18,.72],{...F,side:P.porcelain,top:P.porcelain});box([cx-.17,cy-.18,FLOOR],[cx+.17,cy+.22,.4],{...F,side:P.porcelain,top:P.porcelain,deco:{top:'toiletTop'}});
-    seat(3,0,.4,'seat',[0,1]);vocab('toilet','トイレ（便器）','Don\'t forget to flush the toilet.','トイレを流すのを忘れないでね。',[cx,cy,.6],{house:h})}
-  {const cx=X(4),cy=Y(0);box([cx-.3,cy-.36,FLOOR],[cx+.3,cy+.1,.72],{...F,side:P.woodL,top:P.porcelain,deco:{top:'basinTop',py:'cabinet'}});
-    box([cx-.22,cy-.38,.95],[cx+.22,cy-.35,1.4],{...F,side:P.steel,top:P.steel,deco:{py:'mirror'},cutWith:[0,-1,0]});
-    solid.add(key(cx,cy));vocab('washbasin','洗面台','I wash my face at the washbasin.','洗面台で顔を洗います。',[cx,cy,.8],{house:h});
-    vocab('mirror','鏡','I look in the mirror every morning.','毎朝、鏡を見ます。',[cx,cy-.3,1.25],{house:h,mirror:true})}
-  {const cx=X(5),cy=Y(0);box([cx-.38,cy-.36,FLOOR],[cx+.36,cy+.42,.5],{...F,side:P.porcelain,top:P.porcelain,deco:{top:'tubTop'}});
-    seat(5,0,.5,'tub',[0,1],{lo:[cx-.38,cy-.36],hi:[cx+.36,cy+.42]});vocab('bathtub','浴槽（バスタブ）','The bathtub is full of hot water.','お風呂にお湯がいっぱい。',[cx,cy,.55],{house:h})}
-  // kitchen
-  {const cx=X(3),cy=Y(2);box([cx-.42,cy-.42,FLOOR],[cx+.46,cy+.3,.66],{...F,side:P.woodL,top:P.steel,deco:{top:'sinkTop',py:'cabinet'}});solid.add(key(cx,cy));
-    vocab('sink','流し台（シンク）','Put the dirty dishes in the sink.','汚れたお皿は流しに入れてね。',[cx,cy,.7],{house:h})}
-  {const cx=X(4),cy=Y(2);box([cx-.46,cy-.42,FLOOR],[cx+.46,cy+.3,.66],{...F,side:P.woodL,top:P.dark,deco:{top:'stoveTop',py:'oven'}});solid.add(key(cx,cy));
-    vocab('stove','コンロ','Be careful. The stove is hot!','気をつけて、コンロが熱いよ！',[cx,cy,.7],{house:h})}
-  {const cx=X(5),cy=Y(2);box([cx-.38,cy-.42,FLOOR],[cx+.36,cy+.3,1.45],{...F,side:P.white,top:P.white,deco:{py:'fridge'}});solid.add(key(cx,cy));
-    vocab('fridge','冷蔵庫','There is some milk in the fridge.','冷蔵庫に牛乳があるよ。',[cx,cy,1.45],{house:h})}
-  {const cx=X(4),cy=Y(5);box([cx-.42,cy-.42,.5],[cx+.42,cy+.34,.58],{...F,side:P.wood,top:P.woodL,deco:{top:'tableTop'}});box([cx-.07,cy-.07,FLOOR],[cx+.07,cy+.07,.5],{...F,side:P.wood});solid.add(key(cx,cy));
-    vocab('table','テーブル（食卓）','Dinner is on the table.','夕ごはんがテーブルに並んでいるよ。',[cx,cy,.6],{house:h})}
-  const chair=(c,r,face)=>{const cx=X(c),cy=Y(r);box([cx-.2,cy-.2,FLOOR],[cx+.2,cy+.2,.34],{...F,side:P.wood,top:P.coral});
-    const bx=-face[0],by=-face[1];
-    const blo=[bx?cx+bx*.2-(bx>0?0:.06):cx-.2,by?cy+by*.2-(by>0?0:.06):cy-.2],bhi=[bx?blo[0]+.06:cx+.2,by?blo[1]+.06:cy+.2];
-    box([blo[0],blo[1],FLOOR],[bhi[0],bhi[1],.74],{...F,side:P.wood,top:P.woodL});seat(c,r,.34,'seat',face)};
-  chair(3,5,[1,0]);chair(5,5,[-1,0]);chair(4,4,[0,1]);
-  vocab('chair','いす','Please sit down on the chair.','どうぞいすに座ってください。',[X(3),Y(5),.5],{house:h});
-  // living room
-  {const cx=X(0),cy=Y(3);box([cx-.36,cy-.42,FLOOR],[cx+.05,cy+.42,.4],{...F,side:P.wood,top:P.woodL});box([cx-.3,cy-.38,.4],[cx-.22,cy+.38,.92],{...F,side:P.dark,top:P.dark,deco:{px:'screen'}});solid.add(key(cx,cy));
-    vocab('TV','テレビ','Can you turn on the TV?','テレビをつけてくれる？',[cx-.2,cy,.98],{house:h})}
-  for(const r of[2,3]){const cx=X(2),cy=Y(r);box([cx-.38,cy-.44,FLOOR],[cx+.28,cy+.44,.34],{...F,side:blanket[3],top:mix(blanket[3],[255,255,255],.25),deco:{top:'cushion'}});box([cx+.28,cy-.44,FLOOR],[cx+.4,cy+.44,.66],{...F,side:blanket[3],top:mix(blanket[3],[255,255,255],.2)});seat(2,r,.34,'seat',[-1,0])}
-  vocab('sofa','ソファ','Let\'s sit on the sofa and relax.','ソファに座ってくつろごう。',[X(2),Y(2.5),.55],{house:h});
-  // roof (exterior view only)
-  box([x0-.65,y0-.65,H],[x0+5.65,y0+5.65,H+.28],{side:roofC,top:roofC,house:h,exteriorOnly:true,deco:{top:'roof',px:'dentils',py:'dentils',nx:'dentils',ny:'dentils'}});
-  box([x0+.2,y0+.2,H+.28],[x0+4.8,y0+4.8,H+.6],{side:roofC,top:mix(roofC,[255,255,255],.18),house:h,exteriorOnly:true,deco:{top:'roof'}});
-  box([X(4)-.25,Y(2)-.25,H+.6],[X(4)+.25,Y(2)+.25,H+1.2],{side:P.brick,top:P.brick,house:h,exteriorOnly:true,deco:{top:'flue'}});
-  // tiles
-  for(let c=0;c<6;c++)for(let r=0;r<6;r++){const k=key(X(c),Y(r));if(solid.has(k))continue;const u=use.get(k);
-    if(u)tile(X(c),Y(r),u.z,{indoor:true,house:h,stop:true,furn:u.furn,room:roomOf(c,r)});else tile(X(c),Y(r),FLOOR,{indoor:true,house:h,room:roomOf(c,r)})}
-  const S_=(c,r)=>T(X(c),Y(r));
-  h.spots={beds:[S_(0,0),S_(1,0),S_(2,0)],toilet:[S_(3,0)],tub:[S_(5,0)],basin:[S_(4,1)],sink:[S_(3,3)],stove:[S_(4,3)],fridge:[S_(5,3)],chairs:[S_(3,5),S_(5,5),S_(4,4)],sofa:[S_(2,2),S_(2,3)],
-    floor:tiles.filter(t=>t.house===h&&!t.stop)};
-  h.roomCenters={bed:[X(1),Y(.85),FLOOR],bath:[X(4),Y(1),FLOOR],kitchen:[X(4),Y(3.4),FLOOR],living:[X(1),Y(4.6),FLOOR]};
-  h.cell=(c,r)=>T(X(c),Y(r));
-  return h;
-}
-buildHouse('A',1,1,P.wall,P.coral,P.paper,[[244,160,150],[240,200,120],[140,180,230],[236,150,130]]);
-buildHouse('B',10,1,P.wall2,P.teal,P.paper2,[[160,210,200],[190,170,230],[246,180,200],[120,170,180]]);
-
-// stall, well, bench
-box([7.55,2.6,0],[8.45,3.4,.62],{side:P.wood,top:[226,190,150],deco:{py:'stallfront'}});
-box([7.58,2.6,.62],[7.66,2.68,1.42],{side:P.wood});box([8.34,2.6,.62],[8.42,2.68,1.42],{side:P.wood});
-box([7.45,2.5,1.42],[8.55,3.55,1.52],{side:P.coral,top:P.cream,deco:{top:'awning',py:'awningEdge',px:'awningEdge'}});
-box([15.62,2.62,0],[16.38,3.38,.55],{side:P.stone,top:P.stone,deco:{top:'wellwater'}});
-box([15.66,2.95,.55],[15.76,3.05,1.18],{side:P.wood});box([16.24,2.95,.55],[16.34,3.05,1.18],{side:P.wood});
-box([15.52,2.6,1.18],[16.48,3.4,1.28],{side:P.coral,top:P.coral});
-box([5.62,12.82,0],[5.72,13.12,.3],{side:P.wood});box([6.28,12.82,0],[6.38,13.12,.3],{side:P.wood});
-box([5.56,12.8,.3],[6.44,13.18,.37],{side:P.wood,top:[214,170,138]});box([5.56,12.74,.37],[6.44,12.8,.72],{side:P.wood});
-
-vocab('well','井戸','We get water from the well.','井戸から水をくみます。',[16,3,1.35]);
-vocab('pond','池','There are fish in the pond.','池には魚がいるよ。',[15,12.3,0]);
-vocab('field','畑','We grow vegetables in the field.','畑で野菜を育てています。',[1.5,13,.2]);
-vocab('stall','屋台','The stall sells fresh fruit.','屋台では新鮮な果物を売っています。',[8,3,1.6]);
-vocab('bench','ベンチ','Let\'s sit on the bench.','ベンチに座ろう。',[6,13,.5]);
-vocab('cherry tree','桜の木','The cherry tree is in full bloom.','桜が満開です。',[8,11,1.7]);
-vocab('tree','木','I take a nap under the tree.','木の下で昼寝をします。',[0,0,1.3],{showLabel:true});
-vocab('street lamp','街灯','The street lamp is on at night.','夜は街灯がつきます。',[4,7,.9],{showLabel:true});
-vocab('waterfall','滝','The waterfall is very loud.','滝の音がとても大きい。',[17.5,12.3,-1]);
-vocab('flower bed','花壇','I water the flower bed every day.','毎日花壇に水をやります。',[.5,7,.1]);
-vocab('plaza','広場','Everyone meets at the plaza.','みんな広場に集まります。',[8,10,0]);
-vocab('house','家','This is my house.','これがわたしの家です。',[3.5,3.5,WALL_H+.65],{exterior:true});
-vocab('roof','屋根','There is snow on the roof.','屋根に雪が積もっています。',[12.5,3.5,WALL_H+.65],{exterior:true});
-vocab('chimney','煙突','Smoke comes out of the chimney.','煙突から煙が出ています。',[14,3,WALL_H+1.25],{exterior:true});
-
-// outdoor tiles + links
-for(let x=0;x<MW;x++)for(let y=0;y<MH;y++){const k=key(x,y);if(!blocked.has(k)&&!houseCells.has(k))tile(x,y,0,{tag:'ground'})}
-const edgeOK=(a,b)=>{
-  if(a.house||b.house){
-    const ka=key(a.pos[0],a.pos[1]),kb=key(b.pos[0],b.pos[1]);
-    if(a.house&&b.house&&a.house===b.house)return!a.house.blockedEdges.has(ka+'|'+kb);
-    const h=a.house||b.house,k1=key(...h.door[0]),k2=key(...h.door[1]);
-    return(ka===k1&&kb===k2)||(ka===k2&&kb===k1);
-  }return true};
-for(const t of tiles)for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const o=T(t.pos[0]+dx,t.pos[1]+dy);if(!o)continue;const dz=o.pos[2]-t.pos[2];if(Math.abs(dz)>.55)continue;if(!edgeOK(t,o))continue;if(t.stop&&o.stop)continue;t.links.push({to:o,dir:[dx,dy],dz})}
-const ground=tiles.filter(t=>t.tag==='ground');
-const nbrTiles=(cells)=>{const out=new Set();cells.forEach(([x,y])=>[[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy])=>{const t=T(x+dx,y+dy);if(t&&t.tag==='ground')out.add(t)}));return[...out]};
-const SPOTS={
-  field:[T(4,12),T(4,13),T(4,14),T(0,11),T(1,11),T(2,11),T(3,11)].filter(Boolean),
-  fish:ground.filter(t=>[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>inPond(t.pos[0]+dx,t.pos[1]+dy,.1))),
-  well:[T(16,4),T(17,3),T(16,2)].filter(Boolean),
-  nap:nbrTiles(TREES.map(([x,y])=>[x,y])),
-  flower:nbrTiles(bedCells),
-  bench:[T(5,13),T(7,13),T(6,12)].filter(Boolean),
-  stall:[T(8,4),T(7,3),T(9,3)].filter(Boolean),
-  keeper:[T(8,2)].filter(Boolean),
-  plaza:plazaCells.map(([x,y])=>T(x,y)).filter(Boolean)};
-
-// props
-const props=[];
-TREES.forEach(([x,y,r])=>props.push({kind:'tree',local:[x,y,0],r}));
-props.push({kind:'sakura',local:[8,11,0],r:1.05});
-LANTERNS.forEach(([x,y])=>props.push({kind:'lantern',local:[x,y,0]}));
-props.push({kind:'falls',local:[17.5,12.3,0]});
-fieldCells.forEach(([x,y])=>props.push({kind:'crop',local:[x,y,0],type:(x+y)%2}));
-[[6.5,9.5],[9.5,9.5],[9.5,12.5],[6.5,12.5]].forEach(([x,y])=>props.push({kind:'pole',local:[x,y,0]}));
-props.forEach((t,i)=>{const big=t.kind==='tree'||t.kind==='sakura',e=big?.25:.08;const top=big?1.9*t.r:t.kind==='pole'?1.7:.8;
-  t.lo=[t.local[0]-e,t.local[1]-e,t.local[2]];t.hi=[t.local[0]+e,t.local[1]+e,t.local[2]+top];
-  if(t.kind==='falls'){t.lo=[17.5,11.6,-5];t.hi=[17.62,13,0]}t.id=1000+i});
 
 // ================= time & weather =================
 const DAY=180, HR=DAY/24, START_H=6.8;
@@ -519,8 +346,500 @@ const ACTS={
   dance:{label:J('広場で踊る','dancing at the plaza'),glyph:'♪',dur:[.8,1.6],gain:{fun:.5,social:.2,energy:-.1},
     phrase:()=>J('一緒に踊ろう！','Let\'s dance together!')}};
 let ACT_IDS=Object.keys(ACTS);
+// 家の中の行動は「自分の家」の家具を使う
+ACT_IDS.forEach(id=>{if(ACTS[id].indoor)ACTS[id].home=true});
+// 一人称モードのボタン文言
+const USE_T={sleep:J('ベッドで寝る','Go to bed'),toilet:J('トイレを使う','Use the toilet'),bath:J('お風呂に入る','Take a bath'),brush:J('歯をみがく','Brush your teeth'),wash:J('顔を洗う','Wash your face'),
+  cook:J('料理する','Cook a meal'),eat:J('ごはんを食べる','Eat a meal'),sit:J('いすに座る','Sit on the chair'),snack:J('飲み物を出す','Get a drink'),dishes:J('お皿を洗う','Do the dishes'),
+  tv:J('テレビを見る','Watch TV'),rest:J('ソファでくつろぐ','Relax on the sofa'),fish:J('釣りをする','Go fishing'),well:J('水をくむ','Get some water'),field:J('畑の手入れ','Work in the field'),
+  flower:J('花に水をやる','Water the flowers'),bench:J('ベンチで休む','Rest on the bench'),stall:J('果物を買う','Buy some fruit'),dance:J('踊る','Dance'),nap:J('昼寝する','Take a nap')};
+for(const k in USE_T)if(ACTS[k])ACTS[k].use=USE_T[k];
+
 const labelOf=(w,id)=>{const a=ACTS[id];if(!a)return J('ひと休み','taking a break');if(id==='stall'&&w.keeper)return J('屋台の店番','running the stall');if(id==='bench'&&w.name==='ミノリ')return J('ベンチで読書','reading on the bench');if(id==='field'&&w.kid)return J('畑で虫さがし','looking for bugs in the field');return typeof a.label==='function'?a.label():a.label};
 
+// ================= world: core =================
+// 町は「箱（描画の単位）」と「タイル（歩ける1マス）」でできている。
+// 地形・建物・家具はすべてこの2つを作るだけで、描画や経路探索はそれを読むだけにする。
+const boxes=[], tiles=[], tileAt=new Map(), VOCAB=[], buildings=[], polys=[];
+const key=(x,y)=>x+','+y;
+const tkey=(x,y,lv)=>lv?key(x,y)+'@'+lv:key(x,y);
+const WALL_H=1.6, FLOOR=.12;
+let MW=0, MH=0;
+function box(lo,hi,o={}){const b={...o,lo,hi,id:boxes.length,kind:'box'};b.top=o.top||o.side||P.wall;b.side=o.side||P.wall;b.deco=o.deco||{};b.level=o.level||0;boxes.push(b);return b}
+function tile(x,y,z,o={}){const t={...o,level:o.level||0,pos:[x,y,z],id:tiles.length,links:[]};tiles.push(t);tileAt.set(tkey(x,y,t.level),t);return t}
+const T=(x,y,lv=0)=>tileAt.get(tkey(x,y,lv));
+const tileKey=t=>tkey(t.pos[0],t.pos[1],t.level);
+function vocab(word,ja,ex,exja,pos,o={}){const v={word,ja,ex,exja,pos,...o};VOCAB.push(v);return v}
+const ground=[];
+
+// ---------- spots: 行動ID → その行動ができるタイル ----------
+const SPOTS={}, SPOTREG=new Map();
+// SPOTREG はタイル → そこでできる行動（一人称モードの「行動」ボタン用）。家の家具は SPOTS に入れず、その家の bld.spots と SPOTREG だけに入れる
+function regTile(id,t){let s=SPOTREG.get(t);if(!s)SPOTREG.set(t,s=new Set());s.add(id)}
+function addSpot(id,t){if(!t)return;(SPOTS[id]||(SPOTS[id]=[])).push(t);regTile(id,t)}
+function dropSpot(id,t){const a=SPOTS[id];if(a){const i=a.indexOf(t);if(i>=0)a.splice(i,1)}const s=SPOTREG.get(t);if(s){s.delete(id);if(!s.size)SPOTREG.delete(t)}}
+function dropTile(t){
+  const gi=ground.indexOf(t);if(gi>=0)ground.splice(gi,1);
+  const s=SPOTREG.get(t);if(s)[...s].forEach(id=>dropSpot(id,t));
+  const i=tiles.indexOf(t);if(i>=0)tiles.splice(i,1);
+  if(tileAt.get(tileKey(t))===t)tileAt.delete(tileKey(t));
+}
+
+// ---------- links: 隣のタイルへ歩けるか ----------
+const DIRS=[[1,0],[-1,0],[0,1],[0,-1]];
+function edgeOK(a,b){
+  const ha=a.bld&&a.bld.enterable?a.bld:null,hb=b.bld&&b.bld.enterable?b.bld:null;
+  if(!ha&&!hb)return true;
+  const ka=tileKey(a),kb=tileKey(b);
+  if(ha&&ha===hb)return!ha.blockedEdges.has(ka+'|'+kb);
+  const h=ha||hb;if(!h.door)return false;const k1=key(...h.door[0]),k2=key(...h.door[1]);
+  return(ka===k1&&kb===k2)||(ka===k2&&kb===k1);
+}
+function linkTile(t){
+  t.links=[];
+  for(const[dx,dy]of DIRS){const o=T(t.pos[0]+dx,t.pos[1]+dy,t.level);if(!o)continue;const dz=o.pos[2]-t.pos[2];if(Math.abs(dz)>.55||!edgeOK(t,o)||(t.stop&&o.stop))continue;t.links.push({to:o,dir:[dx,dy],dz})}
+  if(t.stair){const o=t.stair;t.links.push({to:o,dir:[Math.sign(o.pos[0]-t.pos[0]),Math.sign(o.pos[1]-t.pos[1])],dz:o.pos[2]-t.pos[2],stair:true})}
+}
+function relinkAround(cells){
+  const seen=new Set();
+  for(const[x,y]of cells)for(const[dx,dy]of[[0,0],...DIRS])for(let lv=0;lv<4;lv++){const t=T(x+dx,y+dy,lv);if(t&&!seen.has(t)){seen.add(t);linkTile(t)}}
+}
+// ================= shapes & colors for specs =================
+const hexC=(s,fb)=>{const m=/^#?([0-9a-f]{6})$/i.exec(String(s||'').trim());if(!m)return fb;const v=parseInt(m[1],16);return[(v>>16)&255,(v>>8)&255,v&255]};
+// 設計図の色は '#rrggbb' でも [r,g,b] でもよい
+const col=(c,fb)=>Array.isArray(c)&&c.length===3&&c.every(v=>isFinite(v))?c.map(Number):c?hexC(c,fb):fb;
+const PATTERNS=new Set(['windows','door','bricks','stripes','planks','tiles','glass','water','grass','dots','roof']);
+// convex shapes as faces
+function polyFaces(shape,lo,hi,axis){
+  const[x0,y0,z0]=lo,[x1,y1,z1]=hi,cx=(x0+x1)/2,cy=(y0+y1)/2,F=[];
+  if(shape==='prism'){
+    const ax=axis==='y'?'y':axis==='x'?'x':(x1-x0>=y1-y0?'x':'y');
+    if(ax==='x'){F.push([[x0,y0,z0],[x1,y0,z0],[x1,cy,z1],[x0,cy,z1]],[[x1,y1,z0],[x0,y1,z0],[x0,cy,z1],[x1,cy,z1]],[[x0,y1,z0],[x0,y0,z0],[x0,cy,z1]],[[x1,y0,z0],[x1,y1,z0],[x1,cy,z1]])}
+    else{F.push([[x1,y0,z0],[x1,y1,z0],[cx,y1,z1],[cx,y0,z1]],[[x0,y1,z0],[x0,y0,z0],[cx,y0,z1],[cx,y1,z1]],[[x0,y0,z0],[x1,y0,z0],[cx,y0,z1]],[[x1,y1,z0],[x0,y1,z0],[cx,y1,z1]])}
+  }else{
+    const n=12,rx=(x1-x0)/2,ry=(y1-y0)/2,ring=z=>Array.from({length:n},(_,i)=>{const a=i/n*Math.PI*2;return[cx+Math.cos(a)*rx,cy+Math.sin(a)*ry,z]});
+    const b=ring(z0);
+    if(shape==='cone'){for(let i=0;i<n;i++)F.push([b[i],b[(i+1)%n],[cx,cy,z1]])}
+    else{const t=ring(z1);for(let i=0;i<n;i++)F.push([b[i],b[(i+1)%n],t[(i+1)%n],t[i]]);F.push(t.slice())}
+  }
+  const c=[cx,cy,(z0+z1)/2];
+  return F.map(pts=>{let n=norm(cross([pts[1][0]-pts[0][0],pts[1][1]-pts[0][1],pts[1][2]-pts[0][2]],[pts[2][0]-pts[0][0],pts[2][1]-pts[0][1],pts[2][2]-pts[0][2]]));
+    const m=pts.reduce((a,p)=>[a[0]+p[0]/pts.length,a[1]+p[1]/pts.length,a[2]+p[2]/pts.length],[0,0,0]);if(dot(n,[m[0]-c[0],m[1]-c[1],m[2]-c[2]])<0){n=n.map(v=>-v);pts=pts.slice().reverse()}return{pts,n}});
+}
+// ================= furniture catalog =================
+// 家具は1マスに置く。座標は「マスの中心から見たローカル座標」で、正面（使う人が向く側）を +y として書く。
+// 置くときに face（px/py/nx/ny）に合わせて回転する。z は床からではなく、その階の基準からの高さ（1階と同じ数値）。
+// c.spot(行動ID, 'self'|'front') でその行動ができる場所を登録する。'self' は家具の上（座る・寝る）、'front' は正面の床。
+const FACE_VEC={px:[1,0],py:[0,1],nx:[-1,0],ny:[0,-1]};
+const FACE_KEYS=['px','py','nx','ny'];
+const rotXY=(face,lx,ly)=>face==='px'?[ly,-lx]:face==='nx'?[-ly,lx]:face==='ny'?[-lx,-ly]:[lx,ly];
+function rotKey(face,k){const v=FACE_VEC[k];if(!v)return k;const r=rotXY(face,v[0],v[1]);return FACE_KEYS.find(n=>FACE_VEC[n][0]===r[0]&&FACE_VEC[n][1]===r[1])}
+const lighten=(c,k)=>mix(c,[255,255,255],k);
+const FURN={
+  bed:{ja:'ベッド',build(c){const bl=c.color([244,160,150]);
+    c.B([-.36,-.36,FLOOR],[.36,-.28,.72],{side:P.wood,top:P.woodL});
+    c.B([-.36,-.28,FLOOR],[.36,.45,.34],{side:P.woodL,top:P.white,deco:{top:'bedTop'},blanket:bl});
+    c.seat(.34,'bed',{head:[0,-.12,.34],foot:[0,.42,.34],lo:[-.36,-.28],hi:[.36,.45]});c.spot('sleep','self');
+    c.vocab('bed','ベッド','I go to bed at ten.','10時に寝ます。',[0,.1,.4])}},
+  toilet:{ja:'トイレ',build(c){
+    c.B([-.2,-.36,FLOOR],[.2,-.18,.72],{side:P.porcelain,top:P.porcelain});c.B([-.17,-.18,FLOOR],[.17,.22,.4],{side:P.porcelain,top:P.porcelain,deco:{top:'toiletTop'}});
+    c.seat(.4,'seat');c.spot('toilet','self');c.vocab('toilet','トイレ（便器）','Don\'t forget to flush the toilet.','トイレを流すのを忘れないでね。',[0,0,.6])}},
+  basin:{ja:'洗面台',build(c){
+    c.B([-.3,-.36,FLOOR],[.3,.1,.72],{side:P.woodL,top:P.porcelain,deco:{top:'basinTop',py:'cabinet'}});
+    c.B([-.22,-.38,.95],[.22,-.35,1.4],{side:P.steel,top:P.steel,deco:{py:'mirror'},cutWith:[0,-1,0]});
+    c.solid();c.spot('brush','front');c.spot('wash','front');
+    c.vocab('washbasin','洗面台','I wash my face at the washbasin.','洗面台で顔を洗います。',[0,0,.8]);
+    c.vocab('mirror','鏡','I look in the mirror every morning.','毎朝、鏡を見ます。',[0,-.3,1.25],{mirror:c.dir(0,-1)})}},
+  tub:{ja:'浴槽',build(c){
+    c.B([-.38,-.36,FLOOR],[.36,.42,.5],{side:P.porcelain,top:P.porcelain,deco:{top:'tubTop'}});
+    c.seat(.5,'tub',{lo:[-.38,-.36],hi:[.36,.42]});c.spot('bath','self');
+    c.vocab('bathtub','浴槽（バスタブ）','The bathtub is full of hot water.','お風呂にお湯がいっぱい。',[0,0,.55])}},
+  sink:{ja:'流し台',build(c){
+    c.B([-.42,-.42,FLOOR],[.46,.3,.66],{side:P.woodL,top:P.steel,deco:{top:'sinkTop',py:'cabinet'}});c.solid();c.spot('dishes','front');
+    c.vocab('sink','流し台（シンク）','Put the dirty dishes in the sink.','汚れたお皿は流しに入れてね。',[0,0,.7])}},
+  stove:{ja:'コンロ',build(c){
+    c.B([-.46,-.42,FLOOR],[.46,.3,.66],{side:P.woodL,top:P.dark,deco:{top:'stoveTop',py:'oven'}});c.solid();c.spot('cook','front');
+    c.mark('stoveP',[0,-.05,.66]);c.vocab('stove','コンロ','Be careful. The stove is hot!','気をつけて、コンロが熱いよ！',[0,0,.7])}},
+  fridge:{ja:'冷蔵庫',build(c){
+    c.B([-.38,-.42,FLOOR],[.36,.3,1.45],{side:P.white,top:P.white,deco:{py:'fridge'}});c.solid();c.spot('snack','front');
+    c.vocab('fridge','冷蔵庫','There is some milk in the fridge.','冷蔵庫に牛乳があるよ。',[0,0,1.45])}},
+  table:{ja:'テーブル',build(c){
+    c.B([-.42,-.42,.5],[.42,.34,.58],{side:P.wood,top:P.woodL,deco:{top:'tableTop'}});c.B([-.07,-.07,FLOOR],[.07,.07,.5],{side:P.wood});c.solid();
+    c.vocab('table','テーブル（食卓）','Dinner is on the table.','夕ごはんがテーブルに並んでいるよ。',[0,0,.6])}},
+  chair:{ja:'いす',build(c){
+    c.B([-.2,-.2,FLOOR],[.2,.2,.34],{side:P.wood,top:c.color(P.coral)});c.B([-.2,-.26,FLOOR],[.2,-.2,.74],{side:P.wood,top:P.woodL});
+    c.seat(.34,'seat');c.spot('eat','self');c.vocab('chair','いす','Please sit down on the chair.','どうぞいすに座ってください。',[0,0,.5])}},
+  tv:{ja:'テレビ',build(c){
+    c.B([-.42,-.36,FLOOR],[.42,.05,.4],{side:P.wood,top:P.woodL});c.B([-.38,-.3,.4],[.38,-.22,.92],{side:P.dark,top:P.dark,deco:{py:'screen'}});c.solid();
+    c.mark('tvP',[0,-.2,.66]);c.vocab('TV','テレビ','Can you turn on the TV?','テレビをつけてくれる？',[0,-.2,.98])}},
+  sofa:{ja:'ソファ',build(c){const k=c.color([236,150,130]);
+    c.B([-.44,-.28,FLOOR],[.44,.38,.34],{side:k,top:lighten(k,.25),deco:{top:'cushion'}});c.B([-.44,-.4,FLOOR],[.44,-.28,.66],{side:k,top:lighten(k,.2)});
+    c.seat(.34,'seat');c.spot('tv','self');c.spot('rest','self');c.vocab('sofa','ソファ','Let\'s sit on the sofa and relax.','ソファに座ってくつろごう。',[0,0,.55])}},
+  // ---- 学校・お店・公共の建物向け ----
+  desk:{ja:'机といす',build(c){const k=c.color(P.woodL);
+    c.B([-.36,-.42,.52],[.36,-.06,.58],{side:P.wood,top:k});c.B([-.3,-.36,FLOOR],[-.24,-.12,.52],{side:P.steel});c.B([.24,-.36,FLOOR],[.3,-.12,.52],{side:P.steel});
+    c.B([-.18,.02,FLOOR],[.18,.32,.32],{side:P.wood,top:P.coral});c.B([-.18,.32,FLOOR],[.18,.38,.7],{side:P.wood,top:P.woodL});
+    c.seat(.32,'seat');c.vocab('desk','机','I study at my desk.','机で勉強します。',[0,-.24,.62])}},
+  teacherdesk:{ja:'先生の机',build(c){const k=c.color(P.wood);
+    c.B([-.44,-.3,FLOOR],[.44,.3,.66],{side:k,top:P.woodL,deco:{py:'cabinet'}});c.B([-.3,-.18,.66],[-.06,.08,.72],{side:P.white,top:P.white});c.solid();
+    c.vocab('teacher\'s desk','教卓','The teacher is at the desk.','先生は教卓にいます。',[0,0,.75])}},
+  blackboard:{ja:'黒板',build(c){const k=c.color([70,110,96]);
+    c.B([-.48,-.48,.45],[.48,-.4,1.35],{side:P.wood,top:P.wood,deco:{py:'board'},boardC:k,cutWith:[0,-1,0]});
+    c.vocab('blackboard','黒板','Look at the blackboard, please.','黒板を見てください。',[0,-.44,1.45])}},
+  shelf:{ja:'本だな',build(c){const k=c.color(P.wood);
+    c.B([-.44,-.42,FLOOR],[.44,-.06,1.3],{side:k,top:lighten(k,.2),deco:{py:'books'}});c.solid();
+    c.vocab('bookshelf','本だな','The bookshelf is full of books.','本だなは本でいっぱい。',[0,-.2,1.35])}},
+  counter:{ja:'カウンター',build(c){const k=c.color(P.woodL);
+    c.B([-.48,-.3,FLOOR],[.48,.26,.7],{side:k,top:lighten(k,.3),deco:{py:'planksDeco'}});c.solid();
+    c.vocab('counter','カウンター','Please pay at the counter.','お会計はカウンターでどうぞ。',[0,0,.8])}},
+  register:{ja:'レジ',build(c){const k=c.color(P.woodL);
+    c.B([-.48,-.3,FLOOR],[.48,.26,.7],{side:k,top:lighten(k,.3)});c.B([-.2,-.12,.7],[.2,.12,.92],{side:P.dark,top:P.steel,deco:{py:'keys'}});c.solid();
+    c.vocab('cash register','レジ','The cash register is by the door.','レジは入口のそばにあります。',[0,0,1])}},
+  display:{ja:'商品だな',build(c){const k=c.color(P.white);
+    c.B([-.46,-.4,FLOOR],[.46,.04,1.05],{side:k,top:lighten(k,.2),deco:{py:'goods'}});c.solid();
+    c.vocab('shelf','たな','The shelf is full of goods.','たなに商品が並んでいます。',[0,-.18,1.1])}},
+  rack:{ja:'洋服かけ',build(c){const k=c.color([236,150,180]);
+    c.B([-.42,-.06,FLOOR],[-.36,.06,1.2],{side:P.steel});c.B([.36,-.06,FLOOR],[.42,.06,1.2],{side:P.steel});c.B([-.42,-.04,1.14],[.42,.04,1.2],{side:P.steel});
+    c.B([-.34,-.12,.45],[.34,.12,1.1],{side:k,top:lighten(k,.2),deco:{py:'clothes',ny:'clothes'}});c.solid();
+    c.vocab('clothes','洋服','These clothes are on sale.','この服はセール中です。',[0,0,1.2])}},
+  bench:{ja:'ベンチ',build(c){const k=c.color(P.wood);
+    c.B([-.44,-.2,FLOOR],[.44,.2,.34],{side:k,top:lighten(k,.25)});c.seat(.34,'seat');
+    c.vocab('bench','ベンチ','Let\'s sit on the bench.','ベンチに座ろう。',[0,0,.45])}},
+  plant:{ja:'観葉植物',build(c){
+    c.B([-.16,-.16,FLOOR],[.16,.16,.36],{side:P.brick,top:P.soil});c.B([-.26,-.26,.36],[.26,.26,.9],{side:c.color([140,199,149]),top:[169,220,168]});c.solid();
+    c.vocab('plant','観葉植物','Water the plant once a week.','植物には週に一度水をやります。',[0,0,.95])}},
+  piano:{ja:'ピアノ',build(c){const k=c.color(P.dark);
+    c.B([-.46,-.42,FLOOR],[.46,.02,1.05],{side:k,top:lighten(k,.15)});c.B([-.46,.02,.62],[.46,.22,.7],{side:k,top:P.white,deco:{top:'keys'}});c.solid();
+    c.vocab('piano','ピアノ','She plays the piano every day.','彼女は毎日ピアノを弾きます。',[0,0,1.1])}},
+  locker:{ja:'ロッカー',build(c){const k=c.color([150,186,222]);
+    c.B([-.46,-.42,FLOOR],[.46,-.02,1.35],{side:k,top:lighten(k,.2),deco:{py:'lockers'}});c.solid();
+    c.vocab('locker','ロッカー','Put your bag in the locker.','かばんはロッカーに入れてね。',[0,-.2,1.4])}},
+  cabinet:{ja:'たな',build(c){const k=c.color(P.woodL);
+    c.B([-.44,-.4,FLOOR],[.44,.1,.8],{side:k,top:lighten(k,.2),deco:{py:'cabinet'}});c.solid()}},
+  // 自由な形: parts（ローカル座標: x,y は -0.5〜0.5、z は 0〜2.4）と solid / seat を設計図で指定する
+  custom:{ja:'自由な家具',build(c){const it=c.item;
+    for(const q of it.parts||[])c.B([q.from[0],q.from[1],Math.max(FLOOR,q.from[2])],[q.to[0],q.to[1],q.to[2]],{side:col(q.color,P.woodL),top:col(q.top,lighten(col(q.color,P.woodL),.15)),deco:q.pattern&&q.pattern!=='none'?{py:'gen',px:'gen',nx:'gen',ny:'gen'}:{},genSide:q.pattern});
+    if(it.seat)c.seat(clamp(Number(it.seat)||.34,.2,.9),'seat');else if(it.solid)c.solid();
+    if(it.name_en)c.vocab(it.name_en,it.name_ja||it.name_en,it.example_en||`This is a ${it.name_en}.`,it.example_ja||`これは${it.name_ja||it.name_en}です。`,[0,0,1])}},
+};
+const FURN_TYPES=Object.keys(FURN);
+// ================= building builder =================
+// 町の建物も、神の声で生まれる建物も、同じ「設計図（spec）」からここで組み立てる。
+// 座標の決まり（spec 内）:
+//  - マス番号（家具の at、部屋の from/to、ドアの at、階段の at）は 0 から数える整数。
+//  - 連続座標（parts、仕切り壁、窓、床の模様、部屋ラベル）は敷地の左上角が 0、マスの境目が整数。
+//  - 敷地 pos のマス (pos.x, pos.y) が、マス番号 (0,0) になる。
+let bldSeq=1;
+const SIDES=['px','py','nx','ny'];
+const ROOF_SHAPES=['tiered','gable','flat','none'];
+const FLOOR_STYLES=['wood','bedwood','tile','carpet','stone'];
+
+// 床（スラブ）を、吹き抜けのマスを除いた長方形に分ける
+function slabRects(w,d,holes){
+  const out=[];let band=null;
+  const rowSig=r=>{let s='';for(let c=0;c<w;c++)s+=holes.has(key(c,r))?'1':'0';return s};
+  for(let r=0;r<=d;r++){const sig=r<d?rowSig(r):null;
+    if(band&&sig===band.sig){band.r1=r;continue}
+    if(band){let c=0;while(c<w){if(band.sig[c]==='1'){c++;continue}let e=c;while(e<w&&band.sig[e]==='0')e++;out.push({x0:c,y0:band.r0,x1:e,y1:band.r1+1});c=e}}
+    band=sig==null?null:{sig,r0:r,r1:r}}
+  return out;
+}
+
+function buildBuilding(spec,pos,o={}){
+  const id=o.id||('b'+(bldSeq++));
+  const[w,d]=spec.footprint,ox=pos.x-.5,oy=pos.y-.5,st=spec.style||{};
+  const bld={id,spec,cx:pos.x,cy:pos.y,fixed:!!o.fixed,private:!!spec.private,enterable:!!spec.enterable,floors:spec.enterable?clamp(spec.floors||1,1,3):0,
+    k:o.animate?0:1,boxes:[],polys:[],tiles:[],cells:[],vocab:[],acts:[],spots:{},floorTiles:[],blockedEdges:new Set(),door:null,residents:[],
+    lights:false,glow:0,mealReady:0,mealName:null,dirty:false,cooking:null,tvOn:false,
+    paper:col(st.paper,P.paper),curtain:col(st.curtain,[236,170,160]),rooms:[],roomCenters:{},extUses:[],pending:[]};
+  buildings.push(bld);
+  const B=(lo,hi,opt={})=>{const b=box(lo,hi,{...opt,bld});bld.boxes.push(b);return b};
+  for(let x=0;x<w;x++)for(let y=0;y<d;y++)bld.cells.push([pos.x+x,pos.y+y]);
+  // activities defined by this spec
+  const actId={};
+  (spec.activities||[]).forEach(a=>{const aid=(o.fixed?id+'.':'g_'+id+'_')+a.key;actId[a.key]=aid;
+    ACTS[aid]={label:J(a.label_ja,a.label_en),use:J(a.use_ja||a.label_ja,a.use_en||a.label_en),glyph:a.glyph||'♪',dur:a.dur||[.6,1.3],gain:a.gain||{fun:.3},gen:true,
+      created:o.fixed?null:clock.sim,hours:a.hours||null,who:a.who||'all',staff:!!a.staff,
+      phrase:()=>a.phrase_en?J(a.phrase_ja||a.phrase_en,a.phrase_en):null};
+    ACT_IDS.push(aid);bld.acts.push(aid)});
+  const actOf=k=>actId[k]||(ACTS[k]&&!ACTS[k].home?k:null);
+  if(spec.enterable)buildInterior(bld,spec,pos,B,actOf);
+  // exterior parts (boxes and convex shapes)
+  const topZ=bld.floors*WALL_H;
+  for(const q of spec.parts||[]){
+    const lo=[ox+q.from[0],oy+q.from[1],q.from[2]],hi=[ox+q.to[0],oy+q.to[1],q.to[2]],c=col(q.color,[230,200,180]),t=col(q.top,null);
+    const ext=bld.enterable&&q.from[2]>=topZ-.01;
+    if(q.shape==='box'||!q.shape){const deco={...(q.deco||{})};if(q.pattern&&q.pattern!=='none')['px','py','nx','ny'].forEach(k=>deco[k]='gen');if(q.topPattern&&q.topPattern!=='none')deco.top='genTop';
+      B(lo,hi,{side:c,top:t||mix(c,[255,255,255],.15),deco,genSide:q.pattern,genTop:q.topPattern,exteriorOnly:ext})}
+    else{const p={kind:'poly',faces:polyFaces(q.shape,lo,hi,q.axis),lo,hi,col:c,top:t||c,pattern:q.pattern,bld,exteriorOnly:ext};bld.polys.push(p);polys.push(p)}
+  }
+  // exterior uses: [{act, at:[[dx,dy],...]}]（敷地の外のマスも指定できる）
+  for(const u of spec.uses||[]){const aid=u.spot||actOf(u.act);if(aid)bld.extUses.push({aid,cells:u.at.map(([dx,dy])=>[pos.x+dx,pos.y+dy])})}
+  if(spec.activity&&!spec.activities){const a=spec.activity,aid='g_'+id;
+    ACTS[aid]={label:J(a.label_ja,a.label_en),use:J(a.use_ja,a.use_en),glyph:'♪',dur:[.6,1.3],gain:a.gain,created:clock.sim,gen:true,phrase:()=>a.phrase_en?J(a.phrase_ja||a.phrase_en,a.phrase_en):null};
+    ACT_IDS.push(aid);bld.acts.push(aid);bld.ringAct=aid}
+  // name tag
+  const top=Math.max(topZ+(bld.enterable?.6:0),...(spec.parts||[]).map(q=>q.to[2]));
+  if(spec.name_en&&!o.noName){const la=spec.labelAt,v=vocab(spec.name_en,spec.name_ja,spec.example_en||`This is a ${spec.name_en}.`,spec.example_ja||`これは${spec.name_ja}です。`,la?[ox+la[0],oy+la[1],la[2]]:[pos.x+w/2-.5,pos.y+d/2-.5,top+.15],{sid:id,exterior:bld.enterable});bld.vocab.push(v)}
+  return bld;
+}
+
+function buildInterior(bld,spec,pos,B,actOf){
+  const[w,d]=spec.footprint,ox=pos.x-.5,oy=pos.y-.5,st=spec.style||{},H=WALL_H,F=bld.floors;
+  const wallC=col(st.wall,P.wall),roofC=col(st.roof,P.coral);
+  const solid=new Set(),voids=new Set(),uses=new Map();
+  const ck=(c,r,lv)=>c+','+r+'@'+lv;
+  // stairs: foot (c,r) on floor f, landing one step along dir on floor f+1
+  const stairs=(spec.stairs||[]).map(s=>{const v=FACE_VEC[s.dir]||[1,0];return{...s,foot:s.at,land:[s.at[0]+v[0],s.at[1]+v[1]],v}});
+  stairs.forEach(s=>{solid.add(ck(s.land[0],s.land[1],s.floor));voids.add(ck(s.foot[0],s.foot[1],s.floor+1))});
+  const door=spec.door||{side:'py',at:1};
+  for(let lv=0;lv<F;lv++){
+    const zb=lv*H,holes=new Set(stairs.filter(s=>s.floor+1===lv).map(s=>key(...s.foot)));
+    // floor slab
+    for(const r of slabRects(w,d,holes))B([ox+r.x0,oy+r.y0,zb],[ox+r.x1,oy+r.y1,zb+FLOOR],{indoor:true,level:lv,top:P.floorW,side:mix(wallC,[150,120,110],.3),deco:{top:'floor'}});
+    // outer walls (windows in continuous coords along each side)
+    const wins=s=>{const a=spec.windows&&spec.windows[s];const len=s==='px'||s==='nx'?d:w;
+      const list=Array.isArray(a)?a:Array.from({length:Math.max(0,Math.floor((len-.4)/2))},(_,i)=>len/2+(i-(Math.floor((len-.4)/2)-1)/2)*2);
+      return list.map(v=>(s==='px'||s==='nx'?oy:ox)+v)};
+    const wall=(lo,hi,n,ws,extra={})=>{const outer=n[0]>0?'px':n[0]<0?'nx':n[1]>0?'py':'ny',opp={px:'nx',nx:'px',py:'ny',ny:'py'};
+      return B(lo,hi,{side:wallC,top:P.wallTrim,level:lv,cutN:n,wall:{wins:ws,outer,inner:opp[outer]},deco:{[outer]:'wallOut',[opp[outer]]:'wallIn'},...extra})};
+    const z0=zb+FLOOR,z1=zb+H;
+    const side=(s,lo,hi,n)=>{
+      const along=s==='px'||s==='nx'?1:0,ws=wins(s);
+      if(lv>0||door.side!==s){wall(lo,hi,n,ws);return}
+      const a=(along?oy:ox)+door.at+.05,b=(along?oy:ox)+door.at+.95,seg=(p,q,zl,zh,wl)=>{const l=lo.slice(),h=hi.slice();l[along]=p;h[along]=q;l[2]=zl;h[2]=zh;wall(l,h,n,wl)};
+      const inSeg=(p,q)=>ws.filter(v=>v>p+.4&&v<q-.4);
+      seg(lo[along],a,z0,z1,inSeg(lo[along],a));seg(a,b,1.3,z1,[]);seg(b,hi[along],z0,z1,inSeg(b,hi[along]));
+      const dl=lo.slice(),dh=hi.slice();dl[along]=a+.03;dh[along]=b-.03;const nn=along?0:1;
+      if(n[nn]>0){dl[nn]=hi[nn]-.09;dh[nn]=hi[nn]-.03}else{dl[nn]=lo[nn]+.03;dh[nn]=lo[nn]+.09}
+      dl[2]=FLOOR;dh[2]=1.3;B(dl,dh,{side:mix(col(st.door,P.coral),[120,70,90],.3),level:0,exteriorOnly:true,deco:{[s]:'doorleaf'}})};
+    side('nx',[ox,oy,z0],[ox+.12,oy+d,z1],[-1,0,0]);
+    side('px',[ox+w-.12,oy,z0],[ox+w,oy+d,z1],[1,0,0]);
+    side('ny',[ox+.12,oy,z0],[ox+w-.12,oy+.12,z1],[0,-1,0]);
+    side('py',[ox+.12,oy+d-.12,z0],[ox+w-.12,oy+d,z1],[0,1,0]);
+    // partitions (low inner walls) and the edges they block
+    const parts=(spec.partitions||[]).filter(p=>(p.floor||0)===lv);
+    const hz=parts.filter(p=>typeof p.y==='number');
+    for(const p of parts){
+      if(typeof p.y==='number'){const x0=Math.max(.12,p.x[0]),x1=Math.min(w-.12,p.x[1]);B([ox+x0,oy+p.y-.06,z0],[ox+x1,oy+p.y+.06,zb+.6],{indoor:true,level:lv,side:bld.paper,top:P.wallTrim});
+        for(let c=0;c<w;c++)if(c+.5>p.x[0]&&c+.5<p.x[1])blockEdge(bld,[pos.x+c,pos.y+p.y-1,lv],[pos.x+c,pos.y+p.y,lv])}
+      else{const touch=y=>hz.some(h=>Math.abs(h.y-y)<1e-6&&h.x[0]<p.x&&h.x[1]>p.x);
+        const y0=Math.max(.12,p.y[0])+(touch(p.y[0])?.06:0),y1=Math.min(d-.12,p.y[1])-(touch(p.y[1])?.06:0);
+        B([ox+p.x-.06,oy+y0,z0],[ox+p.x+.06,oy+y1,zb+.6],{indoor:true,level:lv,side:bld.paper,top:P.wallTrim});
+        for(let r=0;r<d;r++)if(r+.5>p.y[0]&&r+.5<p.y[1])blockEdge(bld,[pos.x+p.x-1,pos.y+r,lv],[pos.x+p.x,pos.y+r,lv])}
+    }
+    // furniture
+    for(const it of(spec.furniture||[]).filter(f=>(f.floor||0)===lv)){
+      const def=FURN[it.type];if(!def)continue;
+      const c0=it.at[0],r0=it.at[1],cx=pos.x+c0,cy=pos.y+r0,face=it.face||'py';
+      const W3=(lx,ly,z)=>{const[x,y]=rotXY(face,lx,ly);return[cx+x,cy+y,z+zb]};
+      const fr=rotXY(face,0,1);
+      const ctx={item:it,
+        color:fb=>col(it.color,fb),
+        dir:(lx,ly)=>{const[x,y]=rotXY(face,lx,ly);return[x,y,0]},
+        B:(lo,hi,opt={})=>{const a=W3(lo[0],lo[1],lo[2]),b=W3(hi[0],hi[1],hi[2]);
+          const deco={};for(const k in opt.deco||{})deco[rotKey(face,k)]=opt.deco[k];
+          const ex=opt.cutWith?{cutWith:ctx.dir(opt.cutWith[0],opt.cutWith[1])}:{};
+          return B([Math.min(a[0],b[0]),Math.min(a[1],b[1]),a[2]],[Math.max(a[0],b[0]),Math.max(a[1],b[1]),b[2]],{...opt,...ex,deco,indoor:true,level:lv})},
+        seat:(z,type,extra={})=>{const f={type,face:fr,...extra};
+          if(extra.head)f.head=W3(...extra.head);if(extra.foot)f.foot=W3(...extra.foot);
+          if(extra.lo){const a=W3(extra.lo[0],extra.lo[1],0),b=W3(extra.hi[0],extra.hi[1],0);f.lo=[Math.min(a[0],b[0]),Math.min(a[1],b[1])];f.hi=[Math.max(a[0],b[0]),Math.max(a[1],b[1])]}
+          uses.set(ck(c0,r0,lv),{z:z+zb,furn:f})},
+        solid:()=>solid.add(ck(c0,r0,lv)),
+        spot:(act,where)=>bld.pending.push({act,cell:where==='front'?[c0+fr[0],r0+fr[1]]:[c0,r0],lv}),
+        mark:(k,p)=>{if(!bld[k])bld[k]=W3(...p)},
+        vocab:(word,ja,ex,exja,p,opt={})=>{if(bld.vocab.some(v=>v.word===word&&v.level===lv))return;bld.vocab.push(vocab(word,ja,ex,exja,W3(...p),{...opt,bld,level:lv}))}};
+      def.build(ctx);
+      const aid=it.use&&actOf(it.use);if(aid)ctx.spot(aid,uses.has(ck(c0,r0,lv))?'self':solid.has(ck(c0,r0,lv))?'front':'self');
+    }
+    // stairs geometry (steps rise inside the landing cell of the floor below)
+    for(const s of stairs.filter(s=>s.floor===lv)){const[lc,lr]=s.land,N=5;
+      for(let k=0;k<N;k++){const a=k/N,b=(k+1)/N,z=zb+FLOOR+(H)*(k+1)/N;
+        const lo=s.v[0]?[s.v[0]>0?lc-.5+a:lc+.5-b,lr-.42]:[lc-.42,s.v[1]>0?lr-.5+a:lr+.5-b],hi=s.v[0]?[lo[0]+(b-a),lr+.42]:[lc+.42,lo[1]+(b-a)];
+        B([pos.x+lo[0],pos.y+lo[1],zb+FLOOR],[pos.x+hi[0],pos.y+hi[1],z],{indoor:true,level:lv,side:P.wood,top:P.woodL})}}
+  }
+  // roof
+  const Ht=F*H;
+  if(st.roofShape==='tiered'){
+    B([ox-.15,oy-.15,Ht],[ox+w+.15,oy+d+.15,Ht+.28],{side:roofC,top:roofC,exteriorOnly:true,level:F-1,deco:{top:'roof',px:'dentils',py:'dentils',nx:'dentils',ny:'dentils'}});
+    B([ox+.7,oy+.7,Ht+.28],[ox+w-.7,oy+d-.7,Ht+.6],{side:roofC,top:mix(roofC,[255,255,255],.18),exteriorOnly:true,level:F-1,deco:{top:'roof'}});
+  }else if(st.roofShape==='gable'){
+    const p={kind:'poly',faces:polyFaces('prism',[ox-.15,oy-.15,Ht],[ox+w+.15,oy+d+.15,Ht+Math.min(1.4,.3*Math.min(w,d)+.4)],w>=d?'x':'y'),lo:[ox-.15,oy-.15,Ht],hi:[ox+w+.15,oy+d+.15,Ht+1],col:roofC,top:roofC,pattern:'roof',bld,exteriorOnly:true};
+    p.hi[2]=p.faces.reduce((m,f)=>Math.max(m,...f.pts.map(q=>q[2])),Ht);bld.polys.push(p);polys.push(p);
+  }else if(st.roofShape!=='none'){
+    B([ox-.06,oy-.06,Ht],[ox+w+.06,oy+d+.06,Ht+.2],{side:roofC,top:mix(roofC,[255,255,255],.12),exteriorOnly:true,level:F-1,deco:{px:'dentils',py:'dentils',nx:'dentils',ny:'dentils'}});
+  }
+  if(Array.isArray(st.chimney)){const[c,r]=st.chimney,hz=st.roofShape==='tiered'?Ht+.6:Ht+.2;
+    B([pos.x+c-.25,pos.y+r-.25,hz],[pos.x+c+.25,pos.y+r+.25,hz+.6],{side:P.brick,top:P.brick,exteriorOnly:true,level:F-1,deco:{top:'flue'}});bld.chimney=[pos.x+c,pos.y+r,hz+.65]}
+  // rooms (floor style, labels)
+  bld.rooms=(spec.rooms||[]).map(r=>({...r,floor:r.floor||0,color:col(r.color,null)}));
+  bld.roomAt=(c,r,lv)=>bld.rooms.find(m=>m.floor===lv&&c>=m.from[0]&&c<=m.to[0]&&r>=m.from[1]&&r<=m.to[1])||null;
+  bld.rooms.forEach(m=>{const lab=m.label||[(m.from[0]+m.to[0])/2+.5,(m.from[1]+m.to[1])/2+.5];bld.roomCenters[m.id||m.name_en]={p:[ox+lab[0],oy+lab[1],m.floor*H+FLOOR],name:J(m.name_ja||m.name_en,m.name_en),level:m.floor}});
+  // tiles
+  for(let lv=0;lv<F;lv++){const list=[];
+    for(let c=0;c<w;c++)for(let r=0;r<d;r++){const k=ck(c,r,lv);if(solid.has(k)||voids.has(k))continue;const u=uses.get(k),room=bld.roomAt(c,r,lv);
+      const t=u?tile(pos.x+c,pos.y+r,u.z,{indoor:true,bld,level:lv,stop:true,furn:u.furn,room:room&&(room.id||room.name_en)}):tile(pos.x+c,pos.y+r,lv*H+FLOOR,{indoor:true,bld,level:lv,room:room&&(room.id||room.name_en)});
+      bld.tiles.push(t);list.push(t)}
+    bld.floorTiles.push(list)}
+  bld.floor=bld.tiles.filter(t=>!t.stop);
+  stairs.forEach(s=>{const a=T(pos.x+s.foot[0],pos.y+s.foot[1],s.floor),b=T(pos.x+s.land[0],pos.y+s.land[1],s.floor+1);if(a&&b){a.stair=b;b.stair=a}});
+  // door: inner cell and the outside cell in front of it
+  const dv=FACE_VEC[door.side]||[0,1],inner=door.side==='px'?[w-1,door.at]:door.side==='nx'?[0,door.at]:door.side==='ny'?[door.at,0]:[door.at,d-1];
+  bld.door=[[pos.x+inner[0],pos.y+inner[1]],[pos.x+inner[0]+dv[0],pos.y+inner[1]+dv[1]]];
+  // furniture spots
+  for(const p of bld.pending){const t=T(pos.x+p.cell[0],pos.y+p.cell[1],p.lv);if(!t||t.bld!==bld)continue;
+    if(ACTS[p.act]&&ACTS[p.act].home){(bld.spots[p.act]||(bld.spots[p.act]=[])).push(t);regTile(p.act,t)}else{addSpot(p.act,t);if(ACTS[p.act])ACTS[p.act].inside=true}}
+  delete bld.pending;
+}
+function blockEdge(bld,a,b){const ka=tkey(a[0],a[1],a[2]),kb=tkey(b[0],b[1],b[2]);bld.blockedEdges.add(ka+'|'+kb);bld.blockedEdges.add(kb+'|'+ka)}
+
+// 外の行動場所（建物の周りのマス）を今のタイルから作り直す
+function refreshExtSpots(bld){
+  for(const t of bld.extSpotTiles||[])for(const aid of bld.acts.concat(bld.extUses.map(u=>u.aid)))dropSpot(aid,t);
+  bld.extSpotTiles=[];
+  const add=(aid,t)=>{if(t&&!t.bld&&t.tag==='ground'){addSpot(aid,t);bld.extSpotTiles.push(t)}};
+  for(const u of bld.extUses)u.cells.forEach(([x,y])=>add(u.aid,T(x,y)));
+  if(bld.ringAct){const[w,d]=bld.spec.footprint;
+    if(bld.spec.walkable)bld.cells.forEach(([x,y])=>{const t=T(x,y);if(t){addSpot(bld.ringAct,t);bld.extSpotTiles.push(t)}});
+    else for(let x=bld.cx-1;x<=bld.cx+w;x++)for(let y=bld.cy-1;y<=bld.cy+d;y++){const inside=x>=bld.cx&&x<bld.cx+w&&y>=bld.cy&&y<bld.cy+d;if(inside)continue;const edge=(x>=bld.cx&&x<bld.cx+w)||(y>=bld.cy&&y<bld.cy+d);if(edge)add(bld.ringAct,T(x,y))}}
+}
+const homes=()=>buildings.filter(b=>b.residents.length);
+const bldById=id=>buildings.find(b=>b.id===id);
+// その建物で今見えている階（内観モードで上の階を選んだ時）
+let viewFloor=0;
+const effFloor=b=>b&&b.enterable?Math.min(viewFloor,b.floors-1):0;
+// 町でいちばん高い建物の屋根（カメラの範囲合わせに使う）
+const worldTopZ=()=>Math.max(WALL_H,...buildings.map(b=>b.floors*WALL_H))+.8;
+// 単語ラベルを今の視点で見せるか（家の中のものは内観で、その階を見ている時だけ）
+function vocabShown(v){
+  if(v.bld&&v.bld.enterable){if(!interior||(v.level||0)!==effFloor(v.bld))return false}
+  if(v.exterior&&interior)return false;
+  if(v.mirror&&dot(v.mirror,cam.d)>.02)return false;
+  return true;
+}
+// ================= blueprints =================
+// 町にはじめからある建物の設計図。神の声で生まれる建物と同じ形式（09-builder.js の決まり）で書く。
+const BLUEPRINTS={
+  // 住人の家（6×6、断面で中が見えるドールハウス）
+  house:o=>({name_en:'house',name_ja:'家',example_en:'This is my house.',example_ja:'これがわたしの家です。',labelAt:[3,3,WALL_H+.65],
+    footprint:[6,6],enterable:true,floors:1,private:true,
+    style:{wall:o.wall,roof:o.roof,paper:o.paper,curtain:o.curtain,roofShape:'tiered',chimney:[4,2]},
+    door:{side:'py',at:1},
+    windows:{nx:[1.5,5],px:[3.5,5.5],ny:[1.5,4.5],py:[3.5,5.1]},
+    rooms:[{id:'bed',name_en:'bedroom',name_ja:'寝室',from:[0,0],to:[2,1],floorStyle:'wood',color:[214,178,140],label:[1.5,1.35]},
+      {id:'bath',name_en:'bathroom',name_ja:'お風呂・トイレ',from:[3,0],to:[5,1],floorStyle:'tile',color:P.tileB,label:[4.5,1.5]},
+      {id:'living',name_en:'living room',name_ja:'リビング',from:[0,2],to:[2,5],floorStyle:'wood',label:[1.5,5.1]},
+      {id:'kitchen',name_en:'kitchen',name_ja:'キッチン',from:[3,2],to:[5,5],floorStyle:'tile',color:P.tileK,label:[4.5,3.9]}],
+    partitions:[{y:2,x:[0,1]},{y:2,x:[2,6]},{x:3,y:[0,1]},{x:3,y:[2,4]}],
+    decals:[{type:'rug',x:1.1,y:3.2,w:1.4,h:1.6,color:o.rug},{type:'mat',x:5.15,y:1.25,w:.7,h:.45,color:[180,210,230]}],
+    furniture:[{type:'bed',at:[0,0],color:o.blanket[0]},{type:'bed',at:[1,0],color:o.blanket[1]},{type:'bed',at:[2,0],color:o.blanket[2]},
+      {type:'toilet',at:[3,0]},{type:'basin',at:[4,0]},{type:'tub',at:[5,0]},
+      {type:'sink',at:[3,2]},{type:'stove',at:[4,2]},{type:'fridge',at:[5,2]},{type:'table',at:[4,5]},
+      {type:'chair',at:[3,5],face:'px'},{type:'chair',at:[5,5],face:'nx'},{type:'chair',at:[4,4],face:'py'},
+      {type:'tv',at:[0,3],face:'px'},{type:'sofa',at:[2,2],face:'nx',color:o.blanket[3]},{type:'sofa',at:[2,3],face:'nx',color:o.blanket[3]}]}),
+  stall:()=>({name_en:'stall',name_ja:'屋台',example_en:'The stall sells fresh fruit.',example_ja:'屋台では新鮮な果物を売っています。',labelAt:[.5,.5,1.6],footprint:[1,1],
+    parts:[{from:[.05,.1,0],to:[.95,.9,.62],color:P.wood,top:[226,190,150],deco:{py:'stallfront'}},
+      {from:[.08,.1,.62],to:[.16,.18,1.42],color:P.wood,top:P.wood},{from:[.84,.1,.62],to:[.92,.18,1.42],color:P.wood,top:P.wood},
+      {from:[-.05,0,1.42],to:[1.05,1.05,1.52],color:P.coral,top:P.cream,deco:{top:'awning',py:'awningEdge',px:'awningEdge'}}],
+    uses:[{act:'stall',at:[[0,1],[-1,0],[1,0]]},{spot:'keeper',at:[[0,-1]]}]}),
+  well:()=>({name_en:'well',name_ja:'井戸',example_en:'We get water from the well.',example_ja:'井戸から水をくみます。',labelAt:[.5,.5,1.35],footprint:[1,1],
+    parts:[{from:[.12,.12,0],to:[.88,.88,.55],color:P.stone,top:P.stone,deco:{top:'wellwater'}},
+      {from:[.16,.45,.55],to:[.26,.55,1.18],color:P.wood,top:P.wood},{from:[.74,.45,.55],to:[.84,.55,1.18],color:P.wood,top:P.wood},
+      {from:[.02,.1,1.18],to:[.98,.9,1.28],color:P.coral,top:P.coral}],
+    uses:[{act:'well',at:[[0,1],[1,0],[0,-1]]}]}),
+  bench:()=>({name_en:'bench',name_ja:'ベンチ',example_en:'Let\'s sit on the bench.',example_ja:'ベンチに座ろう。',labelAt:[.5,.5,.5],footprint:[1,1],
+    parts:[{from:[.12,.32,0],to:[.22,.62,.3],color:P.wood,top:P.wood},{from:[.78,.32,0],to:[.88,.62,.3],color:P.wood,top:P.wood},
+      {from:[.06,.3,.3],to:[.94,.68,.37],color:P.wood,top:[214,170,138]},{from:[.06,.24,.37],to:[.94,.3,.72],color:P.wood,top:P.wood}],
+    uses:[{act:'bench',at:[[-1,0],[1,0],[0,-1]]}]}),
+};
+// ================= town =================
+// 町の地図。地形・建物・小物はここにデータとして書き、下の assembleTown() が組み立てる。
+const TOWN={
+  size:[18,16],
+  // 島の土台（地層）
+  island:[
+    {lo:[-.5,-.5,-1],hi:[17.5,15.5,0],top:P.grass,side:P.rock,deco:{top:'ground',px:'strata',py:'strata',nx:'strata',ny:'strata'}},
+    {lo:[.3,.3,-2],hi:[16.7,14.7,-1],side:P.rock,deco:{px:'strata',py:'strata',nx:'strata',ny:'strata'}},
+    {lo:[2,1.8,-3],hi:[14.5,13.5,-2],side:P.rockDark,deco:{px:'strata',py:'strata',nx:'strata',ny:'strata'}},
+    {lo:[5,4.5,-3.8],hi:[11.5,10,-3],side:P.rockDark,deco:{px:'strata',py:'strata'}},
+    {lo:[7,6,-4.4],hi:[9.5,8.5,-3.8],side:P.rockDark}],
+  // 道は [x0,y0,x1,y1] の直線（両端を含む）
+  paths:[[0,8,17,8],[2,7,2,7],[11,7,11,7],[5,9,5,15],[12,9,12,15]],
+  plaza:{x:7,y:10,w:3,h:3,except:[[8,11]]},
+  fields:[{x:0,y:12,w:4,h:3}],
+  flowerbeds:[[0,7],[1,7],[14,7],[15,7],[8,6],[8,7]],
+  ponds:[{x:15.2,y:12.3,rx:2.25,ry:1.7}],
+  trees:[[0,0,.85],[8,0,.7],[17,0,.78],[17,6,.7],[0,10,.62],[7,15,.62],[10,14,.6],[15,15,.6],[17,9,.55]],
+  sakura:[[8,11,1.05]],
+  lanterns:[[4,7],[6,9],[9,7],[13,7],[10,10],[10,13]],
+  poles:[[6.5,9.5],[9.5,9.5],[9.5,12.5],[6.5,12.5]],
+  falls:[{x:17.5,y:12.3,y0:11.6,y1:13}],
+  buildings:[
+    {bp:'house',at:[1,1],id:'A',opts:{wall:P.wall,roof:P.coral,paper:P.paper,curtain:[236,170,160],rug:[214,140,140],blanket:[[244,160,150],[240,200,120],[140,180,230],[236,150,130]]}},
+    {bp:'house',at:[10,1],id:'B',noName:true,opts:{wall:P.wall2,roof:P.teal,paper:P.paper2,curtain:[160,200,190],rug:[140,170,200],blanket:[[160,210,200],[190,170,230],[246,180,200],[120,170,180]]}},
+    {bp:'stall',at:[8,3]},{bp:'well',at:[16,3]},{bp:'bench',at:[6,13]}],
+  spots:{field:[[4,12],[4,13],[4,14],[0,11],[1,11],[2,11],[3,11]]},
+  vocab:[
+    ['pond','池','There are fish in the pond.','池には魚がいるよ。',[15,12.3,0]],
+    ['field','畑','We grow vegetables in the field.','畑で野菜を育てています。',[1.5,13,.2]],
+    ['cherry tree','桜の木','The cherry tree is in full bloom.','桜が満開です。',[8,11,1.7]],
+    ['tree','木','I take a nap under the tree.','木の下で昼寝をします。',[0,0,1.3],{showLabel:true}],
+    ['street lamp','街灯','The street lamp is on at night.','夜は街灯がつきます。',[4,7,.9],{showLabel:true}],
+    ['waterfall','滝','The waterfall is very loud.','滝の音がとても大きい。',[17.5,12.3,-1]],
+    ['flower bed','花壇','I water the flower bed every day.','毎日花壇に水をやります。',[.5,7,.1]],
+    ['plaza','広場','Everyone meets at the plaza.','みんな広場に集まります。',[8,10,0]],
+    ['roof','屋根','There is snow on the roof.','屋根に雪が積もっています。',[12.5,3.5,WALL_H+.65],{exterior:true}],
+    ['chimney','煙突','Smoke comes out of the chimney.','煙突から煙が出ています。',[14,3,WALL_H+1.25],{exterior:true}]],
+  // 神の声で建物を置く時の目印
+  landmarks:{plaza:[8,11],pond:[15.2,12.3],field:[1.5,13],houseA:[3.5,3.5],houseB:[12.5,3.5],well:[16,3],stall:[8,3],bench:[6,13],center:[8.5,8],north:[8,1],south:[8,14.5],east:[16.5,8],west:[.5,8]},
+};
+
+// ---------- terrain ----------
+MW=TOWN.size[0];MH=TOWN.size[1];
+const LANDMARKS=TOWN.landmarks;
+const PONDS=TOWN.ponds;
+const inPond=(x,y,m=0)=>PONDS.some(p=>((x-p.x)/(p.rx+m))**2+((y-p.y)/(p.ry+m))**2<1);
+const nearestPond=(x,y)=>PONDS.reduce((a,p)=>!a||Math.hypot(p.x-x,p.y-y)<Math.hypot(a.x-x,a.y-y)?p:a,null);
+const rectCells=r=>{const out=[];for(let x=r.x;x<r.x+r.w;x++)for(let y=r.y;y<r.y+r.h;y++)if(!(r.except||[]).some(([a,b])=>a===x&&b===y))out.push([x,y]);return out};
+const plazaCells=rectCells(TOWN.plaza);
+const pathCells=[];{const seen=new Set();for(const[x0,y0,x1,y1]of TOWN.paths){const n=Math.max(Math.abs(x1-x0),Math.abs(y1-y0));for(let i=0;i<=n;i++){const x=x0+Math.sign(x1-x0)*i,y=y0+Math.sign(y1-y0)*i,k=key(x,y);if(!seen.has(k)&&!inPond(x,y,.15)){seen.add(k);pathCells.push([x,y])}}}}
+const fieldCells=TOWN.fields.flatMap(rectCells);
+const bedCells=TOWN.flowerbeds;
+const pathSet=new Set(pathCells.map(([x,y])=>key(x,y))),plazaSet=new Set(plazaCells.map(([x,y])=>key(x,y))),fieldSet=new Set(fieldCells.map(([x,y])=>key(x,y))),bedSet=new Set(bedCells.map(([x,y])=>key(x,y)));
+const TREES=TOWN.trees,LANTERNS=TOWN.lanterns;
+const blocked=new Set(),occupied=new Set(),sakuraSet=new Set(TOWN.sakura.map(([x,y])=>key(x,y)));
+const block=(x,y)=>blocked.add(key(x,y));
+TREES.forEach(([x,y])=>block(x,y));LANTERNS.forEach(([x,y])=>block(x,y));TOWN.sakura.forEach(([x,y])=>block(x,y));
+fieldCells.forEach(([x,y])=>block(x,y));bedCells.forEach(([x,y])=>block(x,y));
+for(let x=0;x<MW;x++)for(let y=0;y<MH;y++)if(inPond(x,y,.1))block(x,y);
+TOWN.island.forEach(b=>box(b.lo,b.hi,b));
+
+// ---------- buildings, tiles, spots ----------
+TOWN.buildings.forEach((b,i)=>{const spec=BLUEPRINTS[b.bp](b.opts||{});const bld=buildBuilding(spec,{x:b.at[0],y:b.at[1]},{id:b.id||b.bp+i,fixed:true,noName:b.noName});bld.cells.forEach(([x,y])=>occupied.add(key(x,y)))});
+TOWN.vocab.forEach(v=>vocab(...v));
+for(let x=0;x<MW;x++)for(let y=0;y<MH;y++){const k=key(x,y);if(!blocked.has(k)&&!occupied.has(k))ground.push(tile(x,y,0,{tag:'ground'}))}
+tiles.forEach(linkTile);
+const nbrTiles=cells=>{const out=new Set();cells.forEach(([x,y])=>DIRS.forEach(([dx,dy])=>{const t=T(x+dx,y+dy);if(t&&t.tag==='ground')out.add(t)}));return[...out]};
+TOWN.spots.field.forEach(([x,y])=>addSpot('field',T(x,y)));
+ground.filter(t=>DIRS.some(([dx,dy])=>inPond(t.pos[0]+dx,t.pos[1]+dy,.1))).forEach(t=>addSpot('fish',t));
+nbrTiles(TREES.map(([x,y])=>[x,y])).forEach(t=>addSpot('nap',t));
+nbrTiles(bedCells).forEach(t=>addSpot('flower',t));
+plazaCells.forEach(([x,y])=>{const t=T(x,y);addSpot('plaza',t);addSpot('dance',t)});
+buildings.forEach(refreshExtSpots);
+// 町の入口（建物を置く時に、ここから歩いて行けるかを確かめる）
+const townOrigin=()=>T(...(TOWN.origin||homes()[0]&&homes()[0].door[1]||pathCells[0]))||ground[0];
+
+// ---------- props (billboards in the iso view) ----------
+const props=[];
+TREES.forEach(([x,y,r])=>props.push({kind:'tree',local:[x,y,0],r}));
+TOWN.sakura.forEach(([x,y,r])=>props.push({kind:'sakura',local:[x,y,0],r}));
+LANTERNS.forEach(([x,y])=>props.push({kind:'lantern',local:[x,y,0]}));
+TOWN.falls.forEach(f=>props.push({kind:'falls',local:[f.x,f.y,0],y0:f.y0,y1:f.y1}));
+fieldCells.forEach(([x,y])=>props.push({kind:'crop',local:[x,y,0],type:(x+y)%2}));
+TOWN.poles.forEach(([x,y])=>props.push({kind:'pole',local:[x,y,0]}));
+props.forEach((t,i)=>{const big=t.kind==='tree'||t.kind==='sakura',e=big?.25:.08;const top=big?1.9*t.r:t.kind==='pole'?1.7:.8;
+  t.lo=[t.local[0]-e,t.local[1]-e,t.local[2]];t.hi=[t.local[0]+e,t.local[1]+e,t.local[2]+top];
+  if(t.kind==='falls'){t.lo=[t.local[0],t.y0,-5];t.hi=[t.local[0]+.12,t.y1,0]}t.id=1000+i});
 // ================= villagers =================
 const PEOPLE=[
   {name:'ハナ',en:'Hana',home:'A',bed:0,cloak:[232,112,100],cap:[255,246,236],persona:J('元気いっぱいで花が大好き。料理も得意。','Cheerful and loves flowers. A good cook.'),likes:{flower:.6,field:.3,chat:.3,cook:.6},wake:6.1,sleep:21.8,speed:1.5,at:[2,4]},
@@ -529,7 +848,7 @@ const PEOPLE=[
   {name:'ソラ',en:'Sora',home:'B',bed:0,cloak:[86,170,168],cap:[244,196,110],persona:J('のんびり屋の釣り好き。昼寝の名人。','Easygoing and loves fishing. A champion napper.'),likes:{fish:.7,nap:.5,rest:.3,field:-.2},wake:7.2,sleep:22.5,speed:1.2,at:[13,9]},
   {name:'ミノリ',en:'Minori',home:'B',bed:1,cloak:[150,122,196],cap:[252,236,222],persona:J('物静かな読書家。きれい好きで皆の相談役。','A quiet bookworm. Tidy, and everyone asks her for advice.'),likes:{bench:.7,bath:.4,flower:.2,cook:.4},wake:6.3,sleep:22.8,speed:1.25,at:[12,5]},
   {name:'ユイ',en:'Yui',home:'B',bed:2,cloak:[236,150,180],cap:[255,240,214],persona:J('明るい商売人。屋台を切り盛りしていて噂話が好き。','A bright shopkeeper who runs the stall and loves gossip.'),likes:{stall:.6,chat:.4,tv:.2},wake:6,sleep:22,speed:1.4,keeper:true,at:[8,4]}];
-const walkers=PEOPLE.map((p,i)=>{const h=houses[p.home];const w={...p,kind:'person',house:h,tile:T(...p.at)||ground[0],
+const walkers=PEOPLE.map((p,i)=>{const h=bldById(p.home);const w={...p,kind:'person',house:h,tile:T(...p.at)||ground[0],
   link:null,t:0,phase:i*1.3,wait:.05*HR*i,path:[],goal:null,target:null,act:null,lastDir:[0,1],lastAct:null,
   needs:{energy:.8,food:.35+.1*hash(i),social:.45+.3*hash(i+3),fun:.5+.3*hash(i+7),bladder:.35+.4*hash(i+11),hygiene:.55+.3*hash(i+13)},
   mood:null,moodUntil:0,say:null,forced:null,directive:null,memory:[],rel:{},chatT:0,turn:0,brushedAt:-99*HR,washedAt:-99*HR};h.residents.push(w);return w});
@@ -548,15 +867,14 @@ const taken=w=>{const s=new Set();walkers.forEach(o=>{if(o===w)return;if(o.targe
 const remember=(w,txt)=>{if(!w.memory)return;w.memory.push(`${hhmm(clock.hour)} ${txt}`);if(w.memory.length>8)w.memory.shift()};
 const say=(w,phrase,secs=4)=>{if(!phrase)return;w.say={...phrase,until:S.time+secs};addPhrase(phrase)};
 // villagers who start the day still in bed
-people.forEach(w=>{if(sleepTime(w)){w.tile=w.house.spots.beds[w.bed];w.act={id:'sleep'};w.wait=(((w.wake-clock.hour)%24+24)%24)*HR;w.lastDir=[0,1]}});
+people.forEach(w=>{if(sleepTime(w)){w.tile=w.house.spots.sleep[w.bed];w.act={id:'sleep'};w.wait=(((w.wake-clock.hour)%24+24)%24)*HR;w.lastDir=[0,1]}});
 
+// その行動ができる場所: 家の中の行動は自分の家の家具、それ以外は町中の場所（よその家の中は除く）
 function spotsFor(w,id){
-  const h=w.house;
-  switch(id){
-    case'sleep':return[h.spots.beds[w.bed]];case'toilet':return h.spots.toilet;case'bath':return h.spots.tub;case'brush':case'wash':return h.spots.basin;
-    case'cook':return h.spots.stove;case'eat':return h.spots.chairs;case'snack':return h.spots.fridge;case'dishes':return h.spots.sink;
-    case'tv':case'rest':return h.spots.sofa;case'stall':return w.keeper?SPOTS.keeper:SPOTS.stall;case'dance':return SPOTS.plaza;
-    default:return SPOTS[id]||[]}
+  const a=ACTS[id];if(!a)return[];
+  if(a.home){const s=(w.house&&w.house.spots[id])||[];return id==='sleep'?[s[w.bed]]:s}
+  if(id==='stall'&&w.keeper)return SPOTS.keeper||[];
+  return(SPOTS[id]||[]).filter(t=>!t.bld||!t.bld.private||t.bld===w.house);
 }
 function planAct(w,id){
   const a=ACTS[id];if(!a)return null;
@@ -567,6 +885,7 @@ function planAct(w,id){
   return{goal,target};
 }
 function setPlan(w,p){if(!p)return false;const path=bfs(w.tile,p.target);if(!path)return false;w.path=path;w.goal=p.goal;w.target=p.target;return true}
+const inHours=(h,[a,b])=>a<=b?h>=a&&h<b:h>=a||h<b;
 const mealWindow=h=>(h>=6.3&&h<9)||(h>=11.5&&h<13.5)||(h>=17.5&&h<20);
 
 function score(w,id){
@@ -583,7 +902,9 @@ function score(w,id){
     case'bath':s=(h>=17.5||h<1)&&n.hygiene<.65?1.7+(1-n.hygiene)*1.6:n.hygiene<.18?1.6:-2;break;
     case'tv':s=(h>=18?.8:-.1)+(1-n.fun)*.9;break;
     case'rest':s=(1-n.energy)*1.2-.3+(weather.kind!=='clear'?.4:0);break;
-    default:{for(const k in a.gain){const g=a.gain[k];s+=g>0?g*(1-n[k])*2.4:g*(1-n[k])*1.4}
+    default:{
+      if(a.gen){if(a.hours&&!inHours(h,a.hours))return-99;if((a.who==='kid'&&!w.kid)||(a.who==='adult'&&w.kid))return-99}
+      for(const k in a.gain){const g=a.gain[k];s+=g>0?g*(1-n[k])*2.4:g*(1-n[k])*1.4}
       if(id==='dance')s+=clock.sim<weather.festUntil||(directiveOn(w)&&w.directive.goal==='dance')?1.2:-99;
       if(id==='field'&&(h<6||h>17))s-=2;
       if(id==='fish'&&h>=14&&h<17)s+=.2;
@@ -591,8 +912,8 @@ function score(w,id){
       if(id==='stall'){if(w.keeper)s+=h>=8&&h<18?1.1:-2;else{const k=people.find(o=>o.keeper);s+=k&&k.act&&k.act.id==='stall'?.4:-.4}}
       if(id==='play'&&!w.kid)s-=.8;
       if((h>=19.5||h<5.5)&&!(id==='dance'&&clock.sim<weather.festUntil))s-=2.2;
-      if(weather.kind==='rain')s-=w.kid?.5:1.7;
-      if(weather.kind==='snow')s+=w.kid?.4:-.6;
+      if(!a.inside&&weather.kind==='rain')s-=w.kid?.5:1.7;
+      if(!a.inside&&weather.kind==='snow')s+=w.kid?.4:-.6;
       if(directiveOn(w)&&w.directive.goal==='home')s-=4;
       if(a.created!=null)s+=Math.max(0,1.6-(clock.sim-a.created)/(10*HR));
     }
@@ -614,10 +935,10 @@ function chatPartner(w){
 function startChat(w){
   const o=chatPartner(w);if(!o)return false;
   const busy=taken(w),mx=(w.tile.pos[0]+o.tile.pos[0])/2,my=(w.tile.pos[1]+o.tile.pos[1])/2;
-  const sameHouse=w.tile.house&&w.tile.house===o.tile.house;
-  const pool=(sameHouse?w.tile.house.spots.floor:ground).filter(t=>!busy.has(t));
+  const sameHouse=w.tile.bld&&w.tile.bld===o.tile.bld&&w.tile.level===o.tile.level;
+  const pool=(sameHouse?w.tile.bld.floorTiles[w.tile.level].filter(t=>!t.stop):ground).filter(t=>!busy.has(t));
   const cand=pool.sort((a,b)=>Math.hypot(a.pos[0]-mx,a.pos[1]-my)-Math.hypot(b.pos[0]-mx,b.pos[1]-my));
-  for(const t of cand.slice(0,30)){const nb=t.links.map(l=>l.to).find(n=>!n.stop&&n.house===t.house&&!busy.has(n));if(!nb)continue;
+  for(const t of cand.slice(0,30)){const nb=t.links.map(l=>l.to).find(n=>!n.stop&&n.bld===t.bld&&n.level===t.level&&!busy.has(n));if(!nb)continue;
     const g1={id:'chat',dur:ACTS.chat.dur,partner:o,lead:true},g2={id:'chat',dur:ACTS.chat.dur,partner:w};
     if(!setPlan(w,{goal:g1,target:t}))return false;o.forced={goal:g2,target:nb};return true}
   return false;
@@ -638,10 +959,10 @@ function chooseGoal(w){
   w.wait=.3*HR;
 }
 function catGoal(w){
-  const h=clock.hour,night=h>=21||h<6,hA=houses.A;
-  if(night){const t=hA.spots.sofa.find(t=>!taken(w).has(t))||pick(hA.spots.floor);setPlan(w,{goal:{id:'catsleep',dur:[2,4]},target:t});return}
-  if(weather.kind==='rain'){setPlan(w,{goal:{id:'cat',dur:[.5,1]},target:pick(hA.spots.floor)});return}
-  const pool=Math.random()<.25?pick([hA,houses.B]).spots.floor:ground;
+  const h=clock.hour,night=h>=21||h<6,hs=homes(),hA=hs[0];
+  if(night){const t=(hA.spots.rest||[]).find(t=>!taken(w).has(t))||pick(hA.floor);setPlan(w,{goal:{id:'catsleep',dur:[2,4]},target:t});return}
+  if(weather.kind==='rain'){setPlan(w,{goal:{id:'cat',dur:[.5,1]},target:pick(hA.floor)});return}
+  const pool=Math.random()<.25?pick(hs).floor:ground;
   setPlan(w,{goal:{id:'cat',dur:[.3,1]},target:pick(pool)});
 }
 
@@ -717,14 +1038,20 @@ function statusOf(w){
   return J('ひと休み','taking a break');
 }
 
+// 今いる場所の英語の説明（Claude への説明文用）
+function placeOf(w){const t=w.tile;if(!t.indoor)return'outside';const b=t.bld,rc=t.room&&b.roomCenters[t.room];
+  return(b===w.house?'at home':'in the '+b.spec.name_en)+(b.floors>1?`, floor ${t.level+1}`:'')+(rc?', in the '+rc.name.en:'')}
 // ================= sorting =================
 const corner=(lo,hi,h)=>[h&1?hi[0]:lo[0],h&2?hi[1]:lo[1],h&4?hi[2]:lo[2]];
 function prepBox(b){
-  b.skip=false;b.cut=false;let hi=b.hi,lo=b.lo;
-  if(b.st&&b.st.k<1){lo=[b.lo[0],b.lo[1],b.lo[2]*b.st.k];hi=[b.hi[0],b.hi[1],Math.max(lo[2]+.01,b.hi[2]*b.st.k)]}
+  b.skip=false;b.cut=false;let hi=b.hi,lo=b.lo;const h=b.bld;
+  if(h&&h.k<1){lo=[b.lo[0],b.lo[1],b.lo[2]*h.k];hi=[b.hi[0],b.hi[1],Math.max(lo[2]+.01,b.hi[2]*h.k)]}
   if(b.exteriorOnly&&interior){b.skip=true;return}
+  // 内観では、見ている階より上は描かず、見ている階の手前の壁だけ低く切る
+  const ef=interior&&h&&h.enterable?effFloor(h):-1;
+  if(ef>=0&&b.level>ef){b.skip=true;return}
   const cn=b.cutN||b.cutWith;
-  if(cn&&interior&&dot(cn,cam.d)>.02){if(b.cutWith||b.lo[2]>FLOOR+.2){b.skip=true;return}hi=[b.hi[0],b.hi[1],FLOOR+.2];b.cut=true}
+  if(cn&&interior&&b.level===ef&&dot(cn,cam.d)>.02){const zb=b.level*WALL_H;if(b.cutWith||b.lo[2]>zb+FLOOR+.2){b.skip=true;return}hi=[b.hi[0],b.hi[1],zb+FLOOR+.2];b.cut=true}
   b.wc=[];for(let h=0;h<8;h++)b.wc.push(corner(lo,hi,h));b.sc=b.wc.map(project);
   let x0=1/0,y0=1/0,x1=-1/0,y1=-1/0;for(const s of b.sc){x0=Math.min(x0,s[0]);x1=Math.max(x1,s[0]);y0=Math.min(y0,s[1]);y1=Math.max(y1,s[1])}
   b.bb=[x0,y0,x1,y1];b.wlo=lo;b.whi=hi;b.depth=dot([(lo[0]+hi[0])/2,(lo[1]+hi[1])/2,(lo[2]+hi[2])/2],cam.d)}
@@ -744,53 +1071,58 @@ function faceXform(e,l,i){const o=S.dpr;N.setTransform(o*(l[0]-e[0]),o*(l[1]-e[1
 function arch(t,e,l,i){const o=l/2;N.moveTo(t-o,e);N.lineTo(t-o,e+i-o);for(let k=0;k<=10;k++){const a=Math.PI-k/10*Math.PI;N.lineTo(t+Math.cos(a)*o,e+i-o+Math.sin(a)*o)}N.lineTo(t+o,e);N.closePath()}
 function rr(x,y,w,h,r){N.beginPath();if(N.roundRect)N.roundRect(x,y,w,h,r);else N.rect(x,y,w,h)}
 const faceU=(b,k,X)=>k==='px'?b.hi[1]-X:k==='nx'?X-b.lo[1]:k==='py'?X-b.lo[0]:b.hi[0]-X;
-const houseAmb=h=>h?mix(mix(ambOut,[.5,.5,.62],nightK*.4),[1.04,.95,.84],h.glow):ambOut;
+const houseAmb=h=>h&&h.enterable?mix(mix(ambOut,[.5,.5,.62],nightK*.4),[1.04,.95,.84],h.glow):ambOut;
 
 function drawGround(b,f,W,H){
   const a=b.lo,n=f.n;snowOn=true;
   N.fillStyle=rgb(shade(snowy(P.path),n));for(const[x,y]of pathCells){rr(x-a[0]-.46,y-a[1]-.46,.92,.92,.18);N.fill()}
-  N.fillStyle=rgb(shade(snowy(P.plaza),n));rr(7-a[0]-.5,10-a[1]-.5,3,3,.3);N.fill();
-  N.strokeStyle=rgb(shade(snowy(P.plaza),n),.9);N.lineWidth=.03;for(let k=1;k<6;k++){N.beginPath();N.moveTo(6.5-a[0]+k*.5,9.5-a[1]);N.lineTo(6.5-a[0]+k*.5,12.5-a[1]);N.moveTo(6.5-a[0],9.5-a[1]+k*.5);N.lineTo(9.5-a[0],9.5-a[1]+k*.5);N.stroke()}
+  {const pz=TOWN.plaza,px0=pz.x-.5-a[0],py0=pz.y-.5-a[1];N.fillStyle=rgb(shade(snowy(P.plaza),n));rr(pz.x-a[0]-.5,pz.y-a[1]-.5,pz.w,pz.h,.3);N.fill();
+  N.strokeStyle=rgb(shade(snowy(P.plaza),n),.9);N.lineWidth=.03;for(let k=1;k<pz.w*2;k++){N.beginPath();N.moveTo(px0+k*.5,py0);N.lineTo(px0+k*.5,py0+pz.h);N.stroke()}
+  for(let k=1;k<pz.h*2;k++){N.beginPath();N.moveTo(px0,py0+k*.5);N.lineTo(px0+pz.w,py0+k*.5);N.stroke()}}
   for(const[x,y]of fieldCells){N.fillStyle=rgb(shade(snowy(P.soil),n));rr(x-a[0]-.46,y-a[1]-.46,.92,.92,.12);N.fill();N.fillStyle=rgb(shade(snowy(P.soil),n),.84);for(let k=0;k<3;k++)N.fillRect(x-a[0]-.36,y-a[1]-.28+k*.26,.72,.05)}
   for(const[x,y]of bedCells){N.fillStyle=rgb(shade(snowy([160,128,104]),n));rr(x-a[0]-.44,y-a[1]-.44,.88,.88,.2);N.fill();
     for(let k=0;k<9;k++){const c=[[255,150,170],[255,214,110],[200,160,240],[255,255,255]][k%4];N.fillStyle=rgbA(c);N.beginPath();N.arc(x-a[0]-.3+hash(k*3+x*7+y)*.6,y-a[1]-.3+hash(k*5+y*11+x)*.6,.09,0,2*Math.PI);N.fill()}}
-  const px=POND.x-a[0],py=POND.y-a[1];
+  for(const POND of PONDS){const px=POND.x-a[0],py=POND.y-a[1];
   N.fillStyle=rgb(shade(snowy([214,200,170]),n));N.beginPath();N.ellipse(px,py,POND.rx+.16,POND.ry+.16,0,0,2*Math.PI);N.fill();
   N.fillStyle=rgb(mix(A(P.water),[60,80,140],nightK*.35));N.beginPath();N.ellipse(px,py,POND.rx,POND.ry,0,0,2*Math.PI);N.fill();
   N.strokeStyle=rgb(A([226,244,252]),1,.7);N.lineWidth=.04;
   for(let k=0;k<4;k++){const ph=(S.time*.35+k/4)%1;N.globalAlpha=1-ph;N.beginPath();N.ellipse(px-.6+k*.4,py+.2-k*.2,.15+ph*.5,.08+ph*.3,0,0,2*Math.PI);N.stroke()}N.globalAlpha=1;
   if(rainK>.05){N.strokeStyle=`rgba(230,240,255,${.6*rainK})`;for(let k=0;k<10;k++){const ph=(S.time*1.6+hash(k))%1,rx=px+(hash(k*3)-.5)*2.6,ry=py+(hash(k*7)-.5)*1.8;N.globalAlpha=1-ph;N.beginPath();N.ellipse(rx,ry,ph*.25,ph*.15,0,0,2*Math.PI);N.stroke()}N.globalAlpha=1}
-  N.fillStyle=rgb(shade([120,186,130],n));[[-.9,.4],[-.4,.8],[.5,-.4]].forEach(([dx,dy])=>{N.beginPath();N.arc(px+dx,py+dy,.14,.3,2*Math.PI-.1);N.lineTo(px+dx,py+dy);N.fill()});
-  const open=(wx,wy)=>{const k=key(Math.round(wx),Math.round(wy));return!pathSet.has(k)&&!plazaSet.has(k)&&!fieldSet.has(k)&&!bedSet.has(k)&&!houseCells.has(k)&&!inPond(wx,wy,.2)&&!(Math.round(wx)===8&&Math.round(wy)===11)};
+  N.fillStyle=rgb(shade([120,186,130],n));[[-.9,.4],[-.4,.8],[.5,-.4]].forEach(([dx,dy])=>{N.beginPath();N.arc(px+dx,py+dy,.14,.3,2*Math.PI-.1);N.lineTo(px+dx,py+dy);N.fill()})}
+  const open=(wx,wy)=>{const k=key(Math.round(wx),Math.round(wy));return!pathSet.has(k)&&!plazaSet.has(k)&&!fieldSet.has(k)&&!bedSet.has(k)&&!occupied.has(k)&&!inPond(wx,wy,.2)&&!sakuraSet.has(k)};
   N.fillStyle=rgb(shade(snowy(P.grass),n),.9);
   for(let t=0;t<W*H*1.2;t++){const x=hash(1.7*t+b.id)*W,y=hash(2.3*t+3*b.id)*H;if(!open(x+a[0],y+a[1]))continue;N.beginPath();N.arc(x,y,.08+.06*hash(t),0,2*Math.PI);N.fill()}
   if(snowCover<.6)for(let t=0;t<W*H*.3;t++){const x=hash(5.3*t+b.id)*W,y=hash(4.1*t+7*b.id)*H;if(!open(x+a[0],y+a[1]))continue;N.fillStyle=rgbA(t%3===0?[255,236,150]:t%3===1?[255,214,226]:[255,255,255],1,.9*(1-snowCover));N.beginPath();N.arc(x,y,.05,0,2*Math.PI);N.fill()}
-  if(festK>0){N.fillStyle=`rgba(255,200,210,${.8*festK})`;for(let k=0;k<26;k++){N.beginPath();N.arc(7-a[0]-.4+hash(k*9)*2.8,10-a[1]-.4+hash(k*13)*2.8,.07,0,2*Math.PI);N.fill()}}
+  if(festK>0){const pz=TOWN.plaza;N.fillStyle=`rgba(255,200,210,${.8*festK})`;for(let k=0;k<26;k++){N.beginPath();N.arc(pz.x-a[0]-.4+hash(k*9)*(pz.w-.2),pz.y-a[1]-.4+hash(k*13)*(pz.h-.2),.07,0,2*Math.PI);N.fill()}}
   snowOn=false;
 }
+// 床: 部屋ごとの床の種類で塗り、そのあと床の模様（ラグなど）を描く。面の座標は床板の左上角が 0
 function drawFloor(b,f){
-  const h=b.house,n=f.n;
-  for(let c=0;c<6;c++)for(let r=0;r<6;r++){const room=roomOf(c,r),x=c,y=r;
-    if(room==='bath'||room==='kitchen'){const col=room==='bath'?P.tileB:P.tileK;for(let i=0;i<2;i++)for(let j=0;j<2;j++){N.fillStyle=rgb(shade((i+j)%2?col:mix(col,[255,255,255],.35),n));N.fillRect(x+i*.5,y+j*.5,.51,.51)}}
-    else{N.fillStyle=rgb(shade(room==='bed'?[214,178,140]:P.floorW,n));N.fillRect(x,y,1.01,1.01);N.fillStyle=rgb(shade(P.wood,n),.5);for(let k=0;k<4;k++)N.fillRect(x,y+k*.25,1,.02)}}
-  N.fillStyle=rgb(shade(h.id==='A'?[214,140,140]:[140,170,200],n));rr(1.1,3.2,1.4,1.6,.25);N.fill();N.strokeStyle=rgb(shade([255,240,220],n));N.lineWidth=.04;rr(1.2,3.3,1.2,1.4,.2);N.stroke();
-  N.fillStyle=rgb(shade([180,210,230],n));rr(5.15,1.25,.7,.45,.1);N.fill();
+  const h=b.bld,n=f.n,lv=b.level,u0=b.lo[0]-(h.cx-.5),v0=b.lo[1]-(h.cy-.5),W=Math.round(b.hi[0]-b.lo[0]),D=Math.round(b.hi[1]-b.lo[1]);
+  for(let i=0;i<W;i++)for(let j=0;j<D;j++){const c=Math.round(u0)+i,r=Math.round(v0)+j,room=h.roomAt(c,r,lv),x=i,y=j,fs=room?room.floorStyle:'wood';
+    if(fs==='tile'){const col=room.color||P.tileK;for(let p=0;p<2;p++)for(let q=0;q<2;q++){N.fillStyle=rgb(shade((p+q)%2?col:mix(col,[255,255,255],.35),n));N.fillRect(x+p*.5,y+q*.5,.51,.51)}}
+    else if(fs==='carpet'){N.fillStyle=rgb(shade(room.color||[200,170,190],n));N.fillRect(x,y,1.01,1.01)}
+    else if(fs==='stone'){N.fillStyle=rgb(shade(room.color||[226,222,230],n));N.fillRect(x,y,1.01,1.01);N.fillStyle=rgb(shade(room.color||[226,222,230],n),.9);N.fillRect(x,y,1,.02);N.fillRect(x,y,.02,1)}
+    else{N.fillStyle=rgb(shade(room&&room.color||P.floorW,n));N.fillRect(x,y,1.01,1.01);N.fillStyle=rgb(shade(P.wood,n),.5);for(let k=0;k<4;k++)N.fillRect(x,y+k*.25,1,.02)}}
+  for(const d of h.spec.decals||[]){if((d.floor||0)!==lv)continue;const x=d.x-u0,y=d.y-v0;if(x+d.w<0||y+d.h<0||x>W||y>D)continue;
+    if(d.type==='rug'){N.fillStyle=rgb(shade(col(d.color,[214,140,140]),n));rr(x,y,d.w,d.h,.25);N.fill();N.strokeStyle=rgb(shade([255,240,220],n));N.lineWidth=.04;rr(x+.1,y+.1,d.w-.2,d.h-.2,.2);N.stroke()}
+    else{N.fillStyle=rgb(shade(col(d.color,[180,210,230]),n));rr(x,y,d.w,d.h,.1);N.fill()}}
 }
 function drawDeco(b,f,W,H,base,c){
   const r0=b.deco[f.key];const list=Array.isArray(r0)?r0:[{type:r0}];
   for(const r of list)switch(r.type){
-    case'wallOut':{if(b.cut)break;const hs=b.house;for(const X of b.wall.wins){const u=faceU(b,f.key,X);if(u<.4||u>W-.4)continue;
+    case'wallOut':{if(b.cut)break;const hs=b.bld;for(const X of b.wall.wins){const u=faceU(b,f.key,X);if(u<.4||u>W-.4)continue;
       N.fillStyle=rgbA(P.wallTrim);N.fillRect(u-.36,.5,.72,.07);N.fillStyle=rgbA(P.recess);N.beginPath();arch(u,.57,.56,.62);N.fill();
       N.fillStyle=rgb(mix(A(P.glass),[255,206,126],hs.glow*.95),1,.6+.4*hs.glow);N.beginPath();arch(u+.04,.6,.4,.52);N.fill();
       N.fillStyle=rgbA(P.wallTrim,1,.85);N.fillRect(u+.01,.6,.04,.44);N.fillRect(u-.16,.82,.4,.04)}
       N.fillStyle=rgbA(P.wallTrim,.98);N.fillRect(0,H-.22,W,.1);break}
-    case'wallIn':{if(b.cut)break;N.fillStyle=rgb(shade(b.house.paper,f.n));N.fillRect(0,0,W,H);
-      N.fillStyle=rgb(shade(mix(b.house.paper,[200,170,150],.25),f.n),.5);for(let t=.15;t<W;t+=.3)N.fillRect(t,.08,.02,H-.2);
+    case'wallIn':{if(b.cut)break;N.fillStyle=rgb(shade(b.bld.paper,f.n));N.fillRect(0,0,W,H);
+      N.fillStyle=rgb(shade(mix(b.bld.paper,[200,170,150],.25),f.n),.5);for(let t=.15;t<W;t+=.3)N.fillRect(t,.08,.02,H-.2);
       N.fillStyle=rgb(shade(P.wood,f.n));N.fillRect(0,0,W,.08);N.fillStyle=rgb(shade(P.wallTrim,f.n));N.fillRect(0,H-.08,W,.08);
       for(const X of b.wall.wins){const u=faceU(b,f.key,X);if(u<.4||u>W-.4)continue;
         N.fillStyle=rgb(shade(P.wallTrim,f.n));N.fillRect(u-.33,.55,.66,.7);N.fillStyle=rgb(mix(skyMid,[255,255,255],.15*dayK));N.fillRect(u-.27,.61,.54,.58);
         N.fillStyle=rgb(shade(P.wallTrim,f.n));N.fillRect(u-.015,.61,.03,.58);N.fillRect(u-.27,.89,.54,.03);
-        N.fillStyle=rgb(shade(b.house.id==='A'?[236,170,160]:[160,200,190],f.n),.9);N.fillRect(u-.38,.5,.12,.78);N.fillRect(u+.26,.5,.12,.78)}
+        N.fillStyle=rgb(shade(b.bld.curtain,f.n),.9);N.fillRect(u-.38,.5,.12,.78);N.fillRect(u+.26,.5,.12,.78)}
       break}
     case'doorleaf':N.fillStyle=rgb(c,.85);N.fillRect(.08,.1,W-.16,H-.25);N.fillStyle=rgbA(P.gold);N.fillRect(W-.22,H*.45,.07,.07);break;
     case'dentils':N.fillStyle=rgb(c,.8);for(let t=.1;t<W;t+=.3)N.fillRect(t,.04,.14,.16);break;
@@ -802,6 +1134,13 @@ function drawDeco(b,f,W,H,base,c){
     case'awning':for(let t=0;t<W;t+=.22){N.fillStyle=(Math.round(t/.22)%2)?rgb(c):rgb(shade(P.coral,f.n));N.fillRect(t,0,.22,H)}break;
     case'awningEdge':for(let t=0;t<W;t+=.22){N.fillStyle=(Math.round(t/.22)%2)?rgbA(P.cream):rgbA(P.coral);N.beginPath();N.moveTo(t,H);N.lineTo(t+.22,H);N.lineTo(t+.11,-.05);N.fill()}break;
     case'stallfront':N.fillStyle=rgbA([236,190,90]);[[.2,.36],[.45,.4],[.7,.34]].forEach(([u,v])=>{N.beginPath();N.arc(u,v,.09,0,2*Math.PI);N.fill()});N.fillStyle=rgbA([232,112,100]);N.beginPath();N.arc(.33,.48,.08,0,2*Math.PI);N.arc(.58,.5,.08,0,2*Math.PI);N.fill();break;
+    case'board':N.fillStyle=rgb(shade(b.boardC||[70,110,96],f.n));N.fillRect(.06,.06,W-.12,H-.12);N.strokeStyle='rgba(255,255,255,0.7)';N.lineWidth=.025;N.beginPath();N.moveTo(.2,H*.7);N.lineTo(W*.45,H*.7);N.moveTo(.2,H*.5);N.lineTo(W*.6,H*.5);N.moveTo(W*.55,H*.3);N.lineTo(W-.2,H*.3);N.stroke();break;
+    case'books':{const cs=[[232,112,100],[120,170,180],[244,196,110],[150,122,196],[140,199,149]];for(let v=.1;v+.3<=H;v+=.38){N.fillStyle=rgb(c,.75);N.fillRect(.04,v-.04,W-.08,.04);for(let u=.08,k=0;u+.06<W-.06;u+=.09,k++){N.fillStyle=rgb(shade(cs[(k+Math.round(v*10))%5],f.n));N.fillRect(u,v,.07,.22+.06*hash(k+v*7))}}break}
+    case'goods':{const cs=[[232,112,100],[244,196,110],[140,199,149],[150,186,222],[246,180,200]];for(let v=.12,row=0;v+.18<=H;v+=.3,row++){N.fillStyle=rgb(c,.8);N.fillRect(.04,v-.03,W-.08,.03);for(let u=.1,k=0;u+.1<W-.05;u+=.16,k++){N.fillStyle=rgb(shade(cs[(k+row*2)%5],f.n));rr(u,v,.12,.16,.03);N.fill()}}break}
+    case'clothes':{const cs=[[236,150,180],[150,186,222],[244,196,110],[140,199,149]];for(let u=.04,k=0;u+.1<W;u+=.14,k++){N.fillStyle=rgb(shade(cs[k%4],f.n));N.fillRect(u,.1,.12,H-.12)}break}
+    case'lockers':N.strokeStyle=rgb(c,.75);N.lineWidth=.03;for(let u=W/3;u<W-.05;u+=W/3){N.beginPath();N.moveTo(u,0);N.lineTo(u,H);N.stroke()}N.fillStyle=rgb(c,.7);for(let u=W/6;u<W;u+=W/3){N.fillRect(u-.05,H*.8,.1,.03);N.fillRect(u-.04,H*.5,.08,.05)}break;
+    case'keys':N.fillStyle=rgb(shade([250,250,250],f.n));N.fillRect(.02,.02,W-.04,H-.04);N.fillStyle=rgb(shade([60,56,80],f.n));for(let u=.06;u<W-.04;u+=.09)N.fillRect(u,H*.45,.04,H*.5);break;
+    case'planksDeco':N.fillStyle=rgb(c,.85);for(let v=.15;v<H;v+=.18)N.fillRect(0,v,W,.025);break;
     case'floor':drawFloor(b,f);break;
     case'gen':drawPattern(b.genSide,b,f,W,H,c);break;
     case'genTop':drawPattern(b.genTop,b,f,W,H,c);break;
@@ -811,28 +1150,28 @@ function drawDeco(b,f,W,H,base,c){
     case'toiletTop':N.fillStyle=rgb(shade([255,255,255],f.n));N.beginPath();N.ellipse(W/2,H*.55,W*.42,H*.4,0,0,2*Math.PI);N.fill();N.fillStyle=rgb(shade([190,214,232],f.n));N.beginPath();N.ellipse(W/2,H*.55,W*.26,H*.25,0,0,2*Math.PI);N.fill();break;
     case'basinTop':N.fillStyle=rgb(shade([200,220,236],f.n));N.beginPath();N.ellipse(W/2,H*.55,W*.3,H*.28,0,0,2*Math.PI);N.fill();N.fillStyle=rgb(shade(P.steel,f.n));N.fillRect(W/2-.03,.04,.06,.14);break;
     case'tubTop':{N.fillStyle=rgb(shade([255,255,255],f.n));N.fillRect(0,0,W,H);N.fillStyle=rgb(shade([150,206,236],f.n));rr(.08,.08,W-.16,H-.16,.15);N.fill();
-      if(b.house.bathing){N.fillStyle='rgba(255,255,255,0.85)';for(let k=0;k<9;k++){N.beginPath();N.arc(.15+hash(k*3)*(W-.3),.15+hash(k*7)*(H-.3),.05+.04*hash(k),0,2*Math.PI);N.fill()}}
+      if(b.bld.bathing){N.fillStyle='rgba(255,255,255,0.85)';for(let k=0;k<9;k++){N.beginPath();N.arc(.15+hash(k*3)*(W-.3),.15+hash(k*7)*(H-.3),.05+.04*hash(k),0,2*Math.PI);N.fill()}}
       N.fillStyle=rgb(shade(P.steel,f.n));N.fillRect(W/2-.04,.02,.08,.1);break}
     case'sinkTop':N.fillStyle=rgb(shade([170,180,196],f.n));rr(.18,.15,W-.36,H-.3,.08);N.fill();N.fillStyle=rgb(shade([230,236,244],f.n));N.fillRect(W/2-.03,.03,.06,.15);
-      if(b.house.dirty){N.fillStyle=rgb(shade([250,250,250],f.n));[[.35,.4],[.55,.45],[.45,.3]].forEach(([u,v])=>{N.beginPath();N.ellipse(u*W,v*H+.05,.1,.07,0,0,2*Math.PI);N.fill()})}break;
-    case'stoveTop':{const on=!!b.house.cooking;[[.28,.35],[.66,.35],[.28,.65],[.66,.65]].forEach(([u,v],k)=>{N.strokeStyle=on&&k<2?`rgba(255,${(120+60*Math.sin(S.time*9+k))|0},60,0.95)`:rgb(shade([120,116,140],f.n));N.lineWidth=.04;N.beginPath();N.arc(u*W,v*H,.11,0,2*Math.PI);N.stroke()});
+      if(b.bld.dirty){N.fillStyle=rgb(shade([250,250,250],f.n));[[.35,.4],[.55,.45],[.45,.3]].forEach(([u,v])=>{N.beginPath();N.ellipse(u*W,v*H+.05,.1,.07,0,0,2*Math.PI);N.fill()})}break;
+    case'stoveTop':{const on=!!b.bld.cooking;[[.28,.35],[.66,.35],[.28,.65],[.66,.65]].forEach(([u,v],k)=>{N.strokeStyle=on&&k<2?`rgba(255,${(120+60*Math.sin(S.time*9+k))|0},60,0.95)`:rgb(shade([120,116,140],f.n));N.lineWidth=.04;N.beginPath();N.arc(u*W,v*H,.11,0,2*Math.PI);N.stroke()});
       if(on){N.fillStyle=rgb(shade([200,206,220],f.n));N.beginPath();N.arc(.28*W,.35*H,.15,0,2*Math.PI);N.fill();N.fillStyle=rgb(shade([236,180,110],f.n));N.beginPath();N.arc(.28*W,.35*H,.1,0,2*Math.PI);N.fill();
         N.fillStyle=rgb(shade([60,60,70],f.n));N.beginPath();N.ellipse(.66*W,.35*H,.14,.12,0,0,2*Math.PI);N.fill()}break}
     case'cabinet':N.fillStyle=rgb(c,.88);N.fillRect(.06,.08,W/2-.09,H-.2);N.fillRect(W/2+.03,.08,W/2-.09,H-.2);N.fillStyle=rgb(shade(P.steel,f.n));N.fillRect(W/2-.12,H*.55,.06,.12);N.fillRect(W/2+.06,H*.55,.06,.12);break;
-    case'oven':N.fillStyle=rgb(c,.85);rr(.1,.1,W-.2,H-.25,.05);N.fill();N.fillStyle=rgb(shade([60,56,80],f.n));rr(.2,.18,W-.4,H*.4,.04);N.fill();if(b.house.cooking){N.fillStyle='rgba(255,170,80,0.55)';rr(.22,.2,W-.44,H*.36,.04);N.fill()}N.fillStyle=rgb(shade(P.steel,f.n));N.fillRect(.2,H-.2,W-.4,.04);break;
+    case'oven':N.fillStyle=rgb(c,.85);rr(.1,.1,W-.2,H-.25,.05);N.fill();N.fillStyle=rgb(shade([60,56,80],f.n));rr(.2,.18,W-.4,H*.4,.04);N.fill();if(b.bld.cooking){N.fillStyle='rgba(255,170,80,0.55)';rr(.22,.2,W-.44,H*.36,.04);N.fill()}N.fillStyle=rgb(shade(P.steel,f.n));N.fillRect(.2,H-.2,W-.4,.04);break;
     case'fridge':N.fillStyle=rgb(c,.9);N.fillRect(.04,H*.62,W-.08,.03);N.fillStyle=rgb(shade(P.steel,f.n));N.fillRect(.1,H*.66,.04,.2);N.fillRect(.1,H*.3,.04,.24);
       N.fillStyle=rgb(shade([244,196,110],f.n));N.beginPath();N.arc(W*.6,H*.78,.05,0,2*Math.PI);N.fill();N.fillStyle=rgb(shade([232,112,100],f.n));N.fillRect(W*.5,H*.4,.12,.09);break;
-    case'tableTop':{const hs=b.house,ready=hs.mealReady>clock.sim,spots=[[.18,.5],[.82,.5],[.5,.2]];N.fillStyle=rgb(shade([250,236,214],f.n));spots.forEach(([u,v])=>{rr(u*W-.14,v*H-.12,.28,.24,.05);N.fill()});
+    case'tableTop':{const hs=b.bld,ready=hs.mealReady>clock.sim,spots=[[.18,.5],[.82,.5],[.5,.2]];N.fillStyle=rgb(shade([250,236,214],f.n));spots.forEach(([u,v])=>{rr(u*W-.14,v*H-.12,.28,.24,.05);N.fill()});
       if(ready||hs.dirty){spots.forEach(([u,v])=>{N.fillStyle=rgb(shade([255,255,255],f.n));N.beginPath();N.arc(u*W,v*H,.1,0,2*Math.PI);N.fill();if(ready){N.fillStyle=rgb(shade([236,170,90],f.n));N.beginPath();N.arc(u*W,v*H,.06,0,2*Math.PI);N.fill();N.fillStyle=rgb(shade([140,200,120],f.n));N.beginPath();N.arc(u*W+.03,v*H-.02,.03,0,2*Math.PI);N.fill()}})}
       if(ready){N.fillStyle=rgb(shade([230,110,90],f.n));N.beginPath();N.arc(.5*W,.62*H,.12,0,2*Math.PI);N.fill()}break}
-    case'screen':{const on=b.house.tvOn;N.fillStyle=on?rgb([70,90,130]):rgb(shade([40,40,56],f.n));N.fillRect(.05,.05,W-.1,H-.1);
+    case'screen':{const on=b.bld.tvOn;N.fillStyle=on?rgb([70,90,130]):rgb(shade([40,40,56],f.n));N.fillRect(.05,.05,W-.1,H-.1);
       if(on){const k=Math.floor(S.time*1.5);N.fillStyle=`hsla(${(hash(k)*360)|0},70%,70%,0.9)`;N.fillRect(.1,.1,W*.5,H*.5);N.fillStyle=`hsla(${(hash(k+5)*360)|0},70%,75%,0.9)`;N.fillRect(W*.45,H*.35,W*.4,H*.5);N.fillStyle='rgba(255,255,255,0.8)';N.beginPath();N.arc(W*.3+Math.sin(S.time*2)*.1,H*.6,.06,0,2*Math.PI);N.fill()}break}
     case'cushion':N.fillStyle=rgb(c,1.08);rr(.05,.05,W-.1,H/2-.08,.08);N.fill();rr(.05,H/2+.03,W-.1,H/2-.08,.08);N.fill();break;
     case'mirror':N.fillStyle=rgb(mix(skyMid,[230,240,250],.6));rr(.04,.04,W-.08,H-.08,.06);N.fill();N.fillStyle='rgba(255,255,255,0.5)';N.fillRect(W*.2,H*.5,.04,H*.3);break;
   }
 }
 function drawBox(b){
-  const inAmb=houseAmb(b.house);
+  const inAmb=houseAmb(b.bld);
   for(const f of FACES){
     if(dot(f.n,cam.d)<=.001)continue;
     amb=b.indoor||(b.wall&&f.key===b.wall.inner)?inAmb:ambOut;
@@ -847,6 +1186,32 @@ function drawBox(b){
   amb=ambOut;
 }
 
+
+// ---- generated parts: surface patterns and convex shapes ----
+function drawPattern(pat,b,f,W,H,c){
+  if(!pat||pat==='none')return;
+  const lite=rgb(c,1.12),dark=rgb(c,.82);
+  switch(pat){
+    case'windows':{const g=mix(A(P.glass),[255,206,126],nightK*.85);for(let v=.35;v+.45<=H;v+=.9)for(let u=.35;u+.3<=W;u+=.75){N.fillStyle=rgbA(P.wallTrim);N.fillRect(u-.04,v-.04,.38,.53);N.fillStyle=rgb(g,1,.9);N.fillRect(u,v,.3,.45);N.fillStyle=rgbA(P.wallTrim,1,.8);N.fillRect(u+.135,v,.03,.45)}break}
+    case'door':{if(f.key!=='py'&&f.key!=='px'){drawPattern('windows',b,f,W,H,c);break}const dw=Math.min(.6,W*.5),dh=Math.min(1.05,H*.8);N.fillStyle=rgbA(P.wallTrim);N.beginPath();arch(W/2,0,dw+.12,dh+.08);N.fill();N.fillStyle=rgbA(mix(P.coral,[120,70,90],.35));N.beginPath();arch(W/2,0,dw,dh);N.fill();N.fillStyle=rgbA(P.gold);N.fillRect(W/2+dw*.25,dh*.42,.06,.06);break}
+    case'bricks':{N.fillStyle=dark;for(let v=0,row=0;v<H;v+=.18,row++){N.fillRect(0,v,W,.025);for(let u=(row%2)*.2;u<W;u+=.4)N.fillRect(u,v,.025,.18)}break}
+    case'stripes':{N.fillStyle=lite;for(let u=0;u<W;u+=.4)N.fillRect(u,0,.2,H);break}
+    case'planks':{N.fillStyle=dark;for(let v=.2;v<H;v+=.2)N.fillRect(0,v,W,.025);break}
+    case'tiles':{N.fillStyle=dark;for(let v=0;v<H;v+=.25)N.fillRect(0,v,W,.02);for(let u=0;u<W;u+=.25)N.fillRect(u,0,.02,H);break}
+    case'glass':{N.fillStyle=rgb(mix(c,[190,220,245],.6));N.fillRect(.04,.04,W-.08,H-.08);N.strokeStyle='rgba(255,255,255,0.6)';N.lineWidth=.05;N.beginPath();N.moveTo(W*.2,H*.2);N.lineTo(W*.45,H*.75);N.stroke();break}
+    case'water':{N.fillStyle=rgbA(mix(P.water,[60,80,140],nightK*.3));N.fillRect(.06,.06,W-.12,H-.12);N.strokeStyle=rgbA([226,244,252],1,.7);N.lineWidth=.035;for(let k=0;k<3;k++){const ph=(S.time*.4+k/3)%1;N.globalAlpha=1-ph;N.beginPath();N.ellipse(W/2,H/2,(.1+ph*.4)*W/1.2,(.1+ph*.4)*H/1.2,0,0,2*Math.PI);N.stroke()}N.globalAlpha=1;break}
+    case'grass':{N.fillStyle=rgbA(P.grass);N.fillRect(0,0,W,H);N.fillStyle=rgbA([150,200,140]);for(let k=0;k<W*H*12;k++){N.beginPath();N.arc(hash(k*1.3+b.id)*W,hash(k*2.1+b.id)*H,.05,0,2*Math.PI);N.fill()}break}
+    case'dots':{N.fillStyle=lite;for(let v=.2;v<H;v+=.35)for(let u=.2+((v*10|0)%2)*.17;u<W;u+=.35){N.beginPath();N.arc(u,v,.07,0,2*Math.PI);N.fill()}break}
+    case'roof':{N.fillStyle=dark;for(let u=.2;u<W;u+=.35)N.fillRect(u,0,.04,H);break}
+  }
+}
+function drawPoly(p){
+  const k=p.bld.k;amb=ambOut;
+  for(const f of p.faces){if(dot(f.n,cam.d)<=.001)continue;const top=f.n[2]>.7;let col=top?p.top:p.col;if(top){snowOn=true;col=snowy(col);snowOn=false}
+    const c=rgb(shade(col,f.n));N.fillStyle=c;N.strokeStyle=c;N.lineWidth=.8;N.beginPath();f.pts.forEach((q,i)=>{const s=project([q[0],q[1],q[2]*k]);i?N.lineTo(s[0],s[1]):N.moveTo(s[0],s[1])});N.closePath();N.fill();N.stroke();
+    if(p.pattern==='roof'&&!top&&cam.scale>8){N.strokeStyle=rgb(shade(col,f.n),.85);N.lineWidth=1;const a=f.pts[0],b=f.pts[1],d=f.pts[f.pts.length-1];for(let t=.25;t<1;t+=.25){const s1=project([a[0]+(d[0]-a[0])*t,a[1]+(d[1]-a[1])*t,(a[2]+(d[2]-a[2])*t)*k]),s2=project([b[0]+(f.pts[2][0]-b[0])*t,b[1]+(f.pts[2][1]-b[1])*t,(b[2]+(f.pts[2][2]-b[2])*t)*k]);N.beginPath();N.moveTo(s1[0],s1[1]);N.lineTo(s2[0],s2[1]);N.stroke()}}}
+}
+function prepPoly(p){const k=p.bld.k;prepItem(p,p.lo,[p.hi[0],p.hi[1],Math.max(p.lo[2]+.01,p.hi[2]*k)])}
 // ================= drawing: props =================
 function growth(){return .45+.55*(((clock.day-1)*24+clock.hour)%72)/72}
 function canopy(i,t,sway,cols,blossom){
@@ -869,7 +1234,7 @@ function drawProp(e){
     for(const dx of[-.22,.22]){const x=i[0]+dx*l*.9;
       if(e.type===0){[[0,-.12,.17,[124,190,116]],[-.09,-.08,.12,[150,206,128]],[.09,-.09,.12,[140,200,124]],[0,-.17,.1,[178,224,150]]].forEach(([ox,oy,r,c])=>{N.fillStyle=rgbA(snowy(c));N.beginPath();N.arc(x+ox*t,y+oy*t,r*t,0,2*Math.PI);N.fill()})}
       else{N.fillStyle=rgbA([238,140,74]);N.beginPath();N.ellipse(x,y-.02*t,.06*t,.04*t,0,0,2*Math.PI);N.fill();N.strokeStyle=rgbA([110,180,104]);N.lineWidth=Math.max(1,.04*l);N.beginPath();for(const a of[-.5,0,.5]){N.moveTo(x,y-.04*t);N.lineTo(x+a*.18*t+sw,y-.36*t)}N.stroke()}}snowOn=false;
-  }else if(e.kind==='falls'){const a=project([17.52,11.6,0]),b=project([17.52,13,0]),o=5*l;
+  }else if(e.kind==='falls'){const a=project([e.local[0]+.02,e.y0,0]),b=project([e.local[0]+.02,e.y1,0]),o=5*l;
     const g=N.createLinearGradient(0,a[1],0,a[1]+o);const wc=mix(A([176,222,240]),[90,110,170],nightK*.3);g.addColorStop(0,rgb(wc,1,.95));g.addColorStop(.7,rgb(wc,1.05,.55));g.addColorStop(1,rgb(wc,1.1,0));
     N.fillStyle=g;N.beginPath();N.moveTo(a[0],a[1]);N.lineTo(b[0],b[1]);N.lineTo(b[0]+.08*l,b[1]+o);N.lineTo(a[0]-.08*l,a[1]+o);N.closePath();N.fill();
     N.save();N.clip();N.strokeStyle=`rgba(255,255,255,${.5+.25*dayK})`;N.lineWidth=Math.max(1,.035*l);
@@ -880,7 +1245,7 @@ function drawProp(e){
 const SKIN=[253,227,207];
 function postureOf(w){if(w.link||!w.tile.furn)return'stand';return w.tile.furn.type==='bed'?'lie':w.tile.furn.type==='tub'?'bath':'sit'}
 function drawPerson(w){
-  amb=w.tile.indoor?houseAmb(w.tile.house):ambOut;
+  amb=w.tile.indoor?houseAmb(w.tile.bld):ambOut;
   const post=postureOf(w),sc=1.35*cam.scale*(w.kid?.8:1),moving=!!w.link,face=faceOf(w),mood=moodOf(w),s=cam.scale;
   if(post==='lie'){const f=w.tile.furn,hp=project(f.head),fp=project(f.foot),mid=project([f.head[0]+(f.foot[0]-f.head[0])*.25,f.head[1]+(f.foot[1]-f.head[1])*.25,f.head[2]]);
     N.strokeStyle=rgbA(mix(w.cloak,[255,255,255],.25));N.lineCap='round';N.lineWidth=.42*s;N.beginPath();N.moveTo(mid[0],mid[1]-.06*s);N.lineTo(fp[0],fp[1]-.05*s);N.stroke();
@@ -937,7 +1302,7 @@ function drawPerson(w){
   amb=ambOut;
 }
 function drawCat(w){
-  amb=w.tile.indoor?houseAmb(w.tile.house):ambOut;
+  amb=w.tile.indoor?houseAmb(w.tile.bld):ambOut;
   const l=project(walkerPos(w)),s=cam.scale,moving=!!w.link,face=faceOf(w),x=l[0],y=l[1];
   const sleeping=w.act&&w.act.id==='catsleep'&&!moving,b=moving?Math.abs(Math.sin(w.phase*1.3))*s*.03:0;
   if(w===selected){N.strokeStyle='rgba(255,255,255,0.9)';N.lineWidth=2;N.beginPath();N.ellipse(x,y,.28*s,.12*s,0,0,2*Math.PI);N.stroke()}
@@ -1020,7 +1385,7 @@ function updateLight(dt){
   rainbowK=lerp(rainbowK,clock.sim<weather.rainbowUntil?1:0,k*.6);festK=lerp(festK,clock.sim<weather.festUntil?1:0,k*1.5);
   ambOut=mix(mix([.4,.45,.7],[1,1,1],dayK),[1.04,.84,.76],duskK*.6);
   const ov=Math.max(rainK,snowK*.5);ambOut=[ambOut[0]*lerp(1,.76,ov),ambOut[1]*lerp(1,.79,ov),ambOut[2]*lerp(1,.88,ov)];amb=ambOut;
-  for(const id in houses){const hs=houses[id],awake=hs.residents.some(w=>!(w.act&&w.act.id==='sleep'&&!w.link));hs.lights=(nightK>.3||rainK>.5)&&awake;hs.glow=lerp(hs.glow,hs.lights?Math.max(nightK,rainK*.6):0,1-Math.exp(-dt*2));
+  for(const hs of buildings){if(!hs.enterable)continue;const inside=hs.residents.length?hs.residents:walkers.filter(w=>w.tile.bld===hs),awake=inside.some(w=>!(w.act&&w.act.id==='sleep'&&!w.link));hs.lights=(nightK>.3||rainK>.5)&&awake;hs.glow=lerp(hs.glow,hs.lights?Math.max(nightK,rainK*.6):0,1-Math.exp(-dt*2));
     hs.bathing=walkers.some(w=>w.act&&w.act.id==='bath'&&(w.act.hs||w.house)===hs&&!w.link)}
 }
 function updateWeather(sdt){
@@ -1054,7 +1419,7 @@ function updateCamera(dt,dragging){
   const tc=f?(()=>{const p=walkerPos(f);return[p[0],p[1],p[2]+.5]})():B.center;
   cam.center=mix(cam.center,tc,kc);cam.scale=B.scale*cam.zoom;
   let ox=B.cx-B.areaX,oy=B.cy-B.areaY;
-  if(!f){let x0=1/0,x1=-1/0,y0=1/0,y1=-1/0;for(const X of[-.5,MW-.5])for(const Y of[-.5,MH-.5])for(const Z of[-2.5,WALL_H+.8]){const e=[X-B.center[0],Y-B.center[1],Z-B.center[2]],sx=B.scale*dot(e,cam.r),sy=-B.scale*dot(e,cam.u);x0=Math.min(x0,sx);x1=Math.max(x1,sx);y0=Math.min(y0,sy);y1=Math.max(y1,sy)}ox=-(x0+x1)/2;oy=-(y0+y1)/2}
+  if(!f){let x0=1/0,x1=-1/0,y0=1/0,y1=-1/0;for(const X of[-.5,MW-.5])for(const Y of[-.5,MH-.5])for(const Z of[-2.5,worldTopZ()]){const e=[X-B.center[0],Y-B.center[1],Z-B.center[2]],sx=B.scale*dot(e,cam.r),sy=-B.scale*dot(e,cam.u);x0=Math.min(x0,sx);x1=Math.max(x1,sx);y0=Math.min(y0,sy);y1=Math.max(y1,sy)}ox=-(x0+x1)/2;oy=-(y0+y1)/2}
   cam.cx=lerp(cam.cx,f?B.areaX:B.areaX+ox*cam.zoom,kc);cam.cy=lerp(cam.cy,f?B.areaY:B.areaY+oy*cam.zoom,kc);
 }
 
@@ -1079,6 +1444,7 @@ function select(w){
   card.hidden=!w;logEl.hidden=!!w||!wordCard.hidden;thought=null;cThought.hidden=true;
   if(!w){cam.follow=null;cFollow.setAttribute('aria-pressed','false');return}
   if(!interior&&w.tile.indoor){interior=true;$('roofBtn').textContent=tr(UI.roofOn)}
+  if(w.tile.indoor&&w.tile.bld&&w.tile.bld.floors>1)setViewFloor(w.tile.level);
   cDot.style.background=rgb(w.cloak);
   cNeeds.replaceChildren();cNeeds.hidden=!w.needs;
   if(w.needs)for(const k in NEED_T){const lab=document.createElement('span');lab.dataset.k=k;lab.className='nlab';const bar=document.createElement('span');bar.className='bar';const i=document.createElement('i');i.style.background=NEED_T[k][1];i.dataset.k=k;bar.append(i);cNeeds.append(lab,bar)}
@@ -1126,7 +1492,7 @@ function applyLang(){
   $('langBtn').textContent=tr(UI.lang);const lb=$('labelBtn');lb.hidden=L!=='en';lb.textContent=showLabels?'Labels: On':'Labels: Off';lb.setAttribute('aria-pressed',String(showLabels));$('bookLbl').textContent=tr(UI.book);$('bookTitle').textContent=tr(UI.book);$('bookNote').textContent=tr(UI.bookNote);
   $('godLbl').textContent=tr(UI.god);$('godInput').placeholder=tr(UI.ph);if(!godBusy)$('godSend').textContent=tr(UI.send);
   $('hint').textContent=tr(UI.hint);cThink.textContent=tr(UI.think);$('cPlay').textContent=tr(UI.play);if(fpv.on)applyFpvLang();cFollow.textContent=tr(UI.follow);$('wExSay').textContent=tr(UI.exSay);
-  $('roofBtn').textContent=tr(interior?UI.roofOn:UI.roofOff);speedBtn.textContent=`${tr(UI.speed)} ×${clock.speed}`;$('reset').textContent=tr(UI.reset);
+  $('roofBtn').textContent=tr(interior?UI.roofOn:UI.roofOff);updateFloorBtn();speedBtn.textContent=`${tr(UI.speed)} ×${clock.speed}`;$('reset').textContent=tr(UI.reset);
   walkers.forEach(w=>{w.nameEl.textContent=nameOf(w)});
   renderLog();updateHud();if(!$('book').hidden)renderBook();if(typeof renderTown==='function')renderTown();
   try{localStorage.setItem('hakoniwa-lang',L)}catch(e){}
@@ -1135,7 +1501,12 @@ function applyLang(){
 $('labelBtn').addEventListener('click',()=>{showLabels=!showLabels;try{localStorage.setItem('hakoniwa-labels',showLabels?'1':'0')}catch(e){}applyLang()});
 $('langBtn').addEventListener('click',()=>{L=L==='ja'?'en':'ja';applyLang()});
 speedBtn.addEventListener('click',()=>{speedI=(speedI+1)%speeds.length;clock.speed=speeds[speedI];speedBtn.textContent=`${tr(UI.speed)} ×${clock.speed}`});
-$('roofBtn').addEventListener('click',()=>{interior=!interior;$('roofBtn').textContent=tr(interior?UI.roofOn:UI.roofOff);if(!interior&&selected&&selected.tile.indoor)select(null)});
+$('roofBtn').addEventListener('click',()=>{interior=!interior;$('roofBtn').textContent=tr(interior?UI.roofOn:UI.roofOff);if(!interior&&selected&&selected.tile.indoor)select(null);updateFloorBtn()});
+// 2階建て以上の建物がある時だけ、内観で見る階を切りかえるボタンを出す
+const maxFloors=()=>Math.max(1,...buildings.map(b=>b.floors));
+function setViewFloor(n){viewFloor=clamp(n,0,maxFloors()-1);updateFloorBtn()}
+function updateFloorBtn(){const b=$('floorBtn'),m=maxFloors();if(viewFloor>m-1)viewFloor=m-1;b.hidden=!interior||m<2;b.textContent=tr(UI.floor(viewFloor+1))}
+$('floorBtn').addEventListener('click',()=>setViewFloor((viewFloor+1)%maxFloors()));
 $('reset').addEventListener('click',()=>{cam.taz=ISO_AZ;cam.tel=ISO_EL;cam.tzoom=1;cam.follow=null;cFollow.setAttribute('aria-pressed','false')});
 $('zoomIn').addEventListener('click',()=>{cam.tzoom=clamp(cam.tzoom*1.35,.7,3.5)});
 $('zoomOut').addEventListener('click',()=>{cam.tzoom=clamp(cam.tzoom/1.35,.7,3.5)});
@@ -1216,7 +1587,7 @@ const godForm=$('godForm'),godInput=$('godInput'),godSend=$('godSend');
 const GOAL_IDS=[...ACT_IDS,'home','none'];
 const MOODS=['happy','excited','calm','sad','scared','angry'];
 function worldSummary(){
-  return people.map(w=>{const n=w.needs;return`- ${w.name} (${w.en}) ${w.persona.en}${w.kid?' [child]':''} mood:${moodOf(w)} energy${n.energy.toFixed(1)} food${n.food.toFixed(1)} social${n.social.toFixed(1)} fun${n.fun.toFixed(1)} bladder${n.bladder.toFixed(1)} clean${n.hygiene.toFixed(1)} now:${statusOf(w).en} (${w.tile.indoor?'at home':'outside'})`}).join('\n')+`\n- タマ (Tama) the cat. now:${statusOf(cat).en}`;
+  return people.map(w=>{const n=w.needs;return`- ${w.name} (${w.en}) ${w.persona.en}${w.kid?' [child]':''} mood:${moodOf(w)} energy${n.energy.toFixed(1)} food${n.food.toFixed(1)} social${n.social.toFixed(1)} fun${n.fun.toFixed(1)} bladder${n.bladder.toFixed(1)} clean${n.hygiene.toFixed(1)} now:${statusOf(w).en} (${placeOf(w)})`}).join('\n')+`\n- タマ (Tama) the cat. now:${statusOf(cat).en}`;
 }
 function godPrompt(text){
   return `You interpret the "Voice of God" in a cozy village life simulation. The player (God) spoke to the village from the sky. Decide how each villager reacts, based on personality and state. The player is learning English, so every line you write comes in simple everyday English (CEFR A2) AND natural Japanese.
@@ -1251,7 +1622,7 @@ function offlineInterpret(text){
     [['釣','魚','fish'],'fish',J('釣りに行こう。','Let\'s go fishing.')],[['花','flower'],'flower',J('お花に水をあげなきゃ。','I need to water the flowers.')],[['話','仲良','おしゃべり','talk','chat','friend'],'chat',J('誰かと話したいな。','I want to talk with someone.')],
     [['遊','走','鬼ごっこ','play','run'],'play',J('遊ぼう！','Let\'s play!')],[['買','店','屋台','shop','buy','stall'],'stall',J('屋台に行こう。','Let\'s go to the stall.')]];
   if(has('建て','作って','つくって','置いて','たてて','建設','build','make a','create','place','put a'))r.build=text;
-  if(has('壊','撤去','なくして','remove','destroy','demolish')&&structures.length){const s2=structures.find(s=>text.includes(s.spec.name_ja)||t.includes(s.spec.name_en.toLowerCase()))||structures[structures.length-1];r.remove=s2.id;r.build=null}
+  if(has('壊','撤去','なくして','remove','destroy','demolish')&&genBuildings().length){const s2=genBuildings().find(s=>text.includes(s.spec.name_ja)||t.includes(s.spec.name_en.toLowerCase()))||genBuildings().slice(-1)[0];r.remove=s2.id;r.build=null}
   if(!r.build&&!r.remove)for(const[keys,g,p]of G)if(has(...keys)){goal=g;sayP=p;if(g==='dance')r.event='festival';if(g==='sleep'||g==='home')mood='calm';break}
   if(!goal&&has('怒','雷','罰','angry','thunder')){mood='scared';sayP=J('ひえっ！','Yikes!')}
   if(has('夜','night'))r.timeSkipTo=20;else if(has('朝','morning'))r.timeSkipTo=7;else if(has('昼','noon'))r.timeSkipTo=12;
@@ -1267,7 +1638,7 @@ function applyDivine(r,text){
   if(r.weather==='rain'){setWeather('rain',3);log(J('雨が降りはじめた','It started to rain.'))}else if(r.weather==='snow'){setWeather('snow',4);log(J('雪が降りはじめた','It started to snow.'))}
   else if(r.weather==='clear'){weather.kind='clear'}else if(r.weather==='rainbow'){weather.kind='clear';weather.rainbowUntil=clock.sim+2*HR}
   if(r.build)buildFromVoice(String(r.build).slice(0,400),text);
-  if(r.remove){const st=removeStructure(String(r.remove));if(st)log(J(`${st.spec.name_ja}がなくなった`,`The ${st.spec.name_en} is gone.`),'god-line')}
+  if(r.remove){const st=removeBuilding(String(r.remove));if(st)log(J(`${st.spec.name_ja}がなくなった`,`The ${st.spec.name_en} is gone.`),'god-line')}
   if(r.event==='festival'){weather.festUntil=clock.sim+8*HR;log(J('広場にお祭りの飾りが立った','Festival decorations went up in the plaza.'))}
   (Array.isArray(r.villagers)?r.villagers:[]).forEach(v=>{
     const w=byName(String(v.name||''));if(!w)return;
@@ -1285,7 +1656,7 @@ function applyDivine(r,text){
         else if(g==='chat'){if(!w.link){w.act&&finishAct(w,true);w.path=[];w.goal=null;w.wait=0}}
         else{const p=planAct(w,g);if(p)w.forced=p}
       }
-    }else if(w.kind==='cat'&&(v.goal==='home'||v.goal==='sleep')){w.forced={goal:{id:'catsleep',dur:[1,2]},target:houses.A.spots.sofa[0]}}
+    }else if(w.kind==='cat'&&(v.goal==='home'||v.goal==='sleep')){w.forced={goal:{id:'catsleep',dur:[1,2]},target:(homes()[0].spots.rest||homes()[0].floor)[0]}}
   });
 }
 godForm.addEventListener('submit',async e=>{
@@ -1314,7 +1685,7 @@ cThink.addEventListener('click',async()=>{
     :`Write the inner voice (first person, what they are thinking right now) of ${w.en} (${w.name}), a villager in a cozy village sim. The reader is learning everyday English, so use simple, natural spoken English (CEFR A2), 1-2 short sentences about this moment of daily life.
 Personality: ${w.persona.en}${w.kid?' (a child)':''}
 Time: day ${clock.day}, ${hhmm(clock.hour)}, weather ${weather.kind}${clock.sim<weather.festUntil?', festival':''}
-Doing now: ${statusOf(w).en} (${w.tile.indoor?'at home, in the '+ROOMS[w.tile.room].en:'outside'})
+Doing now: ${statusOf(w).en} (${placeOf(w)})
 Mood: ${moodOf(w)} (energy ${n.energy.toFixed(1)}, full ${n.food.toFixed(1)}, social ${n.social.toFixed(1)}, fun ${n.fun.toFixed(1)}, bladder ${n.bladder.toFixed(1)}, clean ${n.hygiene.toFixed(1)}; 0-1)
 Recent memories: ${w.memory.slice(-5).join(' / ')||'nothing special'}
 Best friend: ${best}
@@ -1326,7 +1697,8 @@ Reply with JSON only: {"en":"the inner voice in English","ja":"同じ内容の�
 
 // ================= input =================
 const pointers=new Map();let drag=null,pinch=null;
-const hiddenW=w=>!interior&&(w.tile.indoor||(w.link&&w.link.to.indoor));
+// 見えない住人: 外観では家の中の人、内観ではほかの階にいる人
+const hiddenW=w=>{const t=w.link&&w.t>.5?w.link.to:w.tile;if(!interior)return!!(w.tile.indoor||(w.link&&w.link.to.indoor));return!!(t.indoor&&t.bld&&t.level!==effFloor(t.bld))};
 cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
   if(pointers.size===2){const[a,b]=[...pointers.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),z:cam.tzoom};drag=null}
   else drag={x:e.clientX,y:e.clientY,az:cam.taz,el:cam.tel,moved:false}});
@@ -1337,7 +1709,7 @@ function endPointer(e){pointers.delete(e.pointerId);if(pointers.size<2)pinch=nul
   if(drag&&!drag.moved&&e.type==='pointerup'){const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let best=null,bd=Math.max(18,.75*cam.scale);
     walkers.forEach(w=>{if(hiddenW(w))return;const hp=headPoint(w),p=project(walkerPos(w)),cy=(hp[1]+p[1])/2+.15*cam.scale,d=Math.hypot(hp[0]-x,cy-y);if(d<bd){bd=d;best=w}});
     if(best)select(best);
-    else{let bv=null,bvd=Math.max(16,.6*cam.scale);VOCAB.forEach(v=>{if(v.house&&!interior)return;if(v.exterior&&interior)return;if(v.mirror&&dot([0,-1,0],cam.d)>.02)return;const p=project(v.pos),d=Math.hypot(p[0]-x,p[1]-y);if(d<bvd){bvd=d;bv=v}});
+    else{let bv=null,bvd=Math.max(16,.6*cam.scale);VOCAB.forEach(v=>{if(!vocabShown(v))return;const p=project(v.pos),d=Math.hypot(p[0]-x,p[1]-y);if(d<bvd){bvd=d;bv=v}});
       if(bv)openWord(bv);else{select(null);wordCard.hidden=true;logEl.hidden=false}}}
   drag=null}
 cv.addEventListener('pointerup',endPointer);cv.addEventListener('pointercancel',endPointer);
@@ -1377,7 +1749,7 @@ function frame(dt){
   const sdt=dt*clock.speed;clock.sim+=sdt;tickClock();
   updateWeather(sdt);updateLight(dt);
   updateCamera(dt,!!drag);
-  walkers.forEach(w=>updateWalker(w,sdt));
+  if(!(TEST&&TEST.freeze))walkers.forEach(w=>updateWalker(w,sdt));
   people.forEach(w=>{const a=w.act;if(!a||a.id!=='chat'||!a.lead||w.link)return;const p=a.partner;if(!p.act||p.act.id!=='chat'||p.act.partner!==w||p.link)return;
     w.chatT-=dt;if(w.chatT<=0){const sp=w.turn%2?p:w;w.turn++;say(sp,chatLine(sp,sp===w?p:w),2.8);w.chatT=3.3}});
 
@@ -1387,7 +1759,7 @@ function frame(dt){
   boxes.forEach(prepBox);
   const items=boxes.filter(b=>!b.skip);
   props.forEach(p=>{prepItem(p,p.lo,p.hi);items.push(p)});
-  structures.forEach(st=>{if(st.k<1)st.k=Math.min(1,st.k+dt/1.4)});genPolys.forEach(p=>{prepPoly(p);items.push(p)});
+  buildings.forEach(st=>{if(st.k<1)st.k=Math.min(1,st.k+dt/1.4)});polys.forEach(p=>{if(p.exteriorOnly&&interior)return;prepPoly(p);items.push(p)});
   walkers.forEach(w=>{if(hiddenW(w))return;const e=walkerPos(w);let z=e[2];if(w.link)z=Math.max(w.tile.pos[2],w.link.to.pos[2]);w.item=w.item||{kind:'walker',w};
     const post=w.kind==='person'?postureOf(w):'stand';
     if(post==='lie'||post==='bath'){const f=w.tile.furn;prepItem(w.item,[f.lo[0],f.lo[1],z+.001],[f.hi[0],f.hi[1],z+(post==='lie'?.2:.35)])}
@@ -1396,11 +1768,11 @@ function frame(dt){
   const baseI=items.filter(isBase),restI=items.filter(t=>!isBase(t));
   for(const t of topo(baseI).concat(topo(restI))){if(t.kind==='box')drawBox(t);else if(t.kind==='walker'){t.w.kind==='cat'?drawCat(t.w):drawPerson(t.w)}else if(t.kind==='poly')drawPoly(t);else drawProp(t)}
 
-  if(interior)for(const id in houses){const hs=houses[id];
-    if(hs.tvOn){const p=project(hs.tvP),r=cam.scale*1.6;const g=N.createRadialGradient(p[0],p[1],0,p[0],p[1],r);const a=.12+.2*nightK;g.addColorStop(0,`rgba(140,190,255,${a+.05*Math.sin(S.time*7)})`);g.addColorStop(1,'rgba(140,190,255,0)');N.fillStyle=g;N.fillRect(p[0]-r,p[1]-r,2*r,2*r)}
-    if(hs.cooking&&Math.random()<dt*6)steam.push({p:[hs.stoveP[0]-.2+Math.random()*.1,hs.stoveP[1]-.1,hs.stoveP[2]+.1],life:1})}
+  if(interior)for(const hs of buildings){
+    if(hs.tvOn&&hs.tvP){const p=project(hs.tvP),r=cam.scale*1.6;const g=N.createRadialGradient(p[0],p[1],0,p[0],p[1],r);const a=.12+.2*nightK;g.addColorStop(0,`rgba(140,190,255,${a+.05*Math.sin(S.time*7)})`);g.addColorStop(1,'rgba(140,190,255,0)');N.fillStyle=g;N.fillRect(p[0]-r,p[1]-r,2*r,2*r)}
+    if(hs.cooking&&hs.stoveP&&Math.random()<dt*6)steam.push({p:[hs.stoveP[0]-.2+Math.random()*.1,hs.stoveP[1]-.1,hs.stoveP[2]+.1],life:1})}
   for(let i=steam.length-1;i>=0;i--){const s=steam[i];s.life-=dt/1.6;s.p[2]+=.4*dt;if(s.life<=0||!interior){steam.splice(i,1);continue}const q=project(s.p);N.fillStyle=`rgba(255,255,255,${.5*s.life})`;N.beginPath();N.arc(q[0]+Math.sin(S.time*3+i)*2,q[1],cam.scale*(.06+.12*(1-s.life)),0,2*Math.PI);N.fill()}
-  if(!interior)for(const id in houses){const hs=houses[id];hs.smokeT=(hs.smokeT||0)-sdt;if(hs.smokeT<=0){smoke.push({p:hs.chimney.slice(),life:1,s:.7+Math.random()*.6});hs.smokeT=(.6+Math.random()*.6)/(hs.cooking?2.2:.35)}}
+  if(!interior)for(const hs of buildings){if(!hs.chimney)continue;hs.smokeT=(hs.smokeT||0)-sdt;if(hs.smokeT<=0){smoke.push({p:hs.chimney.slice(),life:1,s:.7+Math.random()*.6});hs.smokeT=(.6+Math.random()*.6)/(hs.cooking?2.2:.35)}}
   for(let i=smoke.length-1;i>=0;i--){const s=smoke[i];s.life-=dt/5;s.p[2]+=.45*dt;s.p[0]+=.12*dt;s.p[1]-=.06*dt;if(s.life<=0||interior){smoke.splice(i,1);continue}
     const q=project(s.p);N.fillStyle=rgb(mix(A([244,240,246]),[150,150,180],nightK*.4),1,.4*s.life);N.beginPath();N.arc(q[0],q[1],cam.scale*(.12+.3*(1-s.life))*s.s,0,2*Math.PI);N.fill()}
   if(nightK>.3&&rainK<.5)flies.forEach(f=>{const p=[f.b[0]+.4*Math.sin(S.time*.6+f.p),f.b[1]+.4*Math.cos(S.time*.5+f.p*1.3),.4+.25*Math.sin(S.time*1.1+f.p)];const q=project(p),a=(nightK-.3)*(.5+.5*Math.sin(S.time*3+f.p*4));
@@ -1409,8 +1781,8 @@ function frame(dt){
   clouds.forEach(c=>{if(c.front)cloud(c,S.time)});
 
   if(L==='en'){
-    if(showLabels&&interior&&cam.zoom>=1.3)for(const id in houses){const hs=houses[id];for(const k in hs.roomCenters){const p=project(hs.roomCenters[k]);tag(p[0],p[1],ROOMS[k].en,'room')}}
-    if(showLabels&&cam.zoom>=1.3)VOCAB.forEach(v=>{if(v.house&&!interior)return;if(v.exterior&&interior)return;if(v.mirror&&dot([0,-1,0],cam.d)>.02)return;if(v.word==='tree'&&!v.showLabel)return;const p=project(v.pos);if(p[0]<-40||p[0]>S.width+40||p[1]<-20||p[1]>S.height+20)return;tag(p[0],p[1]-10,v.word,'obj')});
+    if(showLabels&&interior&&cam.zoom>=1.3)for(const hs of buildings)for(const k in hs.roomCenters){const rc=hs.roomCenters[k];if(rc.level!==effFloor(hs))continue;const p=project(rc.p);tag(p[0],p[1],rc.name.en,'room')}
+    if(showLabels&&cam.zoom>=1.3)VOCAB.forEach(v=>{if(!vocabShown(v))return;if(v.word==='tree'&&!v.showLabel)return;const p=project(v.pos);if(p[0]<-40||p[0]>S.width+40||p[1]<-20||p[1]>S.height+20)return;tag(p[0],p[1]-10,v.word,'obj')});
   }
   const sayText=w=>L==='en'?(w.say.en||w.say.ja):(w.say.ja||w.say.en);
   walkers.forEach(w=>{if(hiddenW(w)||w===selected||(w.say&&S.time<w.say.until))return;if(w.act&&!w.link&&ACTS[w.act.id]&&ACTS[w.act.id].glyph&&w.act.id!=='chat'){const p=headPoint(w);bubble(p[0],p[1],ACTS[w.act.id].glyph,'glyph')}else if(w.act&&w.act.id==='catsleep'&&!w.link){const p=headPoint(w);bubble(p[0],p[1],'z','glyph')}});
@@ -1421,172 +1793,220 @@ function frame(dt){
 }
 
 // ================= generated buildings (voice of God) =================
-const structures=[];const genPolys=[];let structSeq=1;
-const LANDMARKS={plaza:[8,11],pond:[15.2,12.3],field:[1.5,13],houseA:[3.5,3.5],houseB:[12.5,3.5],well:[16,3],stall:[8,3],bench:[6,13],center:[8.5,8],north:[8,1],south:[8,14.5],east:[16.5,8],west:[.5,8]};
-const hexC=(s,fb)=>{const m=/^#?([0-9a-f]{6})$/i.exec(String(s||'').trim());if(!m)return fb;const v=parseInt(m[1],16);return[(v>>16)&255,(v>>8)&255,v&255]};
-const PATTERNS=new Set(['windows','door','bricks','stripes','planks','tiles','glass','water','grass','dots','roof']);
-function drawPattern(pat,b,f,W,H,c){
-  if(!pat||pat==='none')return;
-  const lite=rgb(c,1.12),dark=rgb(c,.82);
-  switch(pat){
-    case'windows':{const g=mix(A(P.glass),[255,206,126],nightK*.85);for(let v=.35;v+.45<=H;v+=.9)for(let u=.35;u+.3<=W;u+=.75){N.fillStyle=rgbA(P.wallTrim);N.fillRect(u-.04,v-.04,.38,.53);N.fillStyle=rgb(g,1,.9);N.fillRect(u,v,.3,.45);N.fillStyle=rgbA(P.wallTrim,1,.8);N.fillRect(u+.135,v,.03,.45)}break}
-    case'door':{if(f.key!=='py'&&f.key!=='px'){drawPattern('windows',b,f,W,H,c);break}const dw=Math.min(.6,W*.5),dh=Math.min(1.05,H*.8);N.fillStyle=rgbA(P.wallTrim);N.beginPath();arch(W/2,0,dw+.12,dh+.08);N.fill();N.fillStyle=rgbA(mix(P.coral,[120,70,90],.35));N.beginPath();arch(W/2,0,dw,dh);N.fill();N.fillStyle=rgbA(P.gold);N.fillRect(W/2+dw*.25,dh*.42,.06,.06);break}
-    case'bricks':{N.fillStyle=dark;for(let v=0,row=0;v<H;v+=.18,row++){N.fillRect(0,v,W,.025);for(let u=(row%2)*.2;u<W;u+=.4)N.fillRect(u,v,.025,.18)}break}
-    case'stripes':{N.fillStyle=lite;for(let u=0;u<W;u+=.4)N.fillRect(u,0,.2,H);break}
-    case'planks':{N.fillStyle=dark;for(let v=.2;v<H;v+=.2)N.fillRect(0,v,W,.025);break}
-    case'tiles':{N.fillStyle=dark;for(let v=0;v<H;v+=.25)N.fillRect(0,v,W,.02);for(let u=0;u<W;u+=.25)N.fillRect(u,0,.02,H);break}
-    case'glass':{N.fillStyle=rgb(mix(c,[190,220,245],.6));N.fillRect(.04,.04,W-.08,H-.08);N.strokeStyle='rgba(255,255,255,0.6)';N.lineWidth=.05;N.beginPath();N.moveTo(W*.2,H*.2);N.lineTo(W*.45,H*.75);N.stroke();break}
-    case'water':{N.fillStyle=rgbA(mix(P.water,[60,80,140],nightK*.3));N.fillRect(.06,.06,W-.12,H-.12);N.strokeStyle=rgbA([226,244,252],1,.7);N.lineWidth=.035;for(let k=0;k<3;k++){const ph=(S.time*.4+k/3)%1;N.globalAlpha=1-ph;N.beginPath();N.ellipse(W/2,H/2,(.1+ph*.4)*W/1.2,(.1+ph*.4)*H/1.2,0,0,2*Math.PI);N.stroke()}N.globalAlpha=1;break}
-    case'grass':{N.fillStyle=rgbA(P.grass);N.fillRect(0,0,W,H);N.fillStyle=rgbA([150,200,140]);for(let k=0;k<W*H*12;k++){N.beginPath();N.arc(hash(k*1.3+b.id)*W,hash(k*2.1+b.id)*H,.05,0,2*Math.PI);N.fill()}break}
-    case'dots':{N.fillStyle=lite;for(let v=.2;v<H;v+=.35)for(let u=.2+((v*10|0)%2)*.17;u<W;u+=.35){N.beginPath();N.arc(u,v,.07,0,2*Math.PI);N.fill()}break}
-    case'roof':{N.fillStyle=dark;for(let u=.2;u<W;u+=.35)N.fillRect(u,0,.04,H);break}
-  }
+// 神の声の建物は、町の建物と同じ設計図の形式（09-builder.js）で作る。Claude の返す設計図は信用せず、sanitizeSpec で必ず整える。
+const MAX_GEN=24;
+const genBuildings=()=>buildings.filter(b=>!b.fixed);
+const toHex=c=>'#'+c.map(v=>Math.round(clamp(v,0,255)).toString(16).padStart(2,'0')).join('');
+const str=(v,n)=>String(v??'').slice(0,n);
+const num=(v,a,b,fb)=>{const x=Number(v);return isFinite(x)?clamp(x,a,b):fb};
+const int=(v,a,b,fb)=>{const x=Math.round(Number(v));return isFinite(x)?clamp(x,a,b):fb};
+const hexOut=c=>{const v=col(c,null);return v?toHex(v):undefined};
+const cellIn=(c,w,d)=>Array.isArray(c)&&c.length>=2&&[int(c[0],0,w-1,0),int(c[1],0,d-1,0)];
+const GAINS=['fun','energy','social','food','hygiene'];
+
+function sanAct(a,i){
+  if(!a||typeof a!=='object'||!a.label_en)return null;
+  const g={};GAINS.forEach(k=>{const v=Number(a.gain&&a.gain[k]);if(isFinite(v)&&v)g[k]=clamp(v,-.3,.8)});if(!Object.keys(g).length)g.fun=.3;
+  const key=/^[a-z0-9_]{1,20}$/.test(String(a.key||''))?a.key:'a'+i;
+  const h=Array.isArray(a.hours)&&a.hours.length===2?[num(a.hours[0],0,24,0),num(a.hours[1],0,24,24)]:null;
+  return{key,label_en:str(a.label_en,60),label_ja:str(a.label_ja||a.label_en,40),use_en:str(a.use_en||a.label_en,60),use_ja:str(a.use_ja||a.label_ja||a.label_en,40),
+    phrase_en:str(a.phrase_en,90),phrase_ja:str(a.phrase_ja,60),gain:g,hours:h&&!(h[0]===0&&h[1]===24)?h:null,who:['kid','adult'].includes(a.who)?a.who:'all'};
 }
-// convex shapes as faces
-function polyFaces(shape,lo,hi,axis){
-  const[x0,y0,z0]=lo,[x1,y1,z1]=hi,cx=(x0+x1)/2,cy=(y0+y1)/2,F=[];
-  if(shape==='prism'){
-    const ax=axis==='y'?'y':axis==='x'?'x':(x1-x0>=y1-y0?'x':'y');
-    if(ax==='x'){F.push([[x0,y0,z0],[x1,y0,z0],[x1,cy,z1],[x0,cy,z1]],[[x1,y1,z0],[x0,y1,z0],[x0,cy,z1],[x1,cy,z1]],[[x0,y1,z0],[x0,y0,z0],[x0,cy,z1]],[[x1,y0,z0],[x1,y1,z0],[x1,cy,z1]])}
-    else{F.push([[x1,y0,z0],[x1,y1,z0],[cx,y1,z1],[cx,y0,z1]],[[x0,y1,z0],[x0,y0,z0],[cx,y0,z1],[cx,y1,z1]],[[x0,y0,z0],[x1,y0,z0],[cx,y0,z1]],[[x1,y1,z0],[x0,y1,z0],[cx,y1,z1]])}
-  }else{
-    const n=12,rx=(x1-x0)/2,ry=(y1-y0)/2,ring=z=>Array.from({length:n},(_,i)=>{const a=i/n*Math.PI*2;return[cx+Math.cos(a)*rx,cy+Math.sin(a)*ry,z]});
-    const b=ring(z0);
-    if(shape==='cone'){for(let i=0;i<n;i++)F.push([b[i],b[(i+1)%n],[cx,cy,z1]])}
-    else{const t=ring(z1);for(let i=0;i<n;i++)F.push([b[i],b[(i+1)%n],t[(i+1)%n],t[i]]);F.push(t.slice())}
-  }
-  const c=[cx,cy,(z0+z1)/2];
-  return F.map(pts=>{let n=norm(cross([pts[1][0]-pts[0][0],pts[1][1]-pts[0][1],pts[1][2]-pts[0][2]],[pts[2][0]-pts[0][0],pts[2][1]-pts[0][1],pts[2][2]-pts[0][2]]));
-    const m=pts.reduce((a,p)=>[a[0]+p[0]/pts.length,a[1]+p[1]/pts.length,a[2]+p[2]/pts.length],[0,0,0]);if(dot(n,[m[0]-c[0],m[1]-c[1],m[2]-c[2]])<0){n=n.map(v=>-v);pts=pts.slice().reverse()}return{pts,n}});
-}
-function drawPoly(p){
-  const k=p.st.k;amb=ambOut;
-  for(const f of p.faces){if(dot(f.n,cam.d)<=.001)continue;const top=f.n[2]>.7;let col=top?p.top:p.col;if(top){snowOn=true;col=snowy(col);snowOn=false}
-    const c=rgb(shade(col,f.n));N.fillStyle=c;N.strokeStyle=c;N.lineWidth=.8;N.beginPath();f.pts.forEach((q,i)=>{const s=project([q[0],q[1],q[2]*k]);i?N.lineTo(s[0],s[1]):N.moveTo(s[0],s[1])});N.closePath();N.fill();N.stroke();
-    if(p.pattern==='roof'&&!top&&cam.scale>8){N.strokeStyle=rgb(shade(col,f.n),.85);N.lineWidth=1;const a=f.pts[0],b=f.pts[1],d=f.pts[f.pts.length-1];for(let t=.25;t<1;t+=.25){const s1=project([a[0]+(d[0]-a[0])*t,a[1]+(d[1]-a[1])*t,(a[2]+(d[2]-a[2])*t)*k]),s2=project([b[0]+(f.pts[2][0]-b[0])*t,b[1]+(f.pts[2][1]-b[1])*t,(b[2]+(f.pts[2][2]-b[2])*t)*k]);N.beginPath();N.moveTo(s1[0],s1[1]);N.lineTo(s2[0],s2[1]);N.stroke()}}}
-}
-function prepPoly(p){const k=p.st.k;prepItem(p,p.lo,[p.hi[0],p.hi[1],Math.max(p.lo[2]+.01,p.hi[2]*k)])}
-// validation
-function sanitizeSpec(sp){
-  if(!sp||typeof sp!=='object'||!Array.isArray(sp.parts))return null;
-  const w=clamp(Math.round(Number(sp.footprint&&sp.footprint[0])||2),1,4),d=clamp(Math.round(Number(sp.footprint&&sp.footprint[1])||2),1,4);
-  const parts=[];
-  for(const q of sp.parts.slice(0,60)){if(!q||!Array.isArray(q.from)||!Array.isArray(q.to))continue;
-    const a=q.from.map(Number),b=q.to.map(Number);if(a.length<3||b.length<3||[...a,...b].some(v=>!isFinite(v)))continue;
-    const lo=[clamp(Math.min(a[0],b[0]),0,w),clamp(Math.min(a[1],b[1]),0,d),clamp(Math.min(a[2],b[2]),0,5)],hi=[clamp(Math.max(a[0],b[0]),0,w),clamp(Math.max(a[1],b[1]),0,d),clamp(Math.max(a[2],b[2]),0,5)];
+function sanParts(list,[w,d,zmax],max,lo0=0){
+  const out=[];
+  for(const q of(Array.isArray(list)?list:[]).slice(0,max)){if(!q)continue;const a=(q.from||q.lo),b=(q.to||q.hi);if(!Array.isArray(a)||!Array.isArray(b))continue;
+    const A=a.map(Number),B=b.map(Number);if(A.length<3||B.length<3||[...A,...B].some(v=>!isFinite(v)))continue;
+    const lo=[clamp(Math.min(A[0],B[0]),lo0,w),clamp(Math.min(A[1],B[1]),lo0,d),clamp(Math.min(A[2],B[2]),0,zmax)],hi=[clamp(Math.max(A[0],B[0]),lo0,w),clamp(Math.max(A[1],B[1]),lo0,d),clamp(Math.max(A[2],B[2]),0,zmax)];
     if(hi[0]-lo[0]<.03||hi[1]-lo[1]<.03||hi[2]-lo[2]<.01)continue;
-    const shape=['box','prism','cylinder','cone'].includes(q.shape)?q.shape:'box';
-    parts.push({shape,lo,hi,color:hexC(q.color,[230,200,180]),top:hexC(q.top,null),pattern:PATTERNS.has(q.pattern)?q.pattern:'none',topPattern:PATTERNS.has(q.topPattern)?q.topPattern:'none',axis:q.axis})}
-  if(!parts.length)return null;
-  const s=v=>String(v||'').slice(0,60);
-  let act=null;if(sp.activity&&typeof sp.activity==='object'&&sp.activity.label_en){const a=sp.activity,g={};['fun','energy','social','food','hygiene'].forEach(k=>{const v=Number(a.gain&&a.gain[k]);if(isFinite(v)&&v)g[k]=clamp(v,-.3,.8)});if(!Object.keys(g).length)g.fun=.3;
-    act={label_en:s(a.label_en),label_ja:s(a.label_ja||a.label_en),use_en:s(a.use_en||a.label_en),use_ja:s(a.use_ja||a.label_ja),phrase_en:String(a.phrase_en||'').slice(0,90),phrase_ja:String(a.phrase_ja||'').slice(0,60),gain:g}}
-  return{name_en:s(sp.name_en)||'building',name_ja:s(sp.name_ja)||s(sp.name_en)||'建物',example_en:String(sp.example_en||'').slice(0,100),example_ja:String(sp.example_ja||'').slice(0,70),
-    footprint:[w,d],walkable:!!sp.walkable,near:LANDMARKS[sp.near]?sp.near:'center',parts,activity:act};
+    out.push({shape:['box','prism','cylinder','cone'].includes(q.shape)?q.shape:'box',from:lo,to:hi,color:hexOut(q.color)||'#e6c8b4',top:hexOut(q.top),
+      pattern:PATTERNS.has(q.pattern)?q.pattern:'none',topPattern:PATTERNS.has(q.topPattern)?q.topPattern:'none',axis:q.axis==='x'||q.axis==='y'?q.axis:undefined})}
+  return out;
 }
-// placement
-function canPlace(cx,cy,w,d,walkable){
+// 設計図を検査して、組み立てられる形にそろえる（Claude の返答・保存データの読み込みの両方で使う）
+function sanitizeSpec(sp){
+  if(!sp||typeof sp!=='object')return null;
+  const enterable=!!sp.enterable,fp=Array.isArray(sp.footprint)?sp.footprint:[];
+  const w=int(fp[0],enterable?3:1,enterable?12:6,enterable?5:2),d=int(fp[1],enterable?3:1,enterable?12:6,enterable?4:2);
+  const floors=enterable?int(sp.floors,1,3,1):0,zmax=enterable?floors*WALL_H+3:6;
+  const parts=sanParts(sp.parts,[w,d,zmax],80);
+  if(!enterable&&!parts.length)return null;
+  const acts=(Array.isArray(sp.activities)?sp.activities:[]).slice(0,6).map(sanAct).filter(Boolean);
+  const seenKey=new Set();acts.forEach((a,i)=>{if(seenKey.has(a.key))a.key='a'+i;seenKey.add(a.key)});
+  const out={v:2,name_en:str(sp.name_en,60)||'building',name_ja:str(sp.name_ja,40)||str(sp.name_en,40)||'建物',example_en:str(sp.example_en,100),example_ja:str(sp.example_ja,70),
+    footprint:[w,d],near:LANDMARKS[sp.near]?sp.near:'center',parts};
+  if(acts.length)out.activities=acts;else if(!enterable&&sp.activity){const a=sanAct(sp.activity,0);if(a)out.activity=a}
+  const usable=k=>typeof k==='string'&&(seenKey.has(k)||(ACTS[k]&&!ACTS[k].home&&!ACTS[k].gen));
+  out.uses=(Array.isArray(sp.uses)?sp.uses:[]).slice(0,6).filter(u=>u&&usable(u.act)&&Array.isArray(u.at)).map(u=>({act:u.act,at:u.at.slice(0,8).filter(c=>Array.isArray(c)).map(c=>[int(c[0],-1,w,0),int(c[1],-1,d,0)])}));
+  if(!enterable){out.walkable=!!sp.walkable&&parts.every(q=>q.to[2]<=.12);return out}
+  // ---- enterable building ----
+  const st=sp.style||{};
+  out.enterable=true;out.floors=floors;
+  out.style={wall:hexOut(st.wall)||'#f6d6be',roof:hexOut(st.roof)||'#ec8c84',paper:hexOut(st.paper)||'#faf0e4',curtain:hexOut(st.curtain)||'#eca8a0',door:hexOut(st.door),
+    roofShape:ROOF_SHAPES.includes(st.roofShape)?st.roofShape:'gable'};
+  if(Array.isArray(st.chimney))out.style.chimney=cellIn(st.chimney,w,d);
+  const dside=SIDES.includes(sp.door&&sp.door.side)?sp.door.side:'py',dlen=dside==='px'||dside==='nx'?d:w;
+  out.door={side:dside,at:int(sp.door&&sp.door.at,0,dlen-1,Math.floor((dlen-1)/2))};
+  if(sp.windows&&typeof sp.windows==='object'){out.windows={};for(const s of SIDES)if(Array.isArray(sp.windows[s])){const len=s==='px'||s==='nx'?d:w;out.windows[s]=sp.windows[s].slice(0,8).map(v=>num(v,.5,len-.5,len/2))}}
+  const fl=v=>int(v,0,floors-1,0);
+  out.rooms=(Array.isArray(sp.rooms)?sp.rooms:[]).slice(0,16).map((r,i)=>{const a=cellIn(r.from,w,d)||[0,0],b=cellIn(r.to,w,d)||[w-1,d-1];
+    return{id:'r'+i,name_en:str(r.name_en,40)||'room',name_ja:str(r.name_ja,30)||str(r.name_en,30)||'部屋',floor:fl(r.floor),from:[Math.min(a[0],b[0]),Math.min(a[1],b[1])],to:[Math.max(a[0],b[0]),Math.max(a[1],b[1])],
+      floorStyle:FLOOR_STYLES.includes(r.floorStyle)?r.floorStyle:'wood',color:hexOut(r.color)}});
+  out.partitions=(Array.isArray(sp.partitions)?sp.partitions:[]).slice(0,30).map(p=>{if(!p)return null;
+    if(p.y!=null&&Array.isArray(p.x)){const y=int(p.y,1,d-1,null);if(y==null)return null;const a=num(p.x[0],0,w,0),b=num(p.x[1],0,w,w);return b-a>=.5?{floor:fl(p.floor),y,x:[a,b]}:null}
+    if(p.x!=null&&Array.isArray(p.y)){const x=int(p.x,1,w-1,null);if(x==null)return null;const a=num(p.y[0],0,d,0),b=num(p.y[1],0,d,d);return b-a>=.5?{floor:fl(p.floor),x,y:[a,b]}:null}
+    return null}).filter(Boolean);
+  // reserved cells: door inside, stairs
+  const used=new Set(),ck=(c,lv)=>c[0]+','+c[1]+'@'+lv;
+  const din=dside==='px'?[w-1,out.door.at]:dside==='nx'?[0,out.door.at]:dside==='ny'?[out.door.at,0]:[out.door.at,d-1];used.add(ck(din,0));
+  out.stairs=[];
+  if(floors>1)for(const s of(Array.isArray(sp.stairs)?sp.stairs:[]).slice(0,4)){const at=cellIn(s.at,w,d),dir=SIDES.includes(s.dir)?s.dir:'px',f=int(s.floor,0,floors-2,0);if(!at)continue;
+    const v=FACE_VEC[dir],land=[at[0]+v[0],at[1]+v[1]];if(land[0]<0||land[1]<0||land[0]>=w||land[1]>=d)continue;
+    const keys=[ck(at,f),ck(land,f),ck(at,f+1),ck(land,f+1)];if(keys.some(k=>used.has(k)))continue;keys.forEach(k=>used.add(k));out.stairs.push({at,dir,floor:f})}
+  // 2階以上があるのに階段がなければ、入口から遠い角に置く
+  for(let f=0;f<floors-1;f++)if(!out.stairs.some(s=>s.floor===f)){
+    for(const[at,dir]of[[[w-2,0],'px'],[[0,0],'px'],[[w-2,d-1],'px'],[[0,d-1],'px'],[[w-1,0],'py'],[[0,0],'py']]){const v=FACE_VEC[dir],land=[at[0]+v[0],at[1]+v[1]];if(land[0]>=w||land[1]>=d||at[0]<0)continue;
+      const keys=[ck(at,f),ck(land,f),ck(at,f+1),ck(land,f+1)];if(keys.some(k=>used.has(k)))continue;keys.forEach(k=>used.add(k));out.stairs.push({at,dir,floor:f});break}}
+  out.furniture=[];
+  for(const it of(Array.isArray(sp.furniture)?sp.furniture:[]).slice(0,90)){if(!it||!FURN[it.type])continue;const at=cellIn(it.at,w,d);if(!at)continue;const f=fl(it.floor);if(used.has(ck(at,f)))continue;used.add(ck(at,f));
+    const o={type:it.type,at,floor:f,face:SIDES.includes(it.face)?it.face:'py'};const c=hexOut(it.color);if(c)o.color=c;if(usable(it.use))o.use=it.use;
+    if(it.type==='custom'){o.parts=sanParts(it.parts,[.5,.5,2.4],12,-.5);if(!o.parts.length)continue;o.solid=!!it.solid;if(it.seat)o.seat=num(it.seat,.2,.9,.34);if(it.name_en){o.name_en=str(it.name_en,40);o.name_ja=str(it.name_ja,30)}}
+    out.furniture.push(o)}
+  out.decals=(Array.isArray(sp.decals)?sp.decals:[]).slice(0,12).map(g=>g&&{type:g.type==='mat'?'mat':'rug',floor:fl(g.floor),x:num(g.x,0,w,0),y:num(g.y,0,d,0),w:num(g.w,.2,w,1),h:num(g.h,.2,d,1),color:hexOut(g.color)}).filter(Boolean);
+  return out;
+}
+
+// ---------- placement ----------
+const doorOuter=(spec,x,y)=>{const[w,d]=spec.footprint,dr=spec.door||{side:'py',at:1},v=FACE_VEC[dr.side];
+  const inner=dr.side==='px'?[w-1,dr.at]:dr.side==='nx'?[0,dr.at]:dr.side==='ny'?[dr.at,0]:[dr.at,d-1];return[x+inner[0]+v[0],y+inner[1]+v[1]]};
+function canPlace(spec,cx,cy){
+  const[w,d]=spec.footprint;
   for(let x=cx;x<cx+w;x++)for(let y=cy;y<cy+d;y++){const t=T(x,y);if(!t||t.tag!=='ground'||t.gen)return false}
-  if(walkable)return true;
+  if(!spec.enterable&&spec.walkable)return true;
   const cells=new Set();for(let x=cx;x<cx+w;x++)for(let y=cy;y<cy+d;y++)cells.add(key(x,y));
-  const start=T(...houses.A.door[1]);if(!start||cells.has(key(...houses.A.door[1])))return false;
+  const start=townOrigin();if(!start||cells.has(key(start.pos[0],start.pos[1])))return false;
   const reach=skip=>{const seen=new Set([start]),q=[start];while(q.length){const o=q.shift();for(const l of o.links){const t=l.to;if(t.tag!=='ground'||seen.has(t)||(skip&&skip.has(key(t.pos[0],t.pos[1]))))continue;seen.add(t);q.push(t)}}return seen};
   const before=reach(null);let lost=0;before.forEach(t=>{if(cells.has(key(t.pos[0],t.pos[1])))lost++});
-  return reach(cells).size===before.size-lost;
+  const after=reach(cells);if(after.size!==before.size-lost)return false;
+  if(spec.enterable){const dc=doorOuter(spec,cx,cy),t=T(...dc);if(!t||t.tag!=='ground'||cells.has(key(...dc))||!after.has(t))return false}
+  return true;
 }
 function findSpot(spec){
   const[w,d]=spec.footprint,tgt=LANDMARKS[spec.near]||LANDMARKS.center,c=[];
   for(let x=0;x<=MW-w;x++)for(let y=0;y<=MH-d;y++){let pen=0;for(let i=x;i<x+w;i++)for(let j=y;j<y+d;j++){const k=key(i,j);if(pathSet.has(k)||plazaSet.has(k))pen+=spec.walkable?0:2.5}
     c.push({x,y,s:Math.hypot(x+(w-1)/2-tgt[0],y+(d-1)/2-tgt[1])+pen})}
   c.sort((a,b)=>a.s-b.s);
-  for(const k of c.slice(0,160))if(canPlace(k.x,k.y,w,d,spec.walkable))return k;
+  for(const k of c.slice(0,400))if(canPlace(spec,k.x,k.y))return k;
   return null;
 }
-function relink(t){t.links=[];for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const o=T(t.pos[0]+dx,t.pos[1]+dy);if(!o)continue;const dz=o.pos[2]-t.pos[2];if(Math.abs(dz)>.55||!edgeOK(t,o)||(t.stop&&o.stop))continue;t.links.push({to:o,dir:[dx,dy],dz})}}
-function removeTileRefs(t){
-  const gi=ground.indexOf(t);if(gi>=0)ground.splice(gi,1);
-  for(const k in SPOTS){const a=SPOTS[k],i=a.indexOf(t);if(i>=0)a.splice(i,1)}
-  if(typeof SPOTREG!=='undefined')SPOTREG.delete(t);
+function moveOff(o,cells,to){const inside=t=>t&&cells.has(key(t.pos[0],t.pos[1]));if(!inside(o.tile)&&!(o.link&&inside(o.link.to)))return;
+  const nb=to||ground.find(g=>!cells.has(key(g.pos[0],g.pos[1]))&&Math.abs(g.pos[0]-o.tile.pos[0])+Math.abs(g.pos[1]-o.tile.pos[1])<=3)||ground[0];
+  if(o.act)finishAct(o,true);o.link=null;o.tile=nb;if(o.player&&o.ppos)o.ppos=[nb.pos[0],nb.pos[1]];o.path=[];o.goal=null;o.target=null;o.act=null;o.wait=0}
+const pathBroken=o=>o.path.length&&o.path.some(t=>T(t.pos[0],t.pos[1],t.level)!==t);
+function placeBuilding(spec,pos,id,animate){
+  const solidLot=spec.enterable||!spec.walkable,cells=new Set();
+  for(const[x,y]of footCells(spec,pos))cells.add(key(x,y));
+  if(solidLot){walkers.forEach(o=>moveOff(o,cells));for(const[x,y]of footCells(spec,pos)){const t=T(x,y);if(t)dropTile(t)}}
+  const bld=buildBuilding(spec,pos,{id,animate});
+  if(id){const n=Number(String(id).slice(1));if(n>=bldSeq)bldSeq=n+1}
+  if(!solidLot)bld.cells.forEach(([x,y])=>{const t=T(x,y);if(t)t.gen=bld.id});
+  relinkAround(bld.cells.concat(bld.door?[bld.door[1]]:[]));
+  walkers.forEach(o=>{if(pathBroken(o)){o.path=[];o.goal=null;o.target=null}});
+  buildings.forEach(refreshExtSpots);
+  if(typeof addStructGL==='function'&&gl)addStructGL(bld);
+  updateFloorBtn();
+  return bld;
 }
-function placeStructure(spec,pos,id,animate){
-  const st={id:id||('b'+(structSeq++)),spec,cx:pos.x,cy:pos.y,k:animate?0:1,boxes:[],polys:[],cells:[]};
-  const ox=pos.x-.5,oy=pos.y-.5;
-  for(const q of spec.parts){
-    const lo=[q.lo[0]+ox,q.lo[1]+oy,q.lo[2]],hi=[q.hi[0]+ox,q.hi[1]+oy,q.hi[2]];
-    if(q.shape==='box'){const deco={};if(q.pattern!=='none')['px','py','nx','ny'].forEach(k=>deco[k]='gen');if(q.topPattern!=='none')deco.top='genTop';
-      const b=box(lo,hi,{side:q.color,top:q.top||mix(q.color,[255,255,255],.15),deco,genSide:q.pattern,genTop:q.topPattern,sid:st.id,st});st.boxes.push(b)}
-    else{const p={kind:'poly',faces:polyFaces(q.shape,lo,hi,q.axis),lo,hi,col:q.color,top:q.top||q.color,pattern:q.pattern,st,sid:st.id};st.polys.push(p);genPolys.push(p)}
-  }
-  const[w,d]=spec.footprint;
-  for(let x=pos.x;x<pos.x+w;x++)for(let y=pos.y;y<pos.y+d;y++){const t=T(x,y);if(!t)continue;st.cells.push([x,y]);
-    if(spec.walkable){t.gen=st.id;continue}
-    walkers.forEach(o=>{if(o.tile===t||(o.link&&o.link.to===t)){const nb=ground.find(g=>g!==t&&Math.abs(g.pos[0]-x)+Math.abs(g.pos[1]-y)<=2&&!(g.pos[0]>=pos.x&&g.pos[0]<pos.x+w&&g.pos[1]>=pos.y&&g.pos[1]<pos.y+d))||ground[0];o.link=null;o.tile=nb;if(o.player&&o.ppos)o.ppos=[nb.pos[0],nb.pos[1]];o.path=[];o.goal=null;o.target=null}});
-    removeTileRefs(t);tileAt.delete(key(x,y));
-    for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const o=T(x+dx,y+dy);if(o)o.links=o.links.filter(l=>l.to!==t)}}
-  walkers.forEach(o=>{if(o.path.length&&o.path.some(t=>!tileAt.has(key(t.pos[0],t.pos[1]))||T(t.pos[0],t.pos[1])!==t)){o.path=[];o.goal=null;o.target=null}});
-  // activity
-  if(spec.activity){const a=spec.activity,aid='g_'+st.id;st.actId=aid;
-    ACTS[aid]={label:J(a.label_ja,a.label_en),glyph:'♪',dur:[.6,1.3],gain:a.gain,created:clock.sim,gen:true,phrase:()=>a.phrase_en?J(a.phrase_ja||a.phrase_en,a.phrase_en):null};
-    ACT_IDS.push(aid);if(typeof USE_T!=='undefined')USE_T[aid]=J(a.use_ja,a.use_en);
-    refreshGenSpots(st)}
-  const top=Math.max(...spec.parts.map(q=>q.hi[2]));
-  st.vocab={word:spec.name_en,ja:spec.name_ja,ex:spec.example_en||`This is a ${spec.name_en}.`,exja:spec.example_ja||`これは${spec.name_ja}です。`,pos:[pos.x+w/2-.5,pos.y+d/2-.5,top+.15],sid:st.id};VOCAB.push(st.vocab);
-  structures.push(st);
-  if(typeof addStructGL==='function'&&gl)addStructGL(st);
-  return st;
+const footCells=(spec,pos)=>{const out=[];for(let x=0;x<spec.footprint[0];x++)for(let y=0;y<spec.footprint[1];y++)out.push([pos.x+x,pos.y+y]);return out};
+function removeBuilding(id){
+  const bld=bldById(id);if(!bld||bld.fixed)return null;
+  buildings.splice(buildings.indexOf(bld),1);
+  for(const b of bld.boxes){const k=boxes.indexOf(b);if(k>=0)boxes.splice(k,1)}
+  for(const p of bld.polys){const k=polys.indexOf(p);if(k>=0)polys.splice(k,1)}
+  for(const v of bld.vocab){const k=VOCAB.indexOf(v);if(k>=0)VOCAB.splice(k,1)}
+  for(const aid of bld.acts){walkers.forEach(o=>{if(o.act&&o.act.id===aid){o.act=null;o.wait=0}if(o.goal&&o.goal.id===aid){o.goal=null;o.path=[];o.target=null}});
+    (SPOTS[aid]||[]).slice().forEach(t=>dropSpot(aid,t));delete SPOTS[aid];delete ACTS[aid];const ai=ACT_IDS.indexOf(aid);if(ai>=0)ACT_IDS.splice(ai,1)}
+  for(const t of bld.extSpotTiles||[])for(const u of bld.extUses)dropSpot(u.aid,t);
+  const cells=new Set(bld.cells.map(([x,y])=>key(x,y))),out=bld.door&&T(...bld.door[1]);
+  walkers.forEach(o=>{if(o.tile.bld===bld||(o.link&&o.link.to.bld===bld)){const t=out||ground[0];if(o.act)finishAct(o,true);o.link=null;o.tile=t;if(o.player&&o.ppos)o.ppos=[t.pos[0],t.pos[1]];o.path=[];o.goal=null;o.target=null;o.act=null;o.wait=0}});
+  bld.tiles.forEach(dropTile);
+  if(bld.enterable||!bld.spec.walkable)for(const[x,y]of bld.cells){if(!T(x,y))ground.push(tile(x,y,0,{tag:'ground'}))}
+  else bld.cells.forEach(([x,y])=>{const t=T(x,y);if(t)delete t.gen});
+  relinkAround(bld.cells);
+  walkers.forEach(o=>{if(pathBroken(o)){o.path=[];o.goal=null;o.target=null}});
+  buildings.forEach(refreshExtSpots);
+  if(typeof removeStructGL==='function'&&gl)removeStructGL(bld.id);
+  updateFloorBtn();saveBuilds();return bld;
 }
-function refreshGenSpots(st){
-  if(!st.actId)return;const[w,d]=st.spec.footprint,out=new Set();
-  if(st.spec.walkable){st.cells.forEach(([x,y])=>{const t=T(x,y);if(t)out.add(t)})}
-  else for(let x=st.cx-1;x<=st.cx+w;x++)for(let y=st.cy-1;y<=st.cy+d;y++){const inside=x>=st.cx&&x<st.cx+w&&y>=st.cy&&y<st.cy+d;if(inside)continue;const edge=(x>=st.cx&&x<st.cx+w)||(y>=st.cy&&y<st.cy+d);if(!edge)continue;const t=T(x,y);if(t&&t.tag==='ground')out.add(t)}
-  SPOTS[st.actId]=[...out];if(typeof regSpot==='function')SPOTS[st.actId].forEach(t=>regSpot(t,[st.actId]));
-}
-function removeStructure(id){
-  const i=structures.findIndex(s=>s.id===id);if(i<0)return null;const st=structures[i];structures.splice(i,1);
-  for(const b of st.boxes){const k=boxes.indexOf(b);if(k>=0)boxes.splice(k,1)}
-  for(const p of st.polys){const k=genPolys.indexOf(p);if(k>=0)genPolys.splice(k,1)}
-  const vi=VOCAB.indexOf(st.vocab);if(vi>=0)VOCAB.splice(vi,1);
-  if(st.actId){walkers.forEach(o=>{if(o.act&&o.act.id===st.actId){o.act=null;o.wait=0}if(o.goal&&o.goal.id===st.actId){o.goal=null;o.path=[];o.target=null}});
-    delete ACTS[st.actId];const ai=ACT_IDS.indexOf(st.actId);if(ai>=0)ACT_IDS.splice(ai,1);(SPOTS[st.actId]||[]).forEach(t=>{const s=SPOTREG&&SPOTREG.get(t);if(s){s.delete(st.actId);if(!s.size)SPOTREG.delete(t)}});delete SPOTS[st.actId]}
-  if(!st.spec.walkable)for(const[x,y]of st.cells){const t=tile(x,y,0,{tag:'ground'});ground.push(t);relink(t);for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const o=T(x+dx,y+dy);if(o&&o!==t)relink(o)}}
-  else st.cells.forEach(([x,y])=>{const t=T(x,y);if(t)delete t.gen});
-  structures.forEach(refreshGenSpots);
-  if(typeof removeStructGL==='function'&&gl)removeStructGL(st.id);
-  saveBuilds();return st;
-}
-function saveBuilds(){try{localStorage.setItem('hakoniwa-builds',JSON.stringify(structures.map(s=>({id:s.id,spec:s.spec,x:s.cx,y:s.cy,by:s.by,wish:s.wish}))))}catch(e){}}
+function saveBuilds(){try{localStorage.setItem('hakoniwa-builds',JSON.stringify(genBuildings().map(s=>({id:s.id,spec:s.spec,x:s.cx,y:s.cy,by:s.by,wish:s.wish}))))}catch(e){}}
 function loadBuilds(){try{const a=JSON.parse(localStorage.getItem('hakoniwa-builds')||'[]');if(!Array.isArray(a))return;
-  for(const r of a.slice(0,24)){const sp=r&&r.spec&&sanitizeSpec({...r.spec,parts:r.spec.parts.map(q=>({...q,from:q.lo,to:q.hi,color:toHex(q.color),top:q.top?toHex(q.top):null}))});if(!sp)continue;
-    if(!canPlace(r.x,r.y,sp.footprint[0],sp.footprint[1],sp.walkable))continue;const n=Number(String(r.id).slice(1));if(n>=structSeq)structSeq=n+1;{const st=placeStructure(sp,{x:r.x,y:r.y},r.id,false);if(r.by){st.by=String(r.by).slice(0,20);st.wish=String(r.wish||'').slice(0,80)}}}}catch(e){}}
-const toHex=c=>'#'+c.map(v=>Math.round(clamp(v,0,255)).toString(16).padStart(2,'0')).join('');
-function structSummary(){return structures.length?structures.map(s=>`${s.id}: ${s.spec.name_en} (${s.spec.name_ja}) at (${s.cx},${s.cy})`).join('\n'):'(none)'}
+  for(const r of a.slice(0,MAX_GEN)){const sp=r&&sanitizeSpec(r.spec);if(!sp||!canPlace(sp,r.x,r.y))continue;
+    const st=placeBuilding(sp,{x:r.x,y:r.y},String(r.id),false);if(r.by){st.by=String(r.by).slice(0,20);st.wish=String(r.wish||'').slice(0,80)}}}catch(e){}}
+function structSummary(){const g=genBuildings();return g.length?g.map(s=>`${s.id}: ${s.spec.name_en} (${s.spec.name_ja}) at (${s.cx},${s.cy})${s.enterable?`, ${s.floors} floor(s), enterable`:''}`).join('\n'):'(none)'}
 
+// ---------- the design brief for Claude ----------
 function buildPrompt(desc,voice,note,who){
-  return `You design a small 3D structure for a cozy isometric village diorama (pastel, toy-like, like a dollhouse village).
-Request from ${who||'the village god'}: "${voice}"
+  const furn=FURN_TYPES.map(k=>`${k} (${FURN[k].ja})`).join(', ');
+  const pub=ACT_IDS.filter(k=>!ACTS[k].home&&!ACTS[k].gen&&!ACTS[k].random&&k!=='chat').join(', ');
+  return `You design a structure for a cozy isometric town diorama (pastel, toy-like, like a dollhouse town). Anything is possible: a small object, a statue, or a full building people walk into (a school, a shop, a cafe, a library, a department store, a castle...).
+Request from ${who||'the town god'}: "${voice}"
 Design brief: ${desc}${note?`\n${note}`:''}
 
-Scale: 1 unit = one grid cell. A villager is about 1 unit tall. House walls are 1.6 high, a door is about 1.1 high and 0.6 wide, a tree is about 1.6 tall.
-Coordinates are local to the footprint: x from 0 to footprint width, y from 0 to footprint depth, z up from 0 (ground) to at most 5. Front faces face +x and +y.
-Shapes: "box" (axis-aligned), "prism" (gable roof filling its box, ridge along "axis" x or y), "cylinder" (12-sided, inscribed in its box), "cone" (inscribed in its box, apex at the top).
-Patterns for box sides: none, windows, door (door on the front face), bricks, stripes, planks, tiles, glass, water, grass, dots. topPattern for box tops (e.g. water for a pool, grass, tiles). "roof" pattern adds roof lines to prisms.
-Use soft pastel colors that fit a village of peach walls (#f6d6be), coral roofs (#ec8c84), teal (#78aab4), mint (#b2e2ce), cream (#fcf0de), wood (#c69678), lavender stone (#b6a4d6). Bright accents are fine when the request asks for them.
-Build it from 6-45 parts. Parts should touch rather than overlap (stack parts on top of each other, z of one = top of the one below). Make it recognizable and charming.
-"walkable": true only for flat things people walk on (z top ≤ 0.12, like a stage floor or mosaic); otherwise false.
-"near": where to put it, one of: ${Object.keys(LANDMARKS).join(', ')}.
-"activity": what villagers can do there (or null if nothing). gain values are per hour, 0.1-0.6, keys from fun, energy, social, food, hygiene.
+Scale: 1 unit = one grid cell. A person is about 1 unit tall. One storey is ${WALL_H} high, a door is about 1.1 high, a tree is about 1.6 tall.
+The town is ${MW}x${MH} cells, so keep the footprint modest (a big building is 6x5 to 10x8 cells).
 
-Reply with JSON only:
-{"name_en":"fountain","name_ja":"噴水","example_en":"Let's meet at the fountain.","example_ja":"噴水のところで会おう。","footprint":[2,2],"walkable":false,"near":"plaza",
+Two kinds of design:
+A) Object (statue, fountain, playground, tower, sign...): "enterable": false. Built only from "parts".
+B) Building people enter: "enterable": true. Walls, windows, floors, door and roof are made for you. You lay out the inside.
+
+Coordinates:
+- "parts" use continuous local coordinates: x from 0 to footprint width, y from 0 to footprint depth, z up from 0. Front faces face +x and +y.
+- Cells are integers [col,row] from [0,0] to [width-1,depth-1].
+- "partitions" (low inner walls) lie on cell borders: {"floor":0,"x":3,"y":[0,4]} is a wall on the line x=3 from y=0 to y=4; {"floor":0,"y":2,"x":[0,5]} runs along y=2. Leave gaps so every room can be reached from the door.
+Shapes for parts: "box" (axis-aligned), "prism" (gable roof filling its box, ridge along "axis" x or y), "cylinder" (12-sided, inscribed in its box), "cone" (inscribed in its box, apex at the top).
+Patterns for box sides: none, windows, door, bricks, stripes, planks, tiles, glass, water, grass, dots. topPattern for box tops (water, grass, tiles...). "roof" adds roof lines to prisms.
+Colors: soft pastels that fit peach walls (#f6d6be), coral roofs (#ec8c84), teal (#78aab4), mint (#b2e2ce), cream (#fcf0de), wood (#c69678), lavender stone (#b6a4d6). Bright accents are fine when asked for.
+
+For an enterable building:
+- "floors": 1-3. "style": {"wall":"#hex","roof":"#hex","paper":"#hex inner wall","curtain":"#hex","door":"#hex","roofShape":"gable|flat|tiered|none"}.
+- "door": {"side":"py|px|nx|ny","at":cell index along that side}. py = the +y side (front). Keep the cell inside the door free.
+- "rooms": [{"name_en","name_ja","floor":0,"from":[c,r],"to":[c,r],"floorStyle":"wood|tile|carpet|stone","color":"#hex"}] (floor look and room labels).
+- "furniture": [{"type":..., "at":[c,r], "floor":0, "face":"py|px|nx|ny" (the side people use it from), "color":"#hex", "use": activity key}]. One item per cell. Types: ${furn}.
+  "custom" furniture takes "parts" in cell-local coords (x,y from -0.5 to 0.5, z 0-2.4), "solid": true or "seat": 0.34, and "name_en"/"name_ja".
+  Seats (chair, sofa, desk, bench, seat custom) are used by sitting on them; other items are used from the cell in front ("face" side). Leave walking space.
+- "stairs": [{"at":[c,r],"dir":"px","floor":0}] go from cell at on that floor to the next cell along dir on the floor above. Needed for every upper floor.
+- "decals": [{"type":"rug|mat","floor":0,"x":1,"y":1,"w":2,"h":1.5,"color":"#hex"}] in continuous coords.
+- Extra outside "parts" are allowed (signboard, awning, chimney, tower) using the same continuous coords; parts above the roof line show only from outside.
+
+"activities": up to 6 things people do there: [{"key":"study","label_en":"studying in class","label_ja":"授業を受ける","use_en":"Study","use_ja":"勉強する","phrase_en":"Let's open our books.","phrase_ja":"教科書を開こう。","gain":{"fun":0.2,"social":0.3},"hours":[8,15],"who":"all|kid|adult"}].
+gain values are per hour (-0.3 to 0.6) for fun, energy, social, food, hygiene. hours = open hours (omit for always).
+Attach an activity to furniture with "use":"key", or to cells outside an object with "uses":[{"act":"key","at":[[dx,dy],...]}] (cells next to the footprint, e.g. [-1,0] or [width,0]).
+You may also use these existing town activities as "use": ${pub}.
+"walkable": true only for flat objects people walk on (top z <= 0.12). "near": one of ${Object.keys(LANDMARKS).join(', ')}.
+
+Reply with JSON only. Object example:
+{"name_en":"fountain","name_ja":"噴水","example_en":"Let's meet at the fountain.","example_ja":"噴水のところで会おう。","enterable":false,"footprint":[2,2],"near":"plaza",
 "parts":[{"shape":"cylinder","from":[0.1,0.1,0],"to":[1.9,1.9,0.3],"color":"#b6a4d6","top":"#88c2e2","pattern":"bricks","topPattern":"water"},{"shape":"cylinder","from":[0.8,0.8,0.3],"to":[1.2,1.2,1.0],"color":"#fcf0de"}],
-"activity":{"label_en":"resting by the fountain","label_ja":"噴水のそばで休憩","use_en":"Rest by the fountain","use_ja":"噴水のそばで休む","phrase_en":"The water sounds so nice.","phrase_ja":"水の音が気持ちいいね。","gain":{"fun":0.3,"energy":0.2}}}`;
+"activities":[{"key":"rest","label_en":"resting by the fountain","label_ja":"噴水のそばで休憩","use_en":"Rest by the fountain","use_ja":"噴水のそばで休む","phrase_en":"The water sounds so nice.","phrase_ja":"水の音が気持ちいいね。","gain":{"fun":0.3,"energy":0.2}}],
+"uses":[{"act":"rest","at":[[-1,0],[2,1],[0,2]]}]}
+Building example:
+{"name_en":"bakery","name_ja":"パン屋","example_en":"I buy bread at the bakery.","example_ja":"パン屋でパンを買います。","enterable":true,"floors":1,"footprint":[5,4],"near":"plaza",
+"style":{"wall":"#fcf0de","roof":"#c69678","roofShape":"gable"},"door":{"side":"py","at":2},
+"rooms":[{"name_en":"shop","name_ja":"売り場","floor":0,"from":[0,0],"to":[4,3],"floorStyle":"tile","color":"#eee2d0"}],
+"furniture":[{"type":"display","at":[0,0],"face":"py","color":"#f6d6be","use":"buy"},{"type":"display","at":[1,0],"face":"py","use":"buy"},{"type":"register","at":[3,1],"face":"py"},{"type":"table","at":[0,2]},{"type":"chair","at":[1,2],"face":"nx","use":"eat_bread"},{"type":"plant","at":[4,3]}],
+"activities":[{"key":"buy","label_en":"buying bread","label_ja":"パンを買う","use_en":"Buy bread","use_ja":"パンを買う","phrase_en":"This bread smells great!","phrase_ja":"このパン、いいにおい！","gain":{"food":0.4,"fun":0.2},"hours":[7,19]},
+{"key":"eat_bread","label_en":"eating bread","label_ja":"パンを食べる","use_en":"Eat bread","use_ja":"パンを食べる","phrase_en":"So soft and warm.","phrase_ja":"ふわふわであったかい。","gain":{"food":0.6,"social":0.2},"hours":[7,19]}],
+"parts":[{"shape":"box","from":[1.5,3.9,1.2],"to":[3.5,4.05,1.5],"color":"#ec8c84"}]}`;
 }
 function offlineSpec(text){
   const t=text.toLowerCase(),has=(...k)=>k.some(x=>t.includes(x));
-  const C=(h)=>h;
+  if(has('カフェ','喫茶','cafe','coffee','パン','bakery'))return{name_en:'cafe',name_ja:'カフェ',example_en:'Let\'s have tea at the cafe.',example_ja:'カフェでお茶しよう。',enterable:true,floors:1,footprint:[5,4],near:'plaza',
+    style:{wall:'#fcf0de',roof:'#c69678',roofShape:'gable'},door:{side:'py',at:2},rooms:[{name_en:'cafe',name_ja:'カフェ',from:[0,0],to:[4,3],floorStyle:'wood',color:'#e6c8a4'}],
+    furniture:[{type:'counter',at:[0,0],face:'py'},{type:'counter',at:[1,0],face:'py'},{type:'display',at:[2,0],face:'py',color:'#f6d6be'},{type:'table',at:[1,2]},{type:'chair',at:[0,2],face:'px',use:'tea'},{type:'chair',at:[2,2],face:'nx',use:'tea'},
+      {type:'table',at:[4,1]},{type:'chair',at:[4,2],face:'ny',use:'tea'},{type:'plant',at:[4,3]}],
+    activities:[{key:'tea',label_en:'having tea at the cafe',label_ja:'カフェでお茶をする',use_en:'Have some tea',use_ja:'お茶を飲む',phrase_en:'This tea is lovely.',phrase_ja:'このお茶、おいしいね。',gain:{food:.3,social:.4,fun:.2},hours:[8,20]}]};
   if(has('噴水','fountain'))return{name_en:'fountain',name_ja:'噴水',example_en:'Let\'s meet at the fountain.',example_ja:'噴水のところで会おう。',footprint:[2,2],near:'plaza',parts:[{shape:'cylinder',from:[.1,.1,0],to:[1.9,1.9,.3],color:'#b6a4d6',top:'#88c2e2',pattern:'bricks',topPattern:'water'},{shape:'cylinder',from:[.75,.75,.3],to:[1.25,1.25,.9],color:'#fcf0de'},{shape:'cylinder',from:[.5,.5,.9],to:[1.5,1.5,1],color:'#fcf0de',top:'#88c2e2'},{shape:'cone',from:[.85,.85,1],to:[1.15,1.15,1.3],color:'#a8dcf0'}],activity:{label_en:'resting by the fountain',label_ja:'噴水のそばで休憩',use_en:'Rest by the fountain',use_ja:'噴水のそばで休む',phrase_en:'The water sounds so nice.',phrase_ja:'水の音が気持ちいいね。',gain:{fun:.3,energy:.2}}};
-  if(has('塔','タワー','tower'))return{name_en:'tower',name_ja:'塔',example_en:'You can see the whole village from the tower.',example_ja:'塔から村全体が見えるよ。',footprint:[2,2],near:'north',parts:[{shape:'cylinder',from:[.2,.2,0],to:[1.8,1.8,1.4],color:'#f6d6be',pattern:'bricks'},{shape:'cylinder',from:[.3,.3,1.4],to:[1.7,1.7,2.6],color:'#fcf0de',pattern:'windows'},{shape:'cylinder',from:[.15,.15,2.6],to:[1.85,1.85,2.75],color:'#ec8c84'},{shape:'cone',from:[.2,.2,2.75],to:[1.8,1.8,3.8],color:'#ec8c84'}],activity:null};
-  if(has('木','tree'))return{name_en:'big tree',name_ja:'大きな木',example_en:'Let\'s rest under the big tree.',example_ja:'大きな木の下で休もう。',footprint:[1,1],near:'center',parts:[{shape:'cylinder',from:[.4,.4,0],to:[.6,.6,.8],color:'#b98a76'},{shape:'cone',from:[.05,.05,.6],to:[.95,.95,1.6],color:'#8cc795'},{shape:'cone',from:[.15,.15,1.2],to:[.85,.85,2.1],color:'#a9dca8'}],activity:null};
+  if(has('塔','タワー','tower'))return{name_en:'tower',name_ja:'塔',example_en:'You can see the whole village from the tower.',example_ja:'塔から村全体が見えるよ。',footprint:[2,2],near:'north',parts:[{shape:'cylinder',from:[.2,.2,0],to:[1.8,1.8,1.4],color:'#f6d6be',pattern:'bricks'},{shape:'cylinder',from:[.3,.3,1.4],to:[1.7,1.7,2.6],color:'#fcf0de',pattern:'windows'},{shape:'cylinder',from:[.15,.15,2.6],to:[1.85,1.85,2.75],color:'#ec8c84'},{shape:'cone',from:[.2,.2,2.75],to:[1.8,1.8,3.8],color:'#ec8c84'}]};
+  if(has('木','tree'))return{name_en:'big tree',name_ja:'大きな木',example_en:'Let\'s rest under the big tree.',example_ja:'大きな木の下で休もう。',footprint:[1,1],near:'center',parts:[{shape:'cylinder',from:[.4,.4,0],to:[.6,.6,.8],color:'#b98a76'},{shape:'cone',from:[.05,.05,.6],to:[.95,.95,1.6],color:'#8cc795'},{shape:'cone',from:[.15,.15,1.2],to:[.85,.85,2.1],color:'#a9dca8'}]};
   const name=text.replace(/(を|の)?(建てて|作って|置いて|つくって|たてて).*/,'').slice(0,12)||'小屋';
   return{name_en:'little house',name_ja:name,example_en:'Look at the little house!',example_ja:`${name}を見て！`,footprint:[2,2],near:'center',parts:[{shape:'box',from:[.2,.2,0],to:[1.8,1.8,1.1],color:'#f6d6be',pattern:'door'},{shape:'prism',from:[.1,.1,1.1],to:[1.9,1.9,1.8],color:'#ec8c84',pattern:'roof',axis:'x'}],activity:{label_en:'visiting the little house',label_ja:`${name}に遊びに行く`,use_en:'Look around',use_ja:'見てまわる',phrase_en:'What a cute little house!',phrase_ja:'かわいい建物だね！',gain:{fun:.3}}};
 }
@@ -1596,33 +2016,23 @@ async function buildFromVoice(desc,voice){
   if(sample){try{const r=await sample.json(buildPrompt(desc,voice),{modelTier:'default',cache:false});spec=sanitizeSpec(r)}catch(err){const c=err&&err.code;if(c==='not_granted'||c==='sampling_disabled')sample=null;if(c==='rate_limited'){log(J('いまは建てられません。少し待ってからもう一度','Cannot build right now. Try again in a moment.'));return}}}
   if(!spec)spec=sanitizeSpec(offlineSpec(voice));
   if(!spec)return;
-  if(structures.length>=24){log(J('これ以上は建てられません。何か壊してから建ててください','There is no more room. Remove something first.'));return}
+  if(genBuildings().length>=MAX_GEN){log(J('これ以上は建てられません。何か壊してから建ててください','There is no more room. Remove something first.'));return}
   const pos=findSpot(spec);
   if(!pos){log(J(`「${spec.name_ja}」を置ける場所がありませんでした`,`There was no room for the ${spec.name_en}.`));return}
-  const st=placeStructure(spec,pos,null,true);saveBuilds();
+  const st=placeBuilding(spec,pos,null,true);saveBuilds();
   log(J(`${spec.name_ja}ができた！`,`A ${spec.name_en} appeared!`),'god-line');
   const fans=people.filter(w=>!w.player&&!sleepTime(w)).sort(()=>Math.random()-.5).slice(0,3);
   fans.forEach((w,i)=>{say(w,pick([J(`わあ、${spec.name_ja}だ！`,`Wow, a ${spec.name_en}!`),J('すごい！行ってみよう！','Amazing! Let\'s go see it!'),J(`${spec.name_ja}ができたね！`,`Look, a new ${spec.name_en}!`)]),5);
-    if(st.actId&&!w.tile.stop){const p=planAct(w,st.actId);if(p){w.forced=p}}});
+    const aid=st.acts[0];if(aid&&!w.tile.stop){const p=planAct(w,aid);if(p){w.forced=p}}});
   if(!cam.follow&&!fpv.on){cam.tzoom=Math.max(cam.tzoom,1)}
   return st;
 }
-
 // ================= first-person mode (built-in WebGL) =================
-const USE_T={sleep:J('ベッドで寝る','Go to bed'),toilet:J('トイレを使う','Use the toilet'),bath:J('お風呂に入る','Take a bath'),brush:J('歯をみがく','Brush your teeth'),wash:J('顔を洗う','Wash your face'),
-  cook:J('料理する','Cook a meal'),eat:J('ごはんを食べる','Eat a meal'),sit:J('いすに座る','Sit on the chair'),snack:J('飲み物を出す','Get a drink'),dishes:J('お皿を洗う','Do the dishes'),
-  tv:J('テレビを見る','Watch TV'),rest:J('ソファでくつろぐ','Relax on the sofa'),fish:J('釣りをする','Go fishing'),well:J('水をくむ','Get some water'),field:J('畑の手入れ','Work in the field'),
-  flower:J('花に水をやる','Water the flowers'),bench:J('ベンチで休む','Rest on the bench'),stall:J('果物を買う','Buy some fruit'),dance:J('踊る','Dance'),nap:J('昼寝する','Take a nap')};
 const FUI={exit:J('一人称をやめる','Exit'),talk:J('話しかける','Talk'),what:J('これは何？','What\'s this?'),busy:J('使用中です','Someone is using it.'),
   hintDesk:J('WASD/矢印で移動・ドラッグで見回す・Eで行動・Tで話す・Escで戻る','WASD / arrows to move · drag to look · E to act · T to talk · Esc to exit'),
   hintTouch:J('左下のスティックで移動・ドラッグで見回す','Stick to move · drag to look around'),
   noGL:J('この端末では3D表示が使えません','3D view is not available on this device.'),send:J('送る','Send'),
   talkPh:J('英語でも日本語でも話しかけてみよう','Say something in English (or Japanese)'),you:J('あなた','You')};
-const SPOTREG=new Map();
-function regSpot(t,ids){if(!t)return;let s=SPOTREG.get(t);if(!s){s=new Set();SPOTREG.set(t,s)}ids.forEach(i=>s.add(i))}
-for(const id in houses){const sp=houses[id].spots;sp.beds.forEach(t=>regSpot(t,['sleep']));regSpot(sp.toilet[0],['toilet']);regSpot(sp.tub[0],['bath']);regSpot(sp.basin[0],['brush','wash']);
-  regSpot(sp.stove[0],['cook']);regSpot(sp.fridge[0],['snack']);regSpot(sp.sink[0],['dishes']);sp.chairs.forEach(t=>regSpot(t,['eat']));sp.sofa.forEach(t=>regSpot(t,['tv','rest']))}
-['fish','well','field','nap','flower','bench','stall'].forEach(k=>SPOTS[k].forEach(t=>regSpot(t,[k])));SPOTS.plaza.forEach(t=>regSpot(t,['dance']));
 const fpvEl=$('fpv'),fpvHud=$('fpvHud'),fpvActs=$('fpvActs'),fpvSub=$('fpvSub'),fpvNeeds=$('fpvNeeds'),fpvName=$('fpvName'),fpvHint=$('fpvHint'),joy=$('joy'),joyKnob=$('joyKnob'),toastEl=$('toast');
 const coarse=window.matchMedia&&matchMedia('(pointer: coarse)').matches;
 document.body.classList.toggle('coarse',!!coarse);
@@ -1672,23 +2082,33 @@ function bakeFace(it){
   N=pN;amb=pA;
   if(it.tex)upTex(it.tex,cv2);else it.tex=mkTex(cv2);
 }
-function buildWorld(){
-  const groups={out:[],A:[],B:[]},pA=amb;amb=[1,1,1];
-  const FACES6=[...FACES,{n:[0,0,-1],o:0,u:1,v:2,key:'bot'}];
-  for(const b of boxes){if(b.deco.py==='doorleaf'||b.sid)continue;b.cut=false;
+const FACES6=[...FACES,{n:[0,0,-1],o:0,u:1,v:2,key:'bot'}];
+// 箱の面をまとめて GPU に送る。建物の中の面は、その建物の明かりで色を変えるため建物ごとにまとめる
+function bakeBoxesGL(list,sid){
+  const groups={},pA=amb;amb=[1,1,1];
+  for(const b of list){if(Object.values(b.deco).includes('doorleaf'))continue;b.cut=false;const inb=b.bld&&b.bld.enterable;
     for(const f of FACES6){if(f.key==='bot'&&b.lo[2]<.05)continue;
       const o=corner(b.lo,b.hi,f.o),u=corner(b.lo,b.hi,f.u),v=corner(b.lo,b.hi,f.v),r=[u[0]+v[0]-o[0],u[1]+v[1]-o[1],u[2]+v[2]-o[2]];
       const W=Math.hypot(u[0]-o[0],u[1]-o[1],u[2]-o[2]),H=Math.hypot(v[0]-o[0],v[1]-o[1],v[2]-o[2]);if(W<.005||H<.005)continue;
-      const grp=b.house&&(b.indoor||(b.wall&&f.key===b.wall.inner)||f.key==='bot')?b.house.id:'out';
-      const base=f.key==='bot'?(b.exteriorOnly&&b.house?P.cream:b.side):f.key==='top'?b.top:b.side;
+      const grp=inb&&(b.indoor||(b.wall&&f.key===b.wall.inner)||f.key==='bot')?b.bld.id:'out';
+      const base=f.key==='bot'?(b.exteriorOnly&&inb?P.cream:b.side):f.key==='top'?b.top:b.side;
       const c=shade(base,f.key==='bot'?[0,0,1]:f.n);
-      if(b.deco[f.key]){const it={b,f,W,H,base,c,grp,ppu:b.deco.top==='ground'?48:110,dyn:DYN.has(b.deco[f.key])};bakeFace(it);
+      if(b.deco[f.key]){const it={b,f,W,H,base,c,grp,ppu:b.deco.top==='ground'?48:110,dyn:sid?true:DYN.has(b.deco[f.key]),sid};bakeFace(it);
         const arr=[];quad(o,u,v,r,[1,1,1],arr);it.buf=mkBuf(arr);texFaces.push(it)}
-      else quad(o,u,v,r,c.map(x=>clamp(x/255,0,1)),groups[grp]);
+      else quad(o,u,v,r,c.map(x=>clamp(x/255,0,1)),groups[grp]||(groups[grp]=[]));
     }}
-  for(const g in groups)if(groups[g].length)statics.push({buf:mkBuf(groups[g]),n:groups[g].length/8,grp:g});
-  structures.forEach(addStructGL);
+  for(const g in groups)if(groups[g].length)statics.push({buf:mkBuf(groups[g]),n:groups[g].length/8,grp:g,sid});
   amb=pA;
+}
+function bakePolysGL(list,sid){
+  const arr=[];for(const p of list)for(const f of p.faces){const top=f.n[2]>.7,c=shade(top?p.top:p.col,f.n).map(x=>clamp(x/255,0,1));
+    for(let i=1;i<f.pts.length-1;i++)for(const q of[f.pts[0],f.pts[i],f.pts[i+1]])arr.push(q[0],q[1],q[2],0,0,c[0],c[1],c[2])}
+  if(arr.length)statics.push({buf:mkBuf(arr),n:arr.length/8,grp:'out',sid});
+}
+function buildWorld(){
+  bakeBoxesGL(boxes.filter(b=>!b.bld||b.bld.fixed));
+  const pA=amb;amb=[1,1,1];bakePolysGL(polys.filter(p=>p.bld.fixed));amb=pA;
+  genBuildings().forEach(addStructGL);
   // props as billboards
   props.forEach(e=>{if(e.kind==='falls'||e.kind==='pole')return;
     const s=e.kind==='crop'?110:80;let w_=140,h_=180,by=15;
@@ -1788,10 +2208,10 @@ function fpvCands(){
   if(w.kind!=='cat'){let best=null,bs=1e9;
     SPOTREG.forEach((ids,t)=>{const dx=t.pos[0]-p[0],dy=t.pos[1]-p[1],d=Math.hypot(dx,dy);if(d>1.25)return;const face=d>.01?(dx*f[0]+dy*f[1])/d:1;
       let ok=t.stop?(d<.7||(d<1.2&&face>.25)):d<.62;if(!ok)return;const sc=d-face*.3;if(sc<bs){bs=sc;best=t}});
-    if(best){const ids=[...SPOTREG.get(best)].map(id=>id==='eat'&&!(best.house&&best.house.mealReady>clock.sim)?'sit':id).filter(id=>id!=='dance'||clock.sim<weather.festUntil);
+    if(best){const ids=[...SPOTREG.get(best)].map(id=>id==='eat'&&!(best.bld&&best.bld.mealReady>clock.sim)?'sit':id).filter(id=>ACTS[id]&&ACTS[id].use&&(id!=='dance'||clock.sim<weather.festUntil));
       out.acts=ids.slice(0,2).map(id=>({id,tile:best}))}}
   let bn=null,bd=1.8;walkers.forEach(o=>{if(o===w)return;const q=walkerPos(o),dx=q[0]-p[0],dy=q[1]-p[1],d=Math.hypot(dx,dy);if(d>bd)return;const face=d>.01?(dx*f[0]+dy*f[1])/d:1;if(face<.35)return;bd=d;bn=o});out.npc=bn;
-  const inH=w.tile.indoor?w.tile.house:null;let bv=null,bvd=2.3;VOCAB.forEach(v=>{if((v.house||null)!==inH)return;const dx=v.pos[0]-p[0],dy=v.pos[1]-p[1],d=Math.hypot(dx,dy);if(d>bvd)return;const face=d>.01?(dx*f[0]+dy*f[1])/d:1;if(face<.55)return;bvd=d;bv=v});out.word=bv;
+  const inH=w.tile.indoor?w.tile.bld:null;let bv=null,bvd=2.3;VOCAB.forEach(v=>{if((v.bld||null)!==inH||(inH&&(v.level||0)!==w.tile.level))return;const dx=v.pos[0]-p[0],dy=v.pos[1]-p[1],d=Math.hypot(dx,dy);if(d>bvd)return;const face=d>.01?(dx*f[0]+dy*f[1])/d:1;if(face<.55)return;bvd=d;bv=v});out.word=bv;
   return out;
 }
 function fpvDoAct(id,tile){
@@ -1799,9 +2219,9 @@ function fpvDoAct(id,tile){
   if(w.act){finishAct(w,true);afterAct(w)}
   w.returnTile=tile.stop?(w.tile.stop?w.returnTile:w.tile):null;
   w.tile=tile;w.ppos=[tile.pos[0],tile.pos[1]];
-  const a=ACTS[id];startAct(w,{id,dur:a.dur,hs:tile.house||w.house});
+  const a=ACTS[id];startAct(w,{id,dur:a.dur,hs:tile.bld||w.house});
   if(tile.furn&&tile.furn.face){fpv.yaw=Math.atan2(tile.furn.face[1],tile.furn.face[0]);fpv.pitch=id==='sleep'?.55:-.12}
-  else{const t2=SPOTREG.get(tile);if(id==='fish'){const d=[POND.x-tile.pos[0],POND.y-tile.pos[1]];fpv.yaw=Math.atan2(d[1],d[0])}}
+  else{const t2=SPOTREG.get(tile);if(id==='fish'){const pd=nearestPond(tile.pos[0],tile.pos[1]),d=[pd.x-tile.pos[0],pd.y-tile.pos[1]];fpv.yaw=Math.atan2(d[1],d[0])}}
   fpv.sig='';
 }
 function renderActs(c){
@@ -1809,25 +2229,12 @@ function renderActs(c){
   c.acts.forEach((a,i)=>parts.push('a'+a.id+a.tile.id));if(c.npc)parts.push('n'+c.npc.name);if(c.word)parts.push('v'+c.word.word);parts.push(L,w.act?w.act.id:'-');
   const sig=parts.join('|');if(sig===fpv.sig)return;fpv.sig=sig;fpvActs.replaceChildren();
   const mk=(label,key,fn,cls)=>{const b=document.createElement('button');b.type='button';if(cls)b.className=cls;b.textContent=label;if(key&&!coarse){const k=document.createElement('kbd');k.textContent=key;b.append(k)}b.addEventListener('click',fn);fpvActs.append(b);return b};
-  c.acts.forEach((a,i)=>{const active=w.act&&w.act.id===a.id&&w.tile===a.tile;mk(tr(USE_T[a.id]||labelOf(w,a.id)),i===0?'E':'F',()=>{if(active){finishAct(w,true);afterAct(w);fpv.sig=''}else fpvDoAct(a.id,a.tile)},active?'on':'main')});
+  c.acts.forEach((a,i)=>{const active=w.act&&w.act.id===a.id&&w.tile===a.tile;mk(tr(ACTS[a.id].use||labelOf(w,a.id)),i===0?'E':'F',()=>{if(active){finishAct(w,true);afterAct(w);fpv.sig=''}else fpvDoAct(a.id,a.tile)},active?'on':'main')});
   if(c.npc)mk(`${tr(FUI.talk)}: ${nameOf(c.npc)}`,'T',()=>openTalk(c.npc));
   if(c.word)mk(`${tr(FUI.what)} ${L==='en'?c.word.word:c.word.ja}`,'Q',()=>openWord(c.word));
 }
 
-function addStructGL(st){
-  const pA=amb;amb=[1,1,1];const arr=[];
-  const FACES6=[...FACES,{n:[0,0,-1],o:0,u:1,v:2,key:'bot'}];
-  for(const b of st.boxes)for(const f of FACES6){if(f.key==='bot'&&b.lo[2]<.05)continue;
-    const o=corner(b.lo,b.hi,f.o),u=corner(b.lo,b.hi,f.u),v=corner(b.lo,b.hi,f.v),r=[u[0]+v[0]-o[0],u[1]+v[1]-o[1],u[2]+v[2]-o[2]];
-    const W=Math.hypot(u[0]-o[0],u[1]-o[1],u[2]-o[2]),H=Math.hypot(v[0]-o[0],v[1]-o[1],v[2]-o[2]);if(W<.005||H<.005)continue;
-    const base=f.key==='top'?b.top:b.side,c=shade(base,f.key==='bot'?[0,0,1]:f.n);
-    if(b.deco[f.key]){const it={b,f,W,H,base,c,grp:'out',ppu:110,dyn:true,sid:st.id};bakeFace(it);const a2=[];quad(o,u,v,r,[1,1,1],a2);it.buf=mkBuf(a2);texFaces.push(it)}
-    else quad(o,u,v,r,c.map(x=>clamp(x/255,0,1)),arr)}
-  for(const p of st.polys)for(const f of p.faces){const top=f.n[2]>.7,c=shade(top?p.top:p.col,f.n).map(x=>clamp(x/255,0,1));
-    for(let i=1;i<f.pts.length-1;i++)for(const q of[f.pts[0],f.pts[i],f.pts[i+1]])arr.push(q[0],q[1],q[2],0,0,c[0],c[1],c[2])}
-  if(arr.length)statics.push({buf:mkBuf(arr),n:arr.length/8,grp:'out',sid:st.id});
-  amb=pA;
-}
+function addStructGL(st){bakeBoxesGL(st.boxes,st.id);const pA=amb;amb=[1,1,1];bakePolysGL(st.polys,st.id);amb=pA}
 function removeStructGL(id){statics=statics.filter(x=>{if(x.sid===id){gl.deleteBuffer(x.buf);return false}return true});texFaces=texFaces.filter(x=>{if(x.sid===id){gl.deleteBuffer(x.buf);gl.deleteTexture(x.tex);return false}return true})}
 let candT=0,curC={acts:[],npc:null,word:null};
 
@@ -1866,7 +2273,7 @@ function talkPrompt(npc,msg){
   const me=fpv.w,n=npc.needs,hist=talk.turns.filter(t=>!t.wait).slice(-8).map(t=>t.who==='me'?`${me.en}: ${t.text}`:`${npc.en}: ${t.en}`).join('\n');
   return `You are ${npc.en} (${npc.name}), a villager in a cozy village life sim. ${npc.persona.en}${npc.kid?' You are a child.':''}
 You are talking face to face with ${me.en} (${me.name}), another villager, who is controlled by a human learning everyday English.
-Now: day ${clock.day}, ${hhmm(clock.hour)}, weather ${weather.kind}${clock.sim<weather.festUntil?', festival day':''}. You are ${statusOf(npc).en} (${npc.tile.indoor?'at home, in the '+ROOMS[npc.tile.room].en:'outside'}). Mood: ${moodOf(npc)}. Energy ${n.energy.toFixed(1)}, full ${n.food.toFixed(1)}, bladder ${n.bladder.toFixed(1)} (0-1).
+Now: day ${clock.day}, ${hhmm(clock.hour)}, weather ${weather.kind}${clock.sim<weather.festUntil?', festival day':''}. You are ${statusOf(npc).en} (${placeOf(npc)}). Mood: ${moodOf(npc)}. Energy ${n.energy.toFixed(1)}, full ${n.food.toFixed(1)}, bladder ${n.bladder.toFixed(1)} (0-1).
 Recent memories: ${npc.memory.slice(-4).join(' / ')||'nothing special'}
 Conversation so far:
 ${hist}
@@ -1909,11 +2316,11 @@ function fpvFrame(dt){
   const fogC=(w.tile.indoor?mix(pal[1],[40,36,50],.3):mix(pal[1],pal[2],.4)).map(v=>v/255);
   gl.viewport(0,0,glc.width,glc.height);gl.clearColor(fogC[0],fogC[1],fogC[2],1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   gl.useProgram(prog);gl.uniformMatrix4fv(U.uVP,false,VP);gl.uniform3fv(U.uFogC,fogC);gl.uniform2f(U.uFog,14,40);gl.uniform3fv(U.uEye,EYE);gl.uniform1i(U.uTex,0);gl.activeTexture(gl.TEXTURE0);
-  const tint={out:ambOut,A:houseAmb(houses.A),B:houseAmb(houses.B)};
+  const tint={out:ambOut};buildings.forEach(b=>{if(b.enterable)tint[b.id]=houseAmb(b)});
   gl.disable(gl.BLEND);gl.depthMask(true);
-  for(const s of statics){gl.bindBuffer(gl.ARRAY_BUFFER,s.buf);bindAttribs();gl.uniform3fv(U.uTint,tint[s.grp]);gl.bindTexture(gl.TEXTURE_2D,whiteTex);gl.drawArrays(gl.TRIANGLES,0,s.n)}
+  for(const s of statics){gl.bindBuffer(gl.ARRAY_BUFFER,s.buf);bindAttribs();gl.uniform3fv(U.uTint,tint[s.grp]||ambOut);gl.bindTexture(gl.TEXTURE_2D,whiteTex);gl.drawArrays(gl.TRIANGLES,0,s.n)}
   dynT-=dt;const re=dynT<=0;if(re)dynT=.35;
-  for(const it of texFaces){if(re&&it.dyn)bakeFace(it);gl.bindBuffer(gl.ARRAY_BUFFER,it.buf);bindAttribs();gl.uniform3fv(U.uTint,tint[it.grp]);gl.bindTexture(gl.TEXTURE_2D,it.tex);gl.drawArrays(gl.TRIANGLES,0,6)}
+  for(const it of texFaces){if(re&&it.dyn)bakeFace(it);gl.bindBuffer(gl.ARRAY_BUFFER,it.buf);bindAttribs();gl.uniform3fv(U.uTint,tint[it.grp]||ambOut);gl.bindTexture(gl.TEXTURE_2D,it.tex);gl.drawArrays(gl.TRIANGLES,0,6)}
   // billboards (far to near)
   gl.enable(gl.BLEND);
   const bb=[];
@@ -1927,9 +2334,9 @@ function fpvFrame(dt){
   // overlay
   const d=glc.width/S.width,pN=N;N=ovc;ovc.setTransform(1,0,0,1,0,0);ovc.clearRect(0,0,ovl.width,ovl.height);ovc.setTransform(d,0,0,d,0,0);
   labelRects=[];
-  const inH=w.tile.indoor?w.tile.house:null;
+  const inH=w.tile.indoor?w.tile.bld:null;
   if(L==='en'&&showLabels&&curC.word){const v=curC.word,s=toScreen(v.pos);if(s){tag(s[0],s[1],v.word,'obj');labelRects.push({x:s[0],y:s[1],v})}}
-  if(false)VOCAB.forEach(v=>{if((v.house||null)!==inH)return;const dd=Math.hypot(v.pos[0]-EYE[0],v.pos[1]-EYE[1]);if(dd>4.5)return;const s=toScreen(v.pos);if(!s)return;tag(s[0],s[1],v.word,'obj');labelRects.push({x:s[0],y:s[1],v})});
+  if(false)VOCAB.forEach(v=>{if((v.bld||null)!==inH)return;const dd=Math.hypot(v.pos[0]-EYE[0],v.pos[1]-EYE[1]);if(dd>4.5)return;const s=toScreen(v.pos);if(!s)return;tag(s[0],s[1],v.word,'obj');labelRects.push({x:s[0],y:s[1],v})});
   const sayText=o=>L==='en'?(o.say.en||o.say.ja):(o.say.ja||o.say.en);
   for(const o of walkers){if(o===w)continue;const q=walkerPos(o);if(Math.hypot(q[0]-EYE[0],q[1]-EYE[1])>11)continue;const post=o.kind==='person'?postureOf(o):'stand';
     const hh=o.kind==='cat'?.5:post==='lie'?.45:post==='bath'?.45:post==='sit'?.82:(o.kid?.86:1.02);const s=toScreen([q[0],q[1],q[2]+hh]);if(!s)continue;
@@ -2057,12 +2464,12 @@ const SMALLS={
     parts:[{shape:'cylinder',from:[.3,.3,0],to:[.7,.7,.5],color:'#b6a4d6'},{shape:'cylinder',from:[.1,.1,.5],to:[.9,.9,.62],color:'#b6a4d6',top:'#88c2e2',topPattern:'water'}],
     act:{label_en:'watching the birds',label_ja:'小鳥を見る',use_en:'Watch the birds',use_ja:'小鳥を見る',phrase_en:'So cute!',phrase_ja:'かわいい！',gain:{fun:.25,energy:.1}}}
 };
-const growStructs=()=>structures.filter(s=>s.by);
+const growStructs=()=>genBuildings().filter(s=>s.by);
 function smallSpec(k){const d=SMALLS[k];return sanitizeSpec({name_en:d.name_en,name_ja:d.name_ja,example_en:d.ex[0],example_ja:d.ex[1],footprint:d.footprint,near:d.near,parts:d.parts,activity:d.act})}
 function growEvent(){return clock.sim<weather.rainbowUntil?'rainbow':clock.sim<weather.festUntil?'festival':weather.kind==='rain'?'rain':weather.kind==='snow'?'snow':null}
 function offlinePlan(){
   const cand=people.filter(w=>!w.player&&!sleepTime(w));if(!cand.length)return null;const ev=growEvent();
-  const have=new Set(structures.map(s=>s.spec.name_en));let best=null,bs=-1;
+  const have=new Set(genBuildings().map(s=>s.spec.name_en));let best=null,bs=-1;
   for(const w of cand){const n=w.needs;for(const k in SMALLS){if(have.has(SMALLS[k].name_en))continue;let s=Math.random()*.8;
     if(k==='swing')s+=(w.kid?2.5:0)+(w.likes.play||0)+(1-n.fun)*1.2;
     if(k==='lantern')s+=(ev==='festival'?2.2:0)+(clock.hour>16?.6:0);
@@ -2078,7 +2485,7 @@ function offlinePlan(){
 function growPrompt(ev){
   const recent=logs.slice(-8).map(l=>`${l.t} ${l.p.en||tr(l.p)}`).join('\n')||'(quiet)';
   const wishes=people.map(w=>`- ${w.name} (${w.en}): likes ${Object.entries(w.likes).filter(([,v])=>v>.3).map(([k])=>k).join(', ')||'-'}; memories: ${(w.memory||[]).slice(-3).map(m=>m.replace(/^\d\d:\d\d /,'')).join(' / ')||'-'}${grow.wishes[w.name]?`; last wish: ${grow.wishes[w.name].en}`:''}`).join('\n');
-  const made=structures.length?structures.map(s=>`${s.id}: ${s.spec.name_en}${s.by?` (made for ${s.by})`:''}`).join('\n'):'(none)';
+  const made=genBuildings().length?genBuildings().map(s=>`${s.id}: ${s.spec.name_en}${s.by?` (made for ${s.by})`:''}`).join('\n'):'(none)';
   return `You are the gentle spirit of a cozy village diorama. The village grows slowly: small objects appear or change because villagers wish for them or because of what happened. Decide ONE small change right now, or none.
 
 Now: day ${clock.day}, ${hhmm(clock.hour)}, weather ${weather.kind}${ev?`, event: ${ev}`:''}
@@ -2096,10 +2503,8 @@ Rules: Keep changes small and charming (bench, swing, lamp, flower bed, scarecro
 Reply with JSON only:
 {"action":"add|upgrade|none","wisher":"ミノリ","wish_en":"I wish I had a quiet place to read.","wish_ja":"静かに本が読める場所がほしい。","brief":"English design brief: what, style, colors, size in cells (1-2), near which landmark","target":null,"log_en":"Minori's wish came true: a reading bench.","log_ja":"ミノリの願いで読書ベンチができた。"}`;
 }
-function specJSON(sp){return{name_en:sp.name_en,name_ja:sp.name_ja,example_en:sp.example_en,example_ja:sp.example_ja,footprint:sp.footprint,walkable:sp.walkable,near:sp.near,
-  parts:sp.parts.map(q=>({shape:q.shape,from:q.lo.map(v=>+v.toFixed(2)),to:q.hi.map(v=>+v.toFixed(2)),color:toHex(q.color),top:q.top?toHex(q.top):undefined,pattern:q.pattern!=='none'?q.pattern:undefined,topPattern:q.topPattern!=='none'?q.topPattern:undefined,axis:q.axis})),activity:sp.activity}}
 function revisePrompt(st,brief,wish){
-  return buildPrompt(brief,wish,`This is an UPGRADE of an existing structure. Keep the same footprint ${st.spec.footprint.join('x')}, the same general identity and position, and make only a modest, charming change. Current design JSON:\n${JSON.stringify(specJSON(st.spec))}\nReturn the complete revised design in the same JSON format (all parts).`,'a villager');
+  return buildPrompt(brief,wish,`This is an UPGRADE of an existing structure. Keep the same footprint ${st.spec.footprint.join('x')}, the same general identity and position, and make only a modest, charming change. Current design JSON:\n${JSON.stringify(st.spec)}\nReturn the complete revised design in the same JSON format (all parts).`,'a villager');
 }
 async function growthStep(){
   if(grow.busy)return;grow.busy=true;
@@ -2113,21 +2518,22 @@ async function growthStep(){
     grow.wishes[w.name]={ja:wish.ja,en:wish.en,day:clock.day};say(w,wish,7);
     const gen=growStructs().length;
     if(plan.action==='upgrade'){
-      const st=structures.find(s=>s.id===String(plan.target));
+      const st=genBuildings().find(s=>s.id===String(plan.target));
       if(st&&usedAI&&sample){
         let ns=null;try{ns=sanitizeSpec(await sample.json(revisePrompt(st,String(plan.brief||'').slice(0,300),wish.en),{modelTier:'default',cache:false}))}catch(err){}
         if(ns&&ns.footprint[0]===st.spec.footprint[0]&&ns.footprint[1]===st.spec.footprint[1]){
-          const{cx,cy,id,by}=st,oldName=st.spec.name_ja;removeStructure(id);ns.near=st.spec.near;const ns2=placeStructure(ns,{x:cx,y:cy},id,true);ns2.by=by||w.name;ns2.wish=wish.ja;saveBuilds();
+          const{cx,cy,id,by}=st,oldName=st.spec.name_ja;removeBuilding(id);ns.near=st.spec.near;const ns2=placeBuilding(ns,{x:cx,y:cy},id,true);ns2.by=by||w.name;ns2.wish=wish.ja;saveBuilds();
           finishGrowth(w,ns2,J(String(plan.log_ja||`${w.name}の願いで${oldName}が変わった`).slice(0,80),String(plan.log_en||`${w.en}'s wish changed the ${ns.name_en}.`).slice(0,100)),false);return}}
       plan.action='add'}
     if(plan.action==='add'){
-      if(structures.length>=24||gen>=14){grow.lastAt=clock.sim;return}
+      if(genBuildings().length>=MAX_GEN||gen>=14){grow.lastAt=clock.sim;return}
       if(plan.key)spec=smallSpec(plan.key);
       else if(sample&&usedAI){try{spec=sanitizeSpec(await sample.json(buildPrompt(String(plan.brief||'').slice(0,300),wish.en,'Keep it small: footprint at most 2x2 cells and 6-20 parts.','a villager'),{modelTier:'default',cache:false}))}catch(err){}}
       if(!spec){plan=offlinePlan();if(!plan)return;spec=smallSpec(plan.key)}
-      if(spec.footprint[0]>2||spec.footprint[1]>2)spec.footprint=[Math.min(2,spec.footprint[0]),Math.min(2,spec.footprint[1])];
+      if(spec&&(spec.enterable||spec.footprint[0]>2||spec.footprint[1]>2))spec=null;
+      if(!spec){plan=offlinePlan();if(!plan)return;spec=smallSpec(plan.key)}
       const pos=findSpot(spec);if(!pos){grow.lastAt=clock.sim-6*HR;return}
-      const st=placeStructure(spec,pos,null,true);st.by=w.name;st.wish=wish.ja;saveBuilds();
+      const st=placeBuilding(spec,pos,null,true);st.by=w.name;st.wish=wish.ja;saveBuilds();
       finishGrowth(w,st,J(String(plan.log_ja||`${w.name}の願いで${spec.name_ja}ができた`).slice(0,80),String(plan.log_en||`${w.en}'s wish came true: a ${spec.name_en}.`).slice(0,100)),true)}
   }catch(e){}finally{grow.busy=false}
 }
@@ -2135,7 +2541,7 @@ function finishGrowth(w,st,msg,isNew){
   grow.lastAt=clock.sim;grow.log.push({day:clock.day,ja:msg.ja,en:msg.en});if(grow.log.length>40)grow.log.shift();
   log(msg,'god-line');remember(w,'願いがかなった');
   const thanks=pick([J('わあ、ありがとう！','Thank you so much!'),J('うれしい！','I\'m so happy!'),J('ずっとほしかったんだ。','I wanted this for so long.')]);
-  setTimeout(()=>{say(w,thanks,5);if(st.actId&&!w.tile.stop&&!w.player){const p=planAct(w,st.actId);if(p)w.forced=p}},2500);
+  setTimeout(()=>{say(w,thanks,5);if(st.acts[0]&&!w.tile.stop&&!w.player){const p=planAct(w,st.acts[0]);if(p)w.forced=p}},2500);
   people.filter(o=>o!==w&&!o.player&&!sleepTime(o)).sort(()=>Math.random()-.5).slice(0,2).forEach(o=>say(o,J(`${st.spec.name_ja}だ！いいね！`,`A ${st.spec.name_en}! Nice!`),4));
   saveTown(false);renderTown();
 }
@@ -2154,6 +2560,8 @@ const _sv=readSave();if(_sv){restoreTown(_sv)}
 let last=performance.now();
 function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;S.time+=dt;frame(dt);requestAnimationFrame(loop)}
 resize();basis();tickClock();applyLang();if(_sv){log(TUI.resumed)}else log(J('1日目の朝。村の一日がはじまる','Day 1. A new day begins in the village.'));started=true;
-requestAnimationFrame(loop);
+if(TEST)TEST.api={cam,clock,walkers,S,boxes,tiles,buildings,SPOTS,ACTS,sanitizeSpec,findSpot,placeBuilding,removeBuilding,offlineSpec,planAct,setPlan,setViewFloor,bfs,step(n,dt){for(let i=0;i<n;i++){S.time+=dt;frame(dt)}},
+  setView(o){if('interior'in o){interior=o.interior;updateFloorBtn()}if('floor'in o)setViewFloor(o.floor);if('az'in o)cam.az=cam.taz=o.az;if('el'in o)cam.el=cam.tel=o.el;if('zoom'in o)cam.zoom=cam.tzoom=o.zoom;basis()}};
+else requestAnimationFrame(loop);
 })();
 </script>

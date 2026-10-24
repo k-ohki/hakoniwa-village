@@ -13,7 +13,7 @@ const UI={
   hint:J('ドラッグで回転・ホイールで拡大・住人や物をタップ','Drag to rotate · zoom in to see names · tap people and things to learn words'),
   think:J('心の声を聞く','Inner voice'),follow:J('この人を追う','Follow'),listening:J('耳をすましています…','Listening…'),
   roofOn:J('外観を見る','Show roofs'),roofOff:J('家の中を見る','Show inside'),
-  speed:J('早送り','Speed'),play:J('この人になる（一人称）','Play as this person'),reset:J('視点を戻す','Reset view'),exSay:J('🔊 例文を聞く','🔊 Example')};
+  speed:J('早送り','Speed'),floor:n=>J(`${n}階を表示中`,`Showing floor ${n}`),play:J('この人になる（一人称）','Play as this person'),reset:J('視点を戻す','Reset view'),exSay:J('🔊 例文を聞く','🔊 Example')};
 const MOOD_T={happy:J('ごきげん','happy'),excited:J('わくわく','excited'),calm:J('おだやか','calm'),sad:J('しょんぼり','sad'),scared:J('こわがり中','scared'),angry:J('ぷんぷん','angry'),tired:J('くたくた','tired')};
 const WX_T={clear:J('晴れ','Sunny'),rain:J('雨','Rainy'),snow:J('雪','Snowy')};
 const NEED_T={energy:[J('元気','Energy'),'#7fc7a0'],food:[J('満腹','Full'),'#a0b8e8'],social:[J('交流','Social'),'#e8a0b0'],fun:[J('楽しさ','Fun'),'#f0c070'],bladder:[J('トイレ','Bladder'),'#c9b3e8'],hygiene:[J('清潔','Clean'),'#8fd3e0']};

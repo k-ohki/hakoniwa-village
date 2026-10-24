@@ -77,12 +77,12 @@ const SMALLS={
     parts:[{shape:'cylinder',from:[.3,.3,0],to:[.7,.7,.5],color:'#b6a4d6'},{shape:'cylinder',from:[.1,.1,.5],to:[.9,.9,.62],color:'#b6a4d6',top:'#88c2e2',topPattern:'water'}],
     act:{label_en:'watching the birds',label_ja:'小鳥を見る',use_en:'Watch the birds',use_ja:'小鳥を見る',phrase_en:'So cute!',phrase_ja:'かわいい！',gain:{fun:.25,energy:.1}}}
 };
-const growStructs=()=>structures.filter(s=>s.by);
+const growStructs=()=>genBuildings().filter(s=>s.by);
 function smallSpec(k){const d=SMALLS[k];return sanitizeSpec({name_en:d.name_en,name_ja:d.name_ja,example_en:d.ex[0],example_ja:d.ex[1],footprint:d.footprint,near:d.near,parts:d.parts,activity:d.act})}
 function growEvent(){return clock.sim<weather.rainbowUntil?'rainbow':clock.sim<weather.festUntil?'festival':weather.kind==='rain'?'rain':weather.kind==='snow'?'snow':null}
 function offlinePlan(){
   const cand=people.filter(w=>!w.player&&!sleepTime(w));if(!cand.length)return null;const ev=growEvent();
-  const have=new Set(structures.map(s=>s.spec.name_en));let best=null,bs=-1;
+  const have=new Set(genBuildings().map(s=>s.spec.name_en));let best=null,bs=-1;
   for(const w of cand){const n=w.needs;for(const k in SMALLS){if(have.has(SMALLS[k].name_en))continue;let s=Math.random()*.8;
     if(k==='swing')s+=(w.kid?2.5:0)+(w.likes.play||0)+(1-n.fun)*1.2;
     if(k==='lantern')s+=(ev==='festival'?2.2:0)+(clock.hour>16?.6:0);
@@ -98,7 +98,7 @@ function offlinePlan(){
 function growPrompt(ev){
   const recent=logs.slice(-8).map(l=>`${l.t} ${l.p.en||tr(l.p)}`).join('\n')||'(quiet)';
   const wishes=people.map(w=>`- ${w.name} (${w.en}): likes ${Object.entries(w.likes).filter(([,v])=>v>.3).map(([k])=>k).join(', ')||'-'}; memories: ${(w.memory||[]).slice(-3).map(m=>m.replace(/^\d\d:\d\d /,'')).join(' / ')||'-'}${grow.wishes[w.name]?`; last wish: ${grow.wishes[w.name].en}`:''}`).join('\n');
-  const made=structures.length?structures.map(s=>`${s.id}: ${s.spec.name_en}${s.by?` (made for ${s.by})`:''}`).join('\n'):'(none)';
+  const made=genBuildings().length?genBuildings().map(s=>`${s.id}: ${s.spec.name_en}${s.by?` (made for ${s.by})`:''}`).join('\n'):'(none)';
   return `You are the gentle spirit of a cozy village diorama. The village grows slowly: small objects appear or change because villagers wish for them or because of what happened. Decide ONE small change right now, or none.
 
 Now: day ${clock.day}, ${hhmm(clock.hour)}, weather ${weather.kind}${ev?`, event: ${ev}`:''}
@@ -116,10 +116,8 @@ Rules: Keep changes small and charming (bench, swing, lamp, flower bed, scarecro
 Reply with JSON only:
 {"action":"add|upgrade|none","wisher":"ミノリ","wish_en":"I wish I had a quiet place to read.","wish_ja":"静かに本が読める場所がほしい。","brief":"English design brief: what, style, colors, size in cells (1-2), near which landmark","target":null,"log_en":"Minori's wish came true: a reading bench.","log_ja":"ミノリの願いで読書ベンチができた。"}`;
 }
-function specJSON(sp){return{name_en:sp.name_en,name_ja:sp.name_ja,example_en:sp.example_en,example_ja:sp.example_ja,footprint:sp.footprint,walkable:sp.walkable,near:sp.near,
-  parts:sp.parts.map(q=>({shape:q.shape,from:q.lo.map(v=>+v.toFixed(2)),to:q.hi.map(v=>+v.toFixed(2)),color:toHex(q.color),top:q.top?toHex(q.top):undefined,pattern:q.pattern!=='none'?q.pattern:undefined,topPattern:q.topPattern!=='none'?q.topPattern:undefined,axis:q.axis})),activity:sp.activity}}
 function revisePrompt(st,brief,wish){
-  return buildPrompt(brief,wish,`This is an UPGRADE of an existing structure. Keep the same footprint ${st.spec.footprint.join('x')}, the same general identity and position, and make only a modest, charming change. Current design JSON:\n${JSON.stringify(specJSON(st.spec))}\nReturn the complete revised design in the same JSON format (all parts).`,'a villager');
+  return buildPrompt(brief,wish,`This is an UPGRADE of an existing structure. Keep the same footprint ${st.spec.footprint.join('x')}, the same general identity and position, and make only a modest, charming change. Current design JSON:\n${JSON.stringify(st.spec)}\nReturn the complete revised design in the same JSON format (all parts).`,'a villager');
 }
 async function growthStep(){
   if(grow.busy)return;grow.busy=true;
@@ -133,21 +131,22 @@ async function growthStep(){
     grow.wishes[w.name]={ja:wish.ja,en:wish.en,day:clock.day};say(w,wish,7);
     const gen=growStructs().length;
     if(plan.action==='upgrade'){
-      const st=structures.find(s=>s.id===String(plan.target));
+      const st=genBuildings().find(s=>s.id===String(plan.target));
       if(st&&usedAI&&sample){
         let ns=null;try{ns=sanitizeSpec(await sample.json(revisePrompt(st,String(plan.brief||'').slice(0,300),wish.en),{modelTier:'default',cache:false}))}catch(err){}
         if(ns&&ns.footprint[0]===st.spec.footprint[0]&&ns.footprint[1]===st.spec.footprint[1]){
-          const{cx,cy,id,by}=st,oldName=st.spec.name_ja;removeStructure(id);ns.near=st.spec.near;const ns2=placeStructure(ns,{x:cx,y:cy},id,true);ns2.by=by||w.name;ns2.wish=wish.ja;saveBuilds();
+          const{cx,cy,id,by}=st,oldName=st.spec.name_ja;removeBuilding(id);ns.near=st.spec.near;const ns2=placeBuilding(ns,{x:cx,y:cy},id,true);ns2.by=by||w.name;ns2.wish=wish.ja;saveBuilds();
           finishGrowth(w,ns2,J(String(plan.log_ja||`${w.name}の願いで${oldName}が変わった`).slice(0,80),String(plan.log_en||`${w.en}'s wish changed the ${ns.name_en}.`).slice(0,100)),false);return}}
       plan.action='add'}
     if(plan.action==='add'){
-      if(structures.length>=24||gen>=14){grow.lastAt=clock.sim;return}
+      if(genBuildings().length>=MAX_GEN||gen>=14){grow.lastAt=clock.sim;return}
       if(plan.key)spec=smallSpec(plan.key);
       else if(sample&&usedAI){try{spec=sanitizeSpec(await sample.json(buildPrompt(String(plan.brief||'').slice(0,300),wish.en,'Keep it small: footprint at most 2x2 cells and 6-20 parts.','a villager'),{modelTier:'default',cache:false}))}catch(err){}}
       if(!spec){plan=offlinePlan();if(!plan)return;spec=smallSpec(plan.key)}
-      if(spec.footprint[0]>2||spec.footprint[1]>2)spec.footprint=[Math.min(2,spec.footprint[0]),Math.min(2,spec.footprint[1])];
+      if(spec&&(spec.enterable||spec.footprint[0]>2||spec.footprint[1]>2))spec=null;
+      if(!spec){plan=offlinePlan();if(!plan)return;spec=smallSpec(plan.key)}
       const pos=findSpot(spec);if(!pos){grow.lastAt=clock.sim-6*HR;return}
-      const st=placeStructure(spec,pos,null,true);st.by=w.name;st.wish=wish.ja;saveBuilds();
+      const st=placeBuilding(spec,pos,null,true);st.by=w.name;st.wish=wish.ja;saveBuilds();
       finishGrowth(w,st,J(String(plan.log_ja||`${w.name}の願いで${spec.name_ja}ができた`).slice(0,80),String(plan.log_en||`${w.en}'s wish came true: a ${spec.name_en}.`).slice(0,100)),true)}
   }catch(e){}finally{grow.busy=false}
 }
@@ -155,7 +154,7 @@ function finishGrowth(w,st,msg,isNew){
   grow.lastAt=clock.sim;grow.log.push({day:clock.day,ja:msg.ja,en:msg.en});if(grow.log.length>40)grow.log.shift();
   log(msg,'god-line');remember(w,'願いがかなった');
   const thanks=pick([J('わあ、ありがとう！','Thank you so much!'),J('うれしい！','I\'m so happy!'),J('ずっとほしかったんだ。','I wanted this for so long.')]);
-  setTimeout(()=>{say(w,thanks,5);if(st.actId&&!w.tile.stop&&!w.player){const p=planAct(w,st.actId);if(p)w.forced=p}},2500);
+  setTimeout(()=>{say(w,thanks,5);if(st.acts[0]&&!w.tile.stop&&!w.player){const p=planAct(w,st.acts[0]);if(p)w.forced=p}},2500);
   people.filter(o=>o!==w&&!o.player&&!sleepTime(o)).sort(()=>Math.random()-.5).slice(0,2).forEach(o=>say(o,J(`${st.spec.name_ja}だ！いいね！`,`A ${st.spec.name_en}! Nice!`),4));
   saveTown(false);renderTown();
 }

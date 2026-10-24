@@ -52,7 +52,7 @@ function updateLight(dt){
   rainbowK=lerp(rainbowK,clock.sim<weather.rainbowUntil?1:0,k*.6);festK=lerp(festK,clock.sim<weather.festUntil?1:0,k*1.5);
   ambOut=mix(mix([.4,.45,.7],[1,1,1],dayK),[1.04,.84,.76],duskK*.6);
   const ov=Math.max(rainK,snowK*.5);ambOut=[ambOut[0]*lerp(1,.76,ov),ambOut[1]*lerp(1,.79,ov),ambOut[2]*lerp(1,.88,ov)];amb=ambOut;
-  for(const id in houses){const hs=houses[id],awake=hs.residents.some(w=>!(w.act&&w.act.id==='sleep'&&!w.link));hs.lights=(nightK>.3||rainK>.5)&&awake;hs.glow=lerp(hs.glow,hs.lights?Math.max(nightK,rainK*.6):0,1-Math.exp(-dt*2));
+  for(const hs of buildings){if(!hs.enterable)continue;const inside=hs.residents.length?hs.residents:walkers.filter(w=>w.tile.bld===hs),awake=inside.some(w=>!(w.act&&w.act.id==='sleep'&&!w.link));hs.lights=(nightK>.3||rainK>.5)&&awake;hs.glow=lerp(hs.glow,hs.lights?Math.max(nightK,rainK*.6):0,1-Math.exp(-dt*2));
     hs.bathing=walkers.some(w=>w.act&&w.act.id==='bath'&&(w.act.hs||w.house)===hs&&!w.link)}
 }
 function updateWeather(sdt){
