@@ -14,9 +14,10 @@ function sanAct(a,i){
   if(!a||typeof a!=='object'||!a.label_en)return null;
   const g={};GAINS.forEach(k=>{const v=Number(a.gain&&a.gain[k]);if(isFinite(v)&&v)g[k]=clamp(v,-.3,.8)});if(!Object.keys(g).length)g.fun=.3;
   const key=/^[a-z0-9_]{1,20}$/.test(String(a.key||''))?a.key:'a'+i;
-  const h=Array.isArray(a.hours)&&a.hours.length===2?[num(a.hours[0],0,24,0),num(a.hours[1],0,24,24)]:null;
+  const rng=r=>Array.isArray(r)&&r.length===2?[num(r[0],0,24,0),num(r[1],0,24,24)]:null;
+  let h=Array.isArray(a.hours)&&Array.isArray(a.hours[0])?a.hours.slice(0,4).map(rng).filter(Boolean):rng(a.hours);if(h&&!h.length)h=null;
   return{key,label_en:str(a.label_en,60),label_ja:str(a.label_ja||a.label_en,40),use_en:str(a.use_en||a.label_en,60),use_ja:str(a.use_ja||a.label_ja||a.label_en,40),
-    phrase_en:str(a.phrase_en,90),phrase_ja:str(a.phrase_ja,60),gain:g,hours:h&&!(h[0]===0&&h[1]===24)?h:null,who:['kid','adult'].includes(a.who)?a.who:'all'};
+    phrase_en:str(a.phrase_en,90),phrase_ja:str(a.phrase_ja,60),gain:g,hours:h&&!(h[0]===0&&h[1]===24)?h:null,who:['kid','adult'].includes(a.who)?a.who:'all',days:a.days==='weekday'?'weekday':null};
 }
 function sanParts(list,[w,d,zmax],max,lo0=0){
   const out=[];
@@ -74,7 +75,7 @@ function sanitizeSpec(sp){
       const keys=[ck(at,f),ck(land,f),ck(at,f+1),ck(land,f+1)];if(keys.some(k=>used.has(k)))continue;keys.forEach(k=>used.add(k));out.stairs.push({at,dir,floor:f});break}}
   out.furniture=[];
   for(const it of(Array.isArray(sp.furniture)?sp.furniture:[]).slice(0,90)){if(!it||!FURN[it.type])continue;const at=cellIn(it.at,w,d);if(!at)continue;const f=fl(it.floor);if(used.has(ck(at,f)))continue;used.add(ck(at,f));
-    const o={type:it.type,at,floor:f,face:SIDES.includes(it.face)?it.face:'py'};const c=hexOut(it.color);if(c)o.color=c;if(usable(it.use))o.use=it.use;
+    const o={type:it.type,at,floor:f,face:SIDES.includes(it.face)?it.face:'py'};const c=hexOut(it.color);if(c)o.color=c;const us=[].concat(it.use||[]).filter(usable).slice(0,3);if(us.length)o.use=us.length===1?us[0]:us;
     if(it.type==='custom'){o.parts=sanParts(it.parts,[.5,.5,2.4],12,-.5);if(!o.parts.length)continue;o.solid=!!it.solid;if(it.seat)o.seat=num(it.seat,.2,.9,.34);if(it.name_en){o.name_en=str(it.name_en,40);o.name_ja=str(it.name_ja,30)}}
     out.furniture.push(o)}
   out.decals=(Array.isArray(sp.decals)?sp.decals:[]).slice(0,12).map(g=>g&&{type:g.type==='mat'?'mat':'rug',floor:fl(g.floor),x:num(g.x,0,w,0),y:num(g.y,0,d,0),w:num(g.w,.2,w,1),h:num(g.h,.2,d,1),color:hexOut(g.color)}).filter(Boolean);
@@ -88,6 +89,8 @@ function canPlace(spec,cx,cy){
   const[w,d]=spec.footprint;
   for(let x=cx;x<cx+w;x++)for(let y=cy;y<cy+d;y++){const t=T(x,y);if(!t||t.tag!=='ground'||t.gen)return false}
   if(!spec.enterable&&spec.walkable)return true;
+  // 道と広場の上には建てない
+  for(let x=cx;x<cx+w;x++)for(let y=cy;y<cy+d;y++){const k=key(x,y);if(pathSet.has(k)||plazaSet.has(k))return false}
   const cells=new Set();for(let x=cx;x<cx+w;x++)for(let y=cy;y<cy+d;y++)cells.add(key(x,y));
   const start=townOrigin();if(!start||cells.has(key(start.pos[0],start.pos[1])))return false;
   const reach=skip=>{const seen=new Set([start]),q=[start];while(q.length){const o=q.shift();for(const l of o.links){const t=l.to;if(t.tag!=='ground'||seen.has(t)||(skip&&skip.has(key(t.pos[0],t.pos[1]))))continue;seen.add(t);q.push(t)}}return seen};
@@ -101,7 +104,7 @@ function findSpot(spec){
   for(let x=0;x<=MW-w;x++)for(let y=0;y<=MH-d;y++){let pen=0;for(let i=x;i<x+w;i++)for(let j=y;j<y+d;j++){const k=key(i,j);if(pathSet.has(k)||plazaSet.has(k))pen+=spec.walkable?0:2.5}
     c.push({x,y,s:Math.hypot(x+(w-1)/2-tgt[0],y+(d-1)/2-tgt[1])+pen})}
   c.sort((a,b)=>a.s-b.s);
-  for(const k of c.slice(0,400))if(canPlace(spec,k.x,k.y))return k;
+  for(const k of c)if(canPlace(spec,k.x,k.y))return k;
   return null;
 }
 function moveOff(o,cells,to){const inside=t=>t&&cells.has(key(t.pos[0],t.pos[1]));if(!inside(o.tile)&&!(o.link&&inside(o.link.to)))return;
@@ -158,7 +161,7 @@ Request from ${who||'the town god'}: "${voice}"
 Design brief: ${desc}${note?`\n${note}`:''}
 
 Scale: 1 unit = one grid cell. A person is about 1 unit tall. One storey is ${WALL_H} high, a door is about 1.1 high, a tree is about 1.6 tall.
-The town is ${MW}x${MH} cells, so keep the footprint modest (a big building is 6x5 to 10x8 cells).
+The town is ${MW}x${MH} cells and mostly built up. Big buildings (6x5 to 7x10 cells) fit only on the vacant land in the east: use "near":"vacant" or "vacantNorth" for them.
 
 Two kinds of design:
 A) Object (statue, fountain, playground, tower, sign...): "enterable": false. Built only from "parts".

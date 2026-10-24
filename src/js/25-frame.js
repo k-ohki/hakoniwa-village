@@ -19,9 +19,13 @@ function frame(dt){
     const post=w.kind==='person'?postureOf(w):'stand';
     if(post==='lie'||post==='bath'){const f=w.tile.furn;prepItem(w.item,[f.lo[0],f.lo[1],z+.001],[f.hi[0],f.hi[1],z+(post==='lie'?.2:.35)])}
     else prepItem(w.item,[e[0]-.04,e[1]-.04,z+.001],[e[0]+.04,e[1]+.04,z+(w.kind==='cat'?.4:.75)]);items.push(w.item)});
+  // 画面の外の箱は描かない
+  const onScreen=t=>t.bb[2]>=-20&&t.bb[0]<=S.width+20&&t.bb[3]>=-20&&t.bb[1]<=S.height+20;
+  for(let i=items.length-1;i>=0;i--)if(!onScreen(items[i]))items.splice(i,1);
   const isBase=t=>t.kind==='box'&&t.whi[2]<=.2&&(t.whi[0]-t.wlo[0])*(t.whi[1]-t.wlo[1])>=2.5;
   const baseI=items.filter(isBase),restI=items.filter(t=>!isBase(t));
-  for(const t of topo(baseI).concat(topo(restI))){if(t.kind==='box')drawBox(t);else if(t.kind==='walker'){t.w.kind==='cat'?drawCat(t.w):drawPerson(t.w)}else if(t.kind==='poly')drawPoly(t);else drawProp(t)}
+  const order=topo(baseI).concat(topo(restI));if(TEST)TEST.order=order;
+  for(const t of order){if(t.kind==='box')drawBox(t);else if(t.kind==='walker'){t.w.kind==='cat'?drawCat(t.w):drawPerson(t.w)}else if(t.kind==='poly')drawPoly(t);else drawProp(t)}
 
   if(interior)for(const hs of buildings){
     if(hs.tvOn&&hs.tvP){const p=project(hs.tvP),r=cam.scale*1.6;const g=N.createRadialGradient(p[0],p[1],0,p[0],p[1],r);const a=.12+.2*nightK;g.addColorStop(0,`rgba(140,190,255,${a+.05*Math.sin(S.time*7)})`);g.addColorStop(1,'rgba(140,190,255,0)');N.fillStyle=g;N.fillRect(p[0]-r,p[1]-r,2*r,2*r)}

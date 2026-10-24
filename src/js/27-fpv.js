@@ -252,7 +252,7 @@ ${me.en}: ${msg}
 
 Reply in character with 1-2 short sentences of natural, simple spoken English (CEFR A2) about everyday life, and give a natural Japanese translation.
 "tip": if ${me.en}'s last message has an English mistake or sounds unnatural, write one short, kind correction in Japanese like 「◯◯ より △△ が自然だよ」. If they wrote in Japanese, show how to say it in English in Japanese, like 「英語では "…" と言えるよ」. Otherwise "".
-"goal": if they invite you to do something together right now and you agree, one of: fish, walk, plaza, stall, bench, field, flower, eat, cook, tv, bath, sleep, play, dance. Otherwise null.
+"goal": if they invite you to do something together right now and you agree, one of: fish, walk, plaza, stall, bench, field, flower, eat, cook, tv, bath, sleep, play, dance, or a town place: ${townGoals()}. Otherwise null.
 Reply with JSON only: {"en":"…","ja":"…","tip":"…","goal":null}`;
 }
 async function sendTalk(text){
@@ -268,7 +268,7 @@ async function sendTalk(text){
   const i=talk.turns.indexOf(wait);const tt={who:'npc',en:String(r.en||'').slice(0,160),ja:String(r.ja||'').slice(0,100)};if(i>=0)talk.turns.splice(i,1);talk.turns.push(tt);
   if(r.tip)talk.turns[talk.turns.length-2]&&(talk.turns.filter(t=>t.who==='me').slice(-1)[0].tip=String(r.tip).slice(0,120));
   talk.busy=false;say(npc,{en:tt.en,ja:tt.ja},6);addPhrase({en:tt.en,ja:tt.ja});renderTalk();
-  if(r.goal&&ACTS[r.goal]&&npc.kind==='person'){npc.wait=0;const p=planAct(npc,r.goal);if(p){npc.directive={goal:r.goal,until:clock.sim+2*HR};npc.forced=p;toast(J(`${npc.name}が「${tr(labelOf(npc,r.goal))}」に向かった`,`${npc.en} is heading off: ${labelOf(npc,r.goal).en}`))}}
+  if(r.goal&&ACTS[r.goal]&&canDo(npc,r.goal)&&npc.kind==='person'){npc.wait=0;const p=planAct(npc,r.goal);if(p){npc.directive={goal:r.goal,until:clock.sim+2*HR};npc.forced=p;toast(J(`${npc.name}が「${tr(labelOf(npc,r.goal))}」に向かった`,`${npc.en} is heading off: ${labelOf(npc,r.goal).en}`))}}
 }
 tForm.addEventListener('submit',e=>{e.preventDefault();sendTalk(tInput.value)});
 tInput.addEventListener('focus',()=>{fpv.typing=true;fpv.keys.clear()});tInput.addEventListener('blur',()=>{fpv.typing=false});

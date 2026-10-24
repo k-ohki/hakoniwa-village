@@ -8,7 +8,7 @@ const TUI={btn:J('町','Town'),title:J('町の保存と歩み','Town: save & his
 let lastSaveAt=0,saveErr=false;
 function snapshot(){
   const n=clock.sim;
-  return{v:1,at:Date.now(),sim:n,
+  return{v:1,hr:HR,at:Date.now(),sim:n,
     weather:{kind:weather.kind,left:Math.max(0,weather.until-n),fest:Math.max(0,weather.festUntil-n),rb:Math.max(0,weather.rainbowUntil-n)},
     walkers:walkers.map(w=>({n:w.name,pos:w.tile.pos.slice(),needs:w.needs?{...w.needs}:null,rel:w.rel&&w.kind==='person'?{...w.rel}:null,mem:(w.memory||[]).slice(-8),mood:w.mood||null,moodLeft:Math.max(0,(w.moodUntil||0)-n)})),
     growth:{log:grow.log.slice(-40),since:n-grow.lastAt,wishes:grow.wishes}};
@@ -17,9 +17,13 @@ function saveTown(manual){
   try{localStorage.setItem(SAVE_KEY,JSON.stringify(snapshot()));saveBuilds();lastSaveAt=Date.now();saveErr=false;if(manual)toast(TUI.saved);renderTown();return true}
   catch(e){saveErr=true;if(manual)toast(TUI.fail);return false}
 }
+function scaleTimes(s,k){if(k===1)return s;const x=JSON.parse(JSON.stringify(s));x.sim*=k;const wx=x.weather||{};['left','fest','rb'].forEach(f=>{if(isFinite(wx[f]))wx[f]*=k});
+  (x.walkers||[]).forEach(r=>{if(isFinite(r.moodLeft))r.moodLeft*=k});if(x.growth&&isFinite(x.growth.since))x.growth.since*=k;return x}
 function readSave(){try{const s=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');return s&&s.v===1&&isFinite(s.sim)?s:null}catch(e){return null}}
 function findTile(p){if(!Array.isArray(p))return null;return tiles.find(t=>Math.abs(t.pos[0]-p[0])<.01&&Math.abs(t.pos[1]-p[1])<.01&&Math.abs(t.pos[2]-p[2])<.01&&t.links.length&&(t.indoor||tileAt.get(key(t.pos[0],t.pos[1]))===t))||null}
 function restoreTown(s){
+  // 保存した時と1時間の長さが違えば、時刻や残り時間を今の長さに直す
+  const k=HR/(Number(s.hr)||OLD_HR);s=scaleTimes(s,k);
   clock.sim=Math.max(0,Number(s.sim)||0);tickClock();clock.lastDay=clock.day;clock.lastHourInt=Math.floor(clock.hour);
   const wx=s.weather||{};weather.kind=['clear','rain','snow'].includes(wx.kind)?wx.kind:'clear';weather.until=clock.sim+(Number(wx.left)||0);weather.festUntil=clock.sim+(Number(wx.fest)||0);weather.rainbowUntil=clock.sim+(Number(wx.rb)||0);weather.plan=null;
   (s.walkers||[]).forEach(r=>{const w=byName(String(r.n));if(!w)return;

@@ -1,11 +1,24 @@
 // ================= villagers =================
+// 子どもは平日に学校へ（給食は学校で）
+const SCHOOL_KID={acts:['school.study','school.lunch'],hours:[[7.5,15]],days:'weekday'};
 const PEOPLE=[
   {name:'ハナ',en:'Hana',home:'A',bed:0,cloak:[232,112,100],cap:[255,246,236],persona:J('元気いっぱいで花が大好き。料理も得意。','Cheerful and loves flowers. A good cook.'),likes:{flower:.6,field:.3,chat:.3,cook:.6},wake:6.1,sleep:21.8,speed:1.5,at:[2,4]},
   {name:'ゴロウ',en:'Goro',home:'A',bed:1,cloak:[226,170,84],cap:[120,158,206],persona:J('無口な力持ちの職人。畑と水くみが日課。','A quiet, strong craftsman. Works in the field every day.'),likes:{field:.6,well:.4,chat:-.2,tv:.3},wake:5.5,sleep:21.5,speed:1.2,at:[2,9]},
-  {name:'ケンタ',en:'Kenta',home:'A',bed:2,cloak:[110,160,220],cap:[244,196,110],persona:J('いたずら好きの子ども。テレビとかけっこが好き。','A playful kid who loves TV and running around.'),likes:{play:.9,walk:.3,tv:.6,fish:.2,bench:-.4,field:-.3},wake:7,sleep:20.5,speed:1.75,kid:true,at:[1,5]},
+  {name:'ケンタ',en:'Kenta',home:'A',bed:2,cloak:[110,160,220],cap:[244,196,110],persona:J('いたずら好きの子ども。テレビとかけっこが好き。','A playful kid who loves TV and running around.'),likes:{play:.9,walk:.3,tv:.6,fish:.2,bench:-.4,field:-.3},wake:7,sleep:20.5,speed:1.75,kid:true,at:[1,5],job:SCHOOL_KID},
   {name:'ソラ',en:'Sora',home:'B',bed:0,cloak:[86,170,168],cap:[244,196,110],persona:J('のんびり屋の釣り好き。昼寝の名人。','Easygoing and loves fishing. A champion napper.'),likes:{fish:.7,nap:.5,rest:.3,field:-.2},wake:7.2,sleep:22.5,speed:1.2,at:[13,9]},
   {name:'ミノリ',en:'Minori',home:'B',bed:1,cloak:[150,122,196],cap:[252,236,222],persona:J('物静かな読書家。きれい好きで皆の相談役。','A quiet bookworm. Tidy, and everyone asks her for advice.'),likes:{bench:.7,bath:.4,flower:.2,cook:.4},wake:6.3,sleep:22.8,speed:1.25,at:[12,5]},
-  {name:'ユイ',en:'Yui',home:'B',bed:2,cloak:[236,150,180],cap:[255,240,214],persona:J('明るい商売人。屋台を切り盛りしていて噂話が好き。','A bright shopkeeper who runs the stall and loves gossip.'),likes:{stall:.6,chat:.4,tv:.2},wake:6,sleep:22,speed:1.4,keeper:true,at:[8,4]}];
+  {name:'ユイ',en:'Yui',home:'B',bed:2,cloak:[236,150,180],cap:[255,240,214],persona:J('明るい商売人。屋台を切り盛りしていて噂話が好き。','A bright shopkeeper who runs the stall and loves gossip.'),likes:{stall:.6,chat:.4,tv:.2},wake:6,sleep:22,speed:1.4,keeper:true,at:[8,4]},
+  {name:'アオイ',en:'Aoi',home:'C',bed:0,cloak:[176,150,206],cap:[90,80,110],persona:J('やさしい学校の先生。音楽と本が好き。','A kind school teacher who loves music and books.'),likes:{'school.music':.4,'school.read':.4,chat:.3,cook:.3},wake:6,sleep:22.5,speed:1.3,at:[8,18],
+    job:{acts:['school.teach','school.lunch'],hours:[[7.3,15.4]],days:'weekday'}},
+  {name:'リク',en:'Riku',home:'C',bed:1,cloak:[244,196,110],cap:[110,90,80],persona:J('元気な男の子。外遊びとおもちゃが大好き。','An energetic boy who loves playing outside and toys.'),likes:{play:.8,'store.toys':.6,'swing.swing':.5,'slide.slide':.4,tv:.3},wake:7,sleep:20.5,speed:1.75,kid:true,at:[9,19],job:SCHOOL_KID},
+  {name:'メイ',en:'Mei',home:'C',bed:2,cloak:[150,186,222],cap:[250,230,210],persona:J('絵と音楽が好きな女の子。ちょっと恥ずかしがり屋。','A shy girl who loves drawing and music.'),likes:{'school.music':.6,flower:.5,'sandbox.sand':.4,bench:.2},wake:6.8,sleep:20.8,speed:1.6,kid:true,at:[7,20],job:SCHOOL_KID},
+  {name:'マコト',en:'Makoto',home:'D',bed:0,cloak:[120,160,120],cap:[70,70,90],persona:J('デパートの店長。まじめで話し好き。','The department store manager. Hardworking and chatty.'),likes:{chat:.5,'store.restaurant':.3,tv:.3},wake:6.5,sleep:23,speed:1.35,at:[15,18],
+    job:{acts:['store.work','store.restaurant'],hours:[[9,18.5]]}},
+  {name:'ナナ',en:'Nana',home:'D',bed:1,cloak:[246,180,200],cap:[150,90,70],persona:J('デパートの店員。おしゃれが大好き。','A department store clerk who loves fashion.'),likes:{'store.shop_clothes':.6,chat:.4,bath:.3},wake:7,sleep:23,speed:1.4,at:[16,19],
+    job:{acts:['store.work','store.restaurant'],hours:[[10.5,19.5]]}},
+  {name:'ハル',en:'Haru',home:'D',bed:2,cloak:[200,180,150],cap:[236,236,240],persona:J('のんびりしたおじいさん。読書と釣りと散歩が好き。','A relaxed grandpa who loves reading, fishing and walks.'),likes:{'school.read':.5,fish:.5,bench:.4,walk:.4,field:.2},wake:5.5,sleep:21,speed:1.0,at:[14,20]}];
+// 歩く速さの倍率（町が広いので少し速め）
+const WALK=2.2;
 const walkers=PEOPLE.map((p,i)=>{const h=bldById(p.home);const w={...p,kind:'person',house:h,tile:T(...p.at)||ground[0],
   link:null,t:0,phase:i*1.3,wait:.05*HR*i,path:[],goal:null,target:null,act:null,lastDir:[0,1],lastAct:null,
   needs:{energy:.8,food:.35+.1*hash(i),social:.45+.3*hash(i+3),fun:.5+.3*hash(i+7),bladder:.35+.4*hash(i+11),hygiene:.55+.3*hash(i+13)},
@@ -39,16 +52,26 @@ function planAct(w,id){
   const goal={id,dur:a.dur,run:a.run};
   const busy=taken(w);let target;
   if(a.random){const here=w.tile.pos,c=ground.filter(t=>!busy.has(t)&&Math.abs(t.pos[0]-here[0])+Math.abs(t.pos[1]-here[1])<(a.run?7:10));target=pick(c.length?c:ground)}
-  else{const c=spotsFor(w,id).filter(t=>t&&!busy.has(t));if(!c.length)return null;target=pick(c)}
+  else{const c=spotsFor(w,id).filter(t=>t&&!busy.has(t));if(!c.length)return null;target=a.home?pick(c):nearPick(w,c)}
   return{goal,target};
 }
+// 町の中の場所は、近いところ（上位3つ）から選ぶ
+function nearPick(w,c){const p=w.tile.pos,lv=w.tile.level,d=t=>Math.abs(t.pos[0]-p[0])+Math.abs(t.pos[1]-p[1])+Math.abs(t.level-lv)*4;return pick(c.slice().sort((a,b)=>d(a)-d(b)).slice(0,3))}
+// 仕事・学校の時間か（job.hours は時間帯のリスト、days:'weekday' なら土日は休み）
+const onJob=w=>!!(w.job&&!(w.job.days==='weekday'&&isWeekend())&&inHours(clock.hour,w.job.hours));
 function setPlan(w,p){if(!p)return false;const path=bfs(w.tile,p.target);if(!path)return false;w.path=path;w.goal=p.goal;w.target=p.target;return true}
-const inHours=(h,[a,b])=>a<=b?h>=a&&h<b:h>=a||h<b;
 const mealWindow=h=>(h>=6.3&&h<9)||(h>=11.5&&h<13.5)||(h>=17.5&&h<20);
 
 function score(w,id){
   const a=ACTS[id],h=clock.hour,n=w.needs,hs=w.house;let s=0;
   if(id==='sleep'||id==='sit')return-99;
+  if(a.staff&&!(w.job&&w.job.acts.includes(id)))return-99;
+  if(a.days==='weekday'&&isWeekend())return-99;
+  const duty=onJob(w);let adj=0;
+  // 仕事・学校には始まる1時間前から向かってよい（町が広いので）
+  const early=duty&&w.job.acts.includes(id)&&a.hours&&!inHours(h,a.hours)&&inHours((h+1)%24,a.hours);
+  if(duty&&w.job.acts.includes(id)){if(a.hours&&!inHours(h,a.hours)&&!early)return-99;adj=6}
+  else if(duty&&!['toilet','eat','snack'].includes(id))adj=-2.5;
   switch(id){
     case'toilet':s=n.bladder<.22?5:n.bladder<.45?1.1:-3;break;
     case'eat':s=hs.mealReady>clock.sim&&n.food<.85?2.6+(1-n.food)*2:-3;break;
@@ -61,7 +84,7 @@ function score(w,id){
     case'tv':s=(h>=18?.8:-.1)+(1-n.fun)*.9;break;
     case'rest':s=(1-n.energy)*1.2-.3+(weather.kind!=='clear'?.4:0);break;
     default:{
-      if(a.gen){if(a.hours&&!inHours(h,a.hours))return-99;if((a.who==='kid'&&!w.kid)||(a.who==='adult'&&w.kid))return-99}
+      if(a.gen){if(a.hours&&!inHours(h,a.hours)&&!early)return-99;if((a.who==='kid'&&!w.kid)||(a.who==='adult'&&w.kid))return-99}
       for(const k in a.gain){const g=a.gain[k];s+=g>0?g*(1-n[k])*2.4:g*(1-n[k])*1.4}
       if(id==='dance')s+=clock.sim<weather.festUntil||(directiveOn(w)&&w.directive.goal==='dance')?1.2:-99;
       if(id==='field'&&(h<6||h>17))s-=2;
@@ -79,7 +102,7 @@ function score(w,id){
   s+=(w.likes[id]||0);
   if(id===w.lastAct&&id!=='eat')s-=.6;
   if(directiveOn(w)){if(w.directive.goal===id)s+=6;else if(w.directive.goal==='home'&&a.indoor)s+=.8;else s-=.3}
-  return s+Math.random()*.4;
+  return s+adj+Math.random()*.4;
 }
 
 function chatPartner(w){
@@ -106,13 +129,21 @@ function bedtime(w){
   if(clock.sim-w.brushedAt>4*HR&&setPlan(w,planAct(w,'brush')))return true;
   return false;
 }
+// その人がしてよい行動か（子ども向け・大人向け・店員や先生だけの行動）
+const canDo=(w,id)=>{const a=ACTS[id];return!!a&&!(a.who==='kid'&&!w.kid)&&!(a.who==='adult'&&w.kid)&&!(a.staff&&!(w.job&&w.job.acts.includes(id)))};
+// 遠くへ出かける前に、トイレが近ければ先にすませる
+function tripPrep(w){
+  if(w.path.length<18||w.needs.bladder>.6||!w.goal||w.goal.id==='toilet')return;
+  const p=planAct(w,'toilet');if(!p)return;const keep={path:w.path,goal:w.goal,target:w.target};
+  if(!setPlan(w,p)||w.path.length>8){w.path=keep.path;w.goal=keep.goal;w.target=keep.target}
+}
 function chooseGoal(w){
   if(w.kind==='cat')return catGoal(w);
   if(sleepTime(w)||(directiveOn(w)&&w.directive.goal==='sleep')){if(bedtime(w))return;if(setPlan(w,planAct(w,'sleep')))return;w.wait=.2*HR;return}
   const ranked=ACT_IDS.map(id=>[id,score(w,id)]).sort((a,b)=>b[1]-a[1]);
   for(const[id,s]of ranked){if(s<-50)break;
     if(id==='chat'){if(startChat(w))return;continue}
-    if(setPlan(w,planAct(w,id)))return;
+    if(setPlan(w,planAct(w,id))){tripPrep(w);return}
   }
   w.wait=.3*HR;
 }
@@ -169,7 +200,9 @@ function updateWalker(w,sdt){
     if(n.bladder<.06&&!w.player&&!(w.act&&w.act.id==='toilet')&&!(w.goal&&w.goal.id==='toilet')&&!w.link&&!w.forced){const p=planAct(w,'toilet');if(p){w.forced=p;say(w,J('もれちゃう〜！','I really need to go!'))}}
   }
   if(w.player){playerTick(w,sdt);return}
-  if(w.link){const run=w.goal&&w.goal.run;w.phase+=(run?13:9)*sdt;w.t+=sdt*w.speed*(run?1.7:1);if(w.t>=1){w.lastDir=w.link.dir;w.tile=w.link.to;w.link=null;w.t=0}else return}
+  if(w.link){const run=w.goal&&w.goal.run;w.phase+=(run?13:9)*sdt;w.t+=sdt*w.speed*WALK*(run?1.7:1);if(w.t>=1){const extra=w.t-1;w.lastDir=w.link.dir;w.tile=w.link.to;w.link=null;w.t=0;
+    // 余った分はそのまま次のマスへ（早送りでも歩く速さが変わらないように）
+    if(extra>0&&w.path.length&&!w.forced){const Lk=w.tile.links.find(l=>l.to===w.path[0]);if(Lk){w.path.shift();w.link=Lk;w.t=Math.min(extra,.99);return}}}else return}
   if(w.forced){applyForced(w);return}
   if(w.wait>0){w.wait-=sdt;if(w.wait<=0&&w.act)finishAct(w,false);return}
   if(w.path.length){const nx=w.path.shift(),Lk=w.tile.links.find(l=>l.to===nx);if(!Lk){w.path=[];w.goal=null;w.target=null;return}w.link=Lk;w.t=0;return}

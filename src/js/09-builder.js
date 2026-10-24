@@ -34,7 +34,7 @@ function buildBuilding(spec,pos,o={}){
   const actId={};
   (spec.activities||[]).forEach(a=>{const aid=(o.fixed?id+'.':'g_'+id+'_')+a.key;actId[a.key]=aid;
     ACTS[aid]={label:J(a.label_ja,a.label_en),use:J(a.use_ja||a.label_ja,a.use_en||a.label_en),glyph:a.glyph||'♪',dur:a.dur||[.6,1.3],gain:a.gain||{fun:.3},gen:true,
-      created:o.fixed?null:clock.sim,hours:a.hours||null,who:a.who||'all',staff:!!a.staff,
+      created:o.fixed?null:clock.sim,hours:a.hours||null,who:a.who||'all',staff:!!a.staff,days:a.days||null,
       phrase:()=>a.phrase_en?J(a.phrase_ja||a.phrase_en,a.phrase_en):null};
     ACT_IDS.push(aid);bld.acts.push(aid)});
   const actOf=k=>actId[k]||(ACTS[k]&&!ACTS[k].home?k:null);
@@ -115,17 +115,22 @@ function buildInterior(bld,spec,pos,B,actOf){
         B:(lo,hi,opt={})=>{const a=W3(lo[0],lo[1],lo[2]),b=W3(hi[0],hi[1],hi[2]);
           const deco={};for(const k in opt.deco||{})deco[rotKey(face,k)]=opt.deco[k];
           const ex=opt.cutWith?{cutWith:ctx.dir(opt.cutWith[0],opt.cutWith[1])}:{};
-          return B([Math.min(a[0],b[0]),Math.min(a[1],b[1]),a[2]],[Math.max(a[0],b[0]),Math.max(a[1],b[1]),b[2]],{...opt,...ex,deco,indoor:true,level:lv})},
+          // 壁にめりこむと描く順番が決まらなくなるので、壁の内側に収める
+          const cx_=v=>clamp(v,ox+.121,ox+w-.121),cy_=v=>clamp(v,oy+.121,oy+d-.121);
+          return B([cx_(Math.min(a[0],b[0])),cy_(Math.min(a[1],b[1])),a[2]],[cx_(Math.max(a[0],b[0])),cy_(Math.max(a[1],b[1])),b[2]],{...opt,...ex,deco,indoor:true,level:lv})},
         seat:(z,type,extra={})=>{const f={type,face:fr,...extra};
           if(extra.head)f.head=W3(...extra.head);if(extra.foot)f.foot=W3(...extra.foot);
           if(extra.lo){const a=W3(extra.lo[0],extra.lo[1],0),b=W3(extra.hi[0],extra.hi[1],0);f.lo=[Math.min(a[0],b[0]),Math.min(a[1],b[1])];f.hi=[Math.max(a[0],b[0]),Math.max(a[1],b[1])]}
           uses.set(ck(c0,r0,lv),{z:z+zb,furn:f})},
         solid:()=>solid.add(ck(c0,r0,lv)),
-        spot:(act,where)=>bld.pending.push({act,cell:where==='front'?[c0+fr[0],r0+fr[1]]:[c0,r0],lv}),
+        spot:(act,where)=>bld.pending.push({act,cell:where==='front'?[c0+fr[0],r0+fr[1]]:where==='back'?[c0-fr[0],r0-fr[1]]:[c0,r0],lv}),
         mark:(k,p)=>{if(!bld[k])bld[k]=W3(...p)},
         vocab:(word,ja,ex,exja,p,opt={})=>{if(bld.vocab.some(v=>v.word===word&&v.level===lv))return;bld.vocab.push(vocab(word,ja,ex,exja,W3(...p),{...opt,bld,level:lv}))}};
       def.build(ctx);
-      const aid=it.use&&actOf(it.use);if(aid)ctx.spot(aid,uses.has(ck(c0,r0,lv))?'self':solid.has(ck(c0,r0,lv))?'front':'self');
+      const where=uses.has(ck(c0,r0,lv))?'self':solid.has(ck(c0,r0,lv))?'front':'self';
+      for(const u of[].concat(it.use||[])){const aid=actOf(u);if(aid)ctx.spot(aid,where)}
+      // 店員・先生などが立つ場所（家具の裏側）
+      if(it.staff){const aid=actOf(it.staff);if(aid)ctx.spot(aid,'back')}
     }
     // stairs geometry (steps rise inside the landing cell of the floor below)
     for(const s of stairs.filter(s=>s.floor===lv)){const[lc,lr]=s.land,N=5;

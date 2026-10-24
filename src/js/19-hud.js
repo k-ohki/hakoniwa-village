@@ -55,7 +55,7 @@ $('bookClose').addEventListener('click',()=>{$('book').hidden=true});
 $('bookN').textContent=book.length;
 
 function updateHud(){
-  const h=clock.hour;dayEl.textContent=L==='en'?`Day ${clock.day}`:`${clock.day}日目`;timeEl.textContent=hhmm(h);
+  const h=clock.hour;dayEl.textContent=L==='en'?`Day ${clock.day} (${WEEK[weekday()].en})`:`${clock.day}日目（${WEEK[weekday()].ja}）`;timeEl.textContent=hhmm(h);
   periodEl.textContent=tr(h<4.5?J('夜','Night'):h<10?J('朝','Morning'):h<16?J('昼','Daytime'):h<19?J('夕方','Evening'):J('夜','Night'));
   wxEl.textContent=(clock.sim<weather.festUntil?tr(J('お祭り・','Festival · ')):'')+tr(WX_T[weather.kind]);
   updateCard();
@@ -80,9 +80,9 @@ $('roofBtn').addEventListener('click',()=>{interior=!interior;$('roofBtn').textC
 // 2階建て以上の建物がある時だけ、内観で見る階を切りかえるボタンを出す
 const maxFloors=()=>Math.max(1,...buildings.map(b=>b.floors));
 function setViewFloor(n){viewFloor=clamp(n,0,maxFloors()-1);updateFloorBtn()}
-function updateFloorBtn(){const b=$('floorBtn'),m=maxFloors();if(viewFloor>m-1)viewFloor=m-1;b.hidden=!interior||m<2;b.textContent=tr(UI.floor(viewFloor+1))}
+function updateFloorBtn(){const b=$('floorBtn'),m=maxFloors();if(viewFloor>m-1)viewFloor=m-1;b.hidden=!interior||m<2;b.textContent=tr(UI.floor(viewFloor+1));b.title=tr(UI.floorTip);b.setAttribute('aria-label',tr(UI.floorTip)+': '+tr(UI.floor(viewFloor+1)))}
 $('floorBtn').addEventListener('click',()=>setViewFloor((viewFloor+1)%maxFloors()));
 $('reset').addEventListener('click',()=>{cam.taz=ISO_AZ;cam.tel=ISO_EL;cam.tzoom=1;cam.follow=null;cFollow.setAttribute('aria-pressed','false')});
-$('zoomIn').addEventListener('click',()=>{cam.tzoom=clamp(cam.tzoom*1.35,.7,3.5)});
-$('zoomOut').addEventListener('click',()=>{cam.tzoom=clamp(cam.tzoom/1.35,.7,3.5)});
+$('zoomIn').addEventListener('click',()=>{cam.tzoom=clamp(cam.tzoom*1.35,.7,ZOOM_MAX)});
+$('zoomOut').addEventListener('click',()=>{cam.tzoom=clamp(cam.tzoom/1.35,.7,ZOOM_MAX)});
 

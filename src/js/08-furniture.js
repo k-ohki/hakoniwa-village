@@ -49,14 +49,15 @@ const FURN={
     c.seat(.34,'seat');c.spot('tv','self');c.spot('rest','self');c.vocab('sofa','ソファ','Let\'s sit on the sofa and relax.','ソファに座ってくつろごう。',[0,0,.55])}},
   // ---- 学校・お店・公共の建物向け ----
   desk:{ja:'机といす',build(c){const k=c.color(P.woodL);
-    c.B([-.36,-.42,.52],[.36,-.06,.58],{side:P.wood,top:k});c.B([-.3,-.36,FLOOR],[-.24,-.12,.52],{side:P.steel});c.B([.24,-.36,FLOOR],[.3,-.12,.52],{side:P.steel});
-    c.B([-.18,.02,FLOOR],[.18,.32,.32],{side:P.wood,top:P.coral});c.B([-.18,.32,FLOOR],[.18,.38,.7],{side:P.wood,top:P.woodL});
-    c.seat(.32,'seat');c.vocab('desk','机','I study at my desk.','机で勉強します。',[0,-.24,.62])}},
+    // 座る人は正面（+y）の机に向かう
+    c.B([-.36,.06,.52],[.36,.42,.58],{side:P.wood,top:k});c.B([-.3,.12,FLOOR],[-.24,.36,.52],{side:P.steel});c.B([.24,.12,FLOOR],[.3,.36,.52],{side:P.steel});
+    c.B([-.18,-.32,FLOOR],[.18,-.02,.32],{side:P.wood,top:P.coral});c.B([-.18,-.38,FLOOR],[.18,-.32,.7],{side:P.wood,top:P.woodL});
+    c.seat(.32,'seat');c.vocab('desk','机','I study at my desk.','机で勉強します。',[0,.24,.62])}},
   teacherdesk:{ja:'先生の机',build(c){const k=c.color(P.wood);
     c.B([-.44,-.3,FLOOR],[.44,.3,.66],{side:k,top:P.woodL,deco:{py:'cabinet'}});c.B([-.3,-.18,.66],[-.06,.08,.72],{side:P.white,top:P.white});c.solid();
     c.vocab('teacher\'s desk','教卓','The teacher is at the desk.','先生は教卓にいます。',[0,0,.75])}},
   blackboard:{ja:'黒板',build(c){const k=c.color([70,110,96]);
-    c.B([-.48,-.48,.45],[.48,-.4,1.35],{side:P.wood,top:P.wood,deco:{py:'board'},boardC:k,cutWith:[0,-1,0]});
+    c.B([-.48,-.37,.45],[.48,-.31,1.35],{side:P.wood,top:P.wood,deco:{py:'board'},boardC:k,cutWith:[0,-1,0]});
     c.vocab('blackboard','黒板','Look at the blackboard, please.','黒板を見てください。',[0,-.44,1.45])}},
   shelf:{ja:'本だな',build(c){const k=c.color(P.wood);
     c.B([-.44,-.42,FLOOR],[.44,-.06,1.3],{side:k,top:lighten(k,.2),deco:{py:'books'}});c.solid();

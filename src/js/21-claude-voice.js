@@ -5,6 +5,8 @@ const MOODS=['happy','excited','calm','sad','scared','angry'];
 function worldSummary(){
   return people.map(w=>{const n=w.needs;return`- ${w.name} (${w.en}) ${w.persona.en}${w.kid?' [child]':''} mood:${moodOf(w)} energy${n.energy.toFixed(1)} food${n.food.toFixed(1)} social${n.social.toFixed(1)} fun${n.fun.toFixed(1)} bladder${n.bladder.toFixed(1)} clean${n.hygiene.toFixed(1)} now:${statusOf(w).en} (${placeOf(w)})`}).join('\n')+`\n- タマ (Tama) the cat. now:${statusOf(cat).en}`;
 }
+// 町の建物でできること（神の声・会話の「行き先」に使える）
+const townGoals=()=>ACT_IDS.filter(id=>ACTS[id].gen&&!ACTS[id].staff).map(id=>`${id} (${ACTS[id].label.en}${ACTS[id].who==='kid'?', kids':''})`).join(', ');
 function godPrompt(text){
   return `You interpret the "Voice of God" in a cozy village life simulation. The player (God) spoke to the village from the sky. Decide how each villager reacts, based on personality and state. The player is learning English, so every line you write comes in simple everyday English (CEFR A2) AND natural Japanese.
 
@@ -19,11 +21,12 @@ ${structSummary()}
 Landmarks for placing things: ${Object.keys(LANDMARKS).join(', ')}.
 
 Goal IDs. At home: sleep (go to bed), toilet, bath, brush (brush teeth), wash (wash face), cook, eat (at the dining table), snack (drink from the fridge), dishes, tv, rest (sofa), home (stay indoors). Outside: field, fish, well, nap (under a tree), chat, flower, bench, stall, play (tag), walk, plaza, dance. none = carry on.
+Town places: ${townGoals()}.
 
 Reply with JSON only, in this shape:
 {"narration_en":"one short sentence describing the village","narration_ja":"同じ内容の日本語","weather":"clear|rain|snow|rainbow|null","event":"festival|null","timeSkipTo":null,"build":null,"remove":null,"villagers":[{"name":"ハナ","say_en":"short line in simple English","say_ja":"そのセリフの自然な日本語","mood":"happy|excited|calm|sad|scared|angry","goal":"goal ID","hours":2,"needs":{"energy":0,"food":0,"social":0,"fun":0,"bladder":0,"hygiene":0}}]}
 
-Rules: include all 6 villagers plus Tama (use the Japanese name as listed). Named villagers react strongly. Someone may hesitate or choose differently if the order doesn't fit them. Set weather only if the voice changes it, else null. If the voice moves time forward, set timeSkipTo to an hour 0-23, else null. needs are changes from -0.5 to 0.5. hours 0.5-6. Each say_en is at most 10 words of natural spoken English. Tama only makes cat sounds ("Meow!" / 「にゃー」).
+Rules: include all ${people.length} villagers plus Tama (use the Japanese name as listed). Named villagers react strongly. Someone may hesitate or choose differently if the order doesn't fit them. Set weather only if the voice changes it, else null. If the voice moves time forward, set timeSkipTo to an hour 0-23, else null. needs are changes from -0.5 to 0.5. hours 0.5-6. Each say_en is at most 10 words of natural spoken English. Tama only makes cat sounds ("Meow!" / 「にゃー」).
 If the voice asks to build, create, place or plant anything (a building, statue, fountain, tower, shrine, garden, playground, anything at all), set build to a clear English design brief: what it is, its style, main colors, rough size in cells (1-4 wide), and where (near which landmark). Villagers react to it with excitement or surprise. If the voice asks to remove or destroy a built structure, set remove to its id. Otherwise both are null.`;
 }
 function offlineInterpret(text){
@@ -36,7 +39,9 @@ function offlineInterpret(text){
     [['歯','teeth'],'brush',J('歯をみがこう。','Let\'s brush our teeth.')],[['料理','作','cook'],'cook',J('料理しよう！','Let\'s cook!')],[['食べ','ごはん','eat','dinner','lunch','breakfast'],'eat',J('ごはんにしよう！','Let\'s eat!')],
     [['テレビ','tv'],'tv',J('テレビを見よう！','Let\'s watch TV!')],[['帰','家','home','house','inside'],'home',J('家に帰ろう。','Let\'s go home.')],[['畑','働','work','field'],'field',J('よし、ひと仕事だ。','OK, time to work.')],
     [['釣','魚','fish'],'fish',J('釣りに行こう。','Let\'s go fishing.')],[['花','flower'],'flower',J('お花に水をあげなきゃ。','I need to water the flowers.')],[['話','仲良','おしゃべり','talk','chat','friend'],'chat',J('誰かと話したいな。','I want to talk with someone.')],
-    [['遊','走','鬼ごっこ','play','run'],'play',J('遊ぼう！','Let\'s play!')],[['買','店','屋台','shop','buy','stall'],'stall',J('屋台に行こう。','Let\'s go to the stall.')]];
+    [['遊','走','鬼ごっこ','play','run'],'play',J('遊ぼう！','Let\'s play!')],[['勉強','学校','school','study'],'school.study',J('学校で勉強しよう。','Let\'s study at school.')],[['本','図書','read','library'],'school.read',J('本を読みに行こう。','Let\'s go read a book.')],[['音楽','歌','music','sing'],'school.music',J('歌おう！','Let\'s sing!')],
+    [['レストラン','外食','restaurant'],'store.restaurant',J('レストランに行こう！','Let\'s go to the restaurant!')],[['デパート','洋服','department','clothes'],'store.shop_clothes',J('デパートに行こう。','Let\'s go to the department store.')],[['おもちゃ','toy'],'store.toys',J('おもちゃを見に行こう！','Let\'s go see the toys!')],
+    [['買','店','屋台','shop','buy','stall'],'stall',J('屋台に行こう。','Let\'s go to the stall.')]];
   if(has('建て','作って','つくって','置いて','たてて','建設','build','make a','create','place','put a'))r.build=text;
   if(has('壊','撤去','なくして','remove','destroy','demolish')&&genBuildings().length){const s2=genBuildings().find(s=>text.includes(s.spec.name_ja)||t.includes(s.spec.name_en.toLowerCase()))||genBuildings().slice(-1)[0];r.remove=s2.id;r.build=null}
   if(!r.build&&!r.remove)for(const[keys,g,p]of G)if(has(...keys)){goal=g;sayP=p;if(g==='dance')r.event='festival';if(g==='sleep'||g==='home')mood='calm';break}
@@ -66,7 +71,7 @@ function applyDivine(r,text){
       if(v.needs&&typeof v.needs==='object')for(const k in w.needs){const d=Number(v.needs[k]);if(isFinite(d))w.needs[k]=clamp(w.needs[k]+clamp(d,-.5,.5),0,1)}
       remember(w,`神の声「${text.slice(0,20)}」を聞いた`);
       const g=String(v.goal||'none'),hrs=clamp(Number(v.hours)||2,.5,6);
-      if((ACTS[g]||g==='home')&&g!=='none'){
+      if(((ACTS[g]&&canDo(w,g))||g==='home')&&g!=='none'){
         w.directive={goal:g,until:clock.sim+hrs*HR};
         if(g==='home'){const p=planAct(w,pick(['tv','rest','snack']));if(p)w.forced=p}
         else if(g==='chat'){if(!w.link){w.act&&finishAct(w,true);w.path=[];w.goal=null;w.wait=0}}
