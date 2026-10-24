@@ -1,18 +1,9 @@
 // ================= first-person mode (built-in WebGL) =================
-const USE_T={sleep:J('ベッドで寝る','Go to bed'),toilet:J('トイレを使う','Use the toilet'),bath:J('お風呂に入る','Take a bath'),brush:J('歯をみがく','Brush your teeth'),wash:J('顔を洗う','Wash your face'),
-  cook:J('料理する','Cook a meal'),eat:J('ごはんを食べる','Eat a meal'),sit:J('いすに座る','Sit on the chair'),snack:J('飲み物を出す','Get a drink'),dishes:J('お皿を洗う','Do the dishes'),
-  tv:J('テレビを見る','Watch TV'),rest:J('ソファでくつろぐ','Relax on the sofa'),fish:J('釣りをする','Go fishing'),well:J('水をくむ','Get some water'),field:J('畑の手入れ','Work in the field'),
-  flower:J('花に水をやる','Water the flowers'),bench:J('ベンチで休む','Rest on the bench'),stall:J('果物を買う','Buy some fruit'),dance:J('踊る','Dance'),nap:J('昼寝する','Take a nap')};
 const FUI={exit:J('一人称をやめる','Exit'),talk:J('話しかける','Talk'),what:J('これは何？','What\'s this?'),busy:J('使用中です','Someone is using it.'),
   hintDesk:J('WASD/矢印で移動・ドラッグで見回す・Eで行動・Tで話す・Escで戻る','WASD / arrows to move · drag to look · E to act · T to talk · Esc to exit'),
   hintTouch:J('左下のスティックで移動・ドラッグで見回す','Stick to move · drag to look around'),
   noGL:J('この端末では3D表示が使えません','3D view is not available on this device.'),send:J('送る','Send'),
   talkPh:J('英語でも日本語でも話しかけてみよう','Say something in English (or Japanese)'),you:J('あなた','You')};
-const SPOTREG=new Map();
-function regSpot(t,ids){if(!t)return;let s=SPOTREG.get(t);if(!s){s=new Set();SPOTREG.set(t,s)}ids.forEach(i=>s.add(i))}
-for(const id in houses){const sp=houses[id].spots;sp.beds.forEach(t=>regSpot(t,['sleep']));regSpot(sp.toilet[0],['toilet']);regSpot(sp.tub[0],['bath']);regSpot(sp.basin[0],['brush','wash']);
-  regSpot(sp.stove[0],['cook']);regSpot(sp.fridge[0],['snack']);regSpot(sp.sink[0],['dishes']);sp.chairs.forEach(t=>regSpot(t,['eat']));sp.sofa.forEach(t=>regSpot(t,['tv','rest']))}
-['fish','well','field','nap','flower','bench','stall'].forEach(k=>SPOTS[k].forEach(t=>regSpot(t,[k])));SPOTS.plaza.forEach(t=>regSpot(t,['dance']));
 const fpvEl=$('fpv'),fpvHud=$('fpvHud'),fpvActs=$('fpvActs'),fpvSub=$('fpvSub'),fpvNeeds=$('fpvNeeds'),fpvName=$('fpvName'),fpvHint=$('fpvHint'),joy=$('joy'),joyKnob=$('joyKnob'),toastEl=$('toast');
 const coarse=window.matchMedia&&matchMedia('(pointer: coarse)').matches;
 document.body.classList.toggle('coarse',!!coarse);
@@ -62,23 +53,33 @@ function bakeFace(it){
   N=pN;amb=pA;
   if(it.tex)upTex(it.tex,cv2);else it.tex=mkTex(cv2);
 }
-function buildWorld(){
-  const groups={out:[],A:[],B:[]},pA=amb;amb=[1,1,1];
-  const FACES6=[...FACES,{n:[0,0,-1],o:0,u:1,v:2,key:'bot'}];
-  for(const b of boxes){if(b.deco.py==='doorleaf'||b.sid)continue;b.cut=false;
+const FACES6=[...FACES,{n:[0,0,-1],o:0,u:1,v:2,key:'bot'}];
+// 箱の面をまとめて GPU に送る。建物の中の面は、その建物の明かりで色を変えるため建物ごとにまとめる
+function bakeBoxesGL(list,sid){
+  const groups={},pA=amb;amb=[1,1,1];
+  for(const b of list){if(Object.values(b.deco).includes('doorleaf'))continue;b.cut=false;const inb=b.bld&&b.bld.enterable;
     for(const f of FACES6){if(f.key==='bot'&&b.lo[2]<.05)continue;
       const o=corner(b.lo,b.hi,f.o),u=corner(b.lo,b.hi,f.u),v=corner(b.lo,b.hi,f.v),r=[u[0]+v[0]-o[0],u[1]+v[1]-o[1],u[2]+v[2]-o[2]];
       const W=Math.hypot(u[0]-o[0],u[1]-o[1],u[2]-o[2]),H=Math.hypot(v[0]-o[0],v[1]-o[1],v[2]-o[2]);if(W<.005||H<.005)continue;
-      const grp=b.house&&(b.indoor||(b.wall&&f.key===b.wall.inner)||f.key==='bot')?b.house.id:'out';
-      const base=f.key==='bot'?(b.exteriorOnly&&b.house?P.cream:b.side):f.key==='top'?b.top:b.side;
+      const grp=inb&&(b.indoor||(b.wall&&f.key===b.wall.inner)||f.key==='bot')?b.bld.id:'out';
+      const base=f.key==='bot'?(b.exteriorOnly&&inb?P.cream:b.side):f.key==='top'?b.top:b.side;
       const c=shade(base,f.key==='bot'?[0,0,1]:f.n);
-      if(b.deco[f.key]){const it={b,f,W,H,base,c,grp,ppu:b.deco.top==='ground'?48:110,dyn:DYN.has(b.deco[f.key])};bakeFace(it);
+      if(b.deco[f.key]){const it={b,f,W,H,base,c,grp,ppu:b.deco.top==='ground'?48:110,dyn:sid?true:DYN.has(b.deco[f.key]),sid};bakeFace(it);
         const arr=[];quad(o,u,v,r,[1,1,1],arr);it.buf=mkBuf(arr);texFaces.push(it)}
-      else quad(o,u,v,r,c.map(x=>clamp(x/255,0,1)),groups[grp]);
+      else quad(o,u,v,r,c.map(x=>clamp(x/255,0,1)),groups[grp]||(groups[grp]=[]));
     }}
-  for(const g in groups)if(groups[g].length)statics.push({buf:mkBuf(groups[g]),n:groups[g].length/8,grp:g});
-  structures.forEach(addStructGL);
+  for(const g in groups)if(groups[g].length)statics.push({buf:mkBuf(groups[g]),n:groups[g].length/8,grp:g,sid});
   amb=pA;
+}
+function bakePolysGL(list,sid){
+  const arr=[];for(const p of list)for(const f of p.faces){const top=f.n[2]>.7,c=shade(top?p.top:p.col,f.n).map(x=>clamp(x/255,0,1));
+    for(let i=1;i<f.pts.length-1;i++)for(const q of[f.pts[0],f.pts[i],f.pts[i+1]])arr.push(q[0],q[1],q[2],0,0,c[0],c[1],c[2])}
+  if(arr.length)statics.push({buf:mkBuf(arr),n:arr.length/8,grp:'out',sid});
+}
+function buildWorld(){
+  bakeBoxesGL(boxes.filter(b=>!b.bld||b.bld.fixed));
+  const pA=amb;amb=[1,1,1];bakePolysGL(polys.filter(p=>p.bld.fixed));amb=pA;
+  genBuildings().forEach(addStructGL);
   // props as billboards
   props.forEach(e=>{if(e.kind==='falls'||e.kind==='pole')return;
     const s=e.kind==='crop'?110:80;let w_=140,h_=180,by=15;
@@ -178,10 +179,10 @@ function fpvCands(){
   if(w.kind!=='cat'){let best=null,bs=1e9;
     SPOTREG.forEach((ids,t)=>{const dx=t.pos[0]-p[0],dy=t.pos[1]-p[1],d=Math.hypot(dx,dy);if(d>1.25)return;const face=d>.01?(dx*f[0]+dy*f[1])/d:1;
       let ok=t.stop?(d<.7||(d<1.2&&face>.25)):d<.62;if(!ok)return;const sc=d-face*.3;if(sc<bs){bs=sc;best=t}});
-    if(best){const ids=[...SPOTREG.get(best)].map(id=>id==='eat'&&!(best.house&&best.house.mealReady>clock.sim)?'sit':id).filter(id=>id!=='dance'||clock.sim<weather.festUntil);
+    if(best){const ids=[...SPOTREG.get(best)].map(id=>id==='eat'&&!(best.bld&&best.bld.mealReady>clock.sim)?'sit':id).filter(id=>ACTS[id]&&ACTS[id].use&&(id!=='dance'||clock.sim<weather.festUntil));
       out.acts=ids.slice(0,2).map(id=>({id,tile:best}))}}
   let bn=null,bd=1.8;walkers.forEach(o=>{if(o===w)return;const q=walkerPos(o),dx=q[0]-p[0],dy=q[1]-p[1],d=Math.hypot(dx,dy);if(d>bd)return;const face=d>.01?(dx*f[0]+dy*f[1])/d:1;if(face<.35)return;bd=d;bn=o});out.npc=bn;
-  const inH=w.tile.indoor?w.tile.house:null;let bv=null,bvd=2.3;VOCAB.forEach(v=>{if((v.house||null)!==inH)return;const dx=v.pos[0]-p[0],dy=v.pos[1]-p[1],d=Math.hypot(dx,dy);if(d>bvd)return;const face=d>.01?(dx*f[0]+dy*f[1])/d:1;if(face<.55)return;bvd=d;bv=v});out.word=bv;
+  const inH=w.tile.indoor?w.tile.bld:null;let bv=null,bvd=2.3;VOCAB.forEach(v=>{if((v.bld||null)!==inH||(inH&&(v.level||0)!==w.tile.level))return;const dx=v.pos[0]-p[0],dy=v.pos[1]-p[1],d=Math.hypot(dx,dy);if(d>bvd)return;const face=d>.01?(dx*f[0]+dy*f[1])/d:1;if(face<.55)return;bvd=d;bv=v});out.word=bv;
   return out;
 }
 function fpvDoAct(id,tile){
@@ -189,9 +190,9 @@ function fpvDoAct(id,tile){
   if(w.act){finishAct(w,true);afterAct(w)}
   w.returnTile=tile.stop?(w.tile.stop?w.returnTile:w.tile):null;
   w.tile=tile;w.ppos=[tile.pos[0],tile.pos[1]];
-  const a=ACTS[id];startAct(w,{id,dur:a.dur,hs:tile.house||w.house});
+  const a=ACTS[id];startAct(w,{id,dur:a.dur,hs:tile.bld||w.house});
   if(tile.furn&&tile.furn.face){fpv.yaw=Math.atan2(tile.furn.face[1],tile.furn.face[0]);fpv.pitch=id==='sleep'?.55:-.12}
-  else{const t2=SPOTREG.get(tile);if(id==='fish'){const d=[POND.x-tile.pos[0],POND.y-tile.pos[1]];fpv.yaw=Math.atan2(d[1],d[0])}}
+  else{const t2=SPOTREG.get(tile);if(id==='fish'){const pd=nearestPond(tile.pos[0],tile.pos[1]),d=[pd.x-tile.pos[0],pd.y-tile.pos[1]];fpv.yaw=Math.atan2(d[1],d[0])}}
   fpv.sig='';
 }
 function renderActs(c){
@@ -199,25 +200,12 @@ function renderActs(c){
   c.acts.forEach((a,i)=>parts.push('a'+a.id+a.tile.id));if(c.npc)parts.push('n'+c.npc.name);if(c.word)parts.push('v'+c.word.word);parts.push(L,w.act?w.act.id:'-');
   const sig=parts.join('|');if(sig===fpv.sig)return;fpv.sig=sig;fpvActs.replaceChildren();
   const mk=(label,key,fn,cls)=>{const b=document.createElement('button');b.type='button';if(cls)b.className=cls;b.textContent=label;if(key&&!coarse){const k=document.createElement('kbd');k.textContent=key;b.append(k)}b.addEventListener('click',fn);fpvActs.append(b);return b};
-  c.acts.forEach((a,i)=>{const active=w.act&&w.act.id===a.id&&w.tile===a.tile;mk(tr(USE_T[a.id]||labelOf(w,a.id)),i===0?'E':'F',()=>{if(active){finishAct(w,true);afterAct(w);fpv.sig=''}else fpvDoAct(a.id,a.tile)},active?'on':'main')});
+  c.acts.forEach((a,i)=>{const active=w.act&&w.act.id===a.id&&w.tile===a.tile;mk(tr(ACTS[a.id].use||labelOf(w,a.id)),i===0?'E':'F',()=>{if(active){finishAct(w,true);afterAct(w);fpv.sig=''}else fpvDoAct(a.id,a.tile)},active?'on':'main')});
   if(c.npc)mk(`${tr(FUI.talk)}: ${nameOf(c.npc)}`,'T',()=>openTalk(c.npc));
   if(c.word)mk(`${tr(FUI.what)} ${L==='en'?c.word.word:c.word.ja}`,'Q',()=>openWord(c.word));
 }
 
-function addStructGL(st){
-  const pA=amb;amb=[1,1,1];const arr=[];
-  const FACES6=[...FACES,{n:[0,0,-1],o:0,u:1,v:2,key:'bot'}];
-  for(const b of st.boxes)for(const f of FACES6){if(f.key==='bot'&&b.lo[2]<.05)continue;
-    const o=corner(b.lo,b.hi,f.o),u=corner(b.lo,b.hi,f.u),v=corner(b.lo,b.hi,f.v),r=[u[0]+v[0]-o[0],u[1]+v[1]-o[1],u[2]+v[2]-o[2]];
-    const W=Math.hypot(u[0]-o[0],u[1]-o[1],u[2]-o[2]),H=Math.hypot(v[0]-o[0],v[1]-o[1],v[2]-o[2]);if(W<.005||H<.005)continue;
-    const base=f.key==='top'?b.top:b.side,c=shade(base,f.key==='bot'?[0,0,1]:f.n);
-    if(b.deco[f.key]){const it={b,f,W,H,base,c,grp:'out',ppu:110,dyn:true,sid:st.id};bakeFace(it);const a2=[];quad(o,u,v,r,[1,1,1],a2);it.buf=mkBuf(a2);texFaces.push(it)}
-    else quad(o,u,v,r,c.map(x=>clamp(x/255,0,1)),arr)}
-  for(const p of st.polys)for(const f of p.faces){const top=f.n[2]>.7,c=shade(top?p.top:p.col,f.n).map(x=>clamp(x/255,0,1));
-    for(let i=1;i<f.pts.length-1;i++)for(const q of[f.pts[0],f.pts[i],f.pts[i+1]])arr.push(q[0],q[1],q[2],0,0,c[0],c[1],c[2])}
-  if(arr.length)statics.push({buf:mkBuf(arr),n:arr.length/8,grp:'out',sid:st.id});
-  amb=pA;
-}
+function addStructGL(st){bakeBoxesGL(st.boxes,st.id);const pA=amb;amb=[1,1,1];bakePolysGL(st.polys,st.id);amb=pA}
 function removeStructGL(id){statics=statics.filter(x=>{if(x.sid===id){gl.deleteBuffer(x.buf);return false}return true});texFaces=texFaces.filter(x=>{if(x.sid===id){gl.deleteBuffer(x.buf);gl.deleteTexture(x.tex);return false}return true})}
 let candT=0,curC={acts:[],npc:null,word:null};
 
@@ -256,7 +244,7 @@ function talkPrompt(npc,msg){
   const me=fpv.w,n=npc.needs,hist=talk.turns.filter(t=>!t.wait).slice(-8).map(t=>t.who==='me'?`${me.en}: ${t.text}`:`${npc.en}: ${t.en}`).join('\n');
   return `You are ${npc.en} (${npc.name}), a villager in a cozy village life sim. ${npc.persona.en}${npc.kid?' You are a child.':''}
 You are talking face to face with ${me.en} (${me.name}), another villager, who is controlled by a human learning everyday English.
-Now: day ${clock.day}, ${hhmm(clock.hour)}, weather ${weather.kind}${clock.sim<weather.festUntil?', festival day':''}. You are ${statusOf(npc).en} (${npc.tile.indoor?'at home, in the '+ROOMS[npc.tile.room].en:'outside'}). Mood: ${moodOf(npc)}. Energy ${n.energy.toFixed(1)}, full ${n.food.toFixed(1)}, bladder ${n.bladder.toFixed(1)} (0-1).
+Now: day ${clock.day}, ${hhmm(clock.hour)}, weather ${weather.kind}${clock.sim<weather.festUntil?', festival day':''}. You are ${statusOf(npc).en} (${placeOf(npc)}). Mood: ${moodOf(npc)}. Energy ${n.energy.toFixed(1)}, full ${n.food.toFixed(1)}, bladder ${n.bladder.toFixed(1)} (0-1).
 Recent memories: ${npc.memory.slice(-4).join(' / ')||'nothing special'}
 Conversation so far:
 ${hist}
@@ -299,11 +287,11 @@ function fpvFrame(dt){
   const fogC=(w.tile.indoor?mix(pal[1],[40,36,50],.3):mix(pal[1],pal[2],.4)).map(v=>v/255);
   gl.viewport(0,0,glc.width,glc.height);gl.clearColor(fogC[0],fogC[1],fogC[2],1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   gl.useProgram(prog);gl.uniformMatrix4fv(U.uVP,false,VP);gl.uniform3fv(U.uFogC,fogC);gl.uniform2f(U.uFog,14,40);gl.uniform3fv(U.uEye,EYE);gl.uniform1i(U.uTex,0);gl.activeTexture(gl.TEXTURE0);
-  const tint={out:ambOut,A:houseAmb(houses.A),B:houseAmb(houses.B)};
+  const tint={out:ambOut};buildings.forEach(b=>{if(b.enterable)tint[b.id]=houseAmb(b)});
   gl.disable(gl.BLEND);gl.depthMask(true);
-  for(const s of statics){gl.bindBuffer(gl.ARRAY_BUFFER,s.buf);bindAttribs();gl.uniform3fv(U.uTint,tint[s.grp]);gl.bindTexture(gl.TEXTURE_2D,whiteTex);gl.drawArrays(gl.TRIANGLES,0,s.n)}
+  for(const s of statics){gl.bindBuffer(gl.ARRAY_BUFFER,s.buf);bindAttribs();gl.uniform3fv(U.uTint,tint[s.grp]||ambOut);gl.bindTexture(gl.TEXTURE_2D,whiteTex);gl.drawArrays(gl.TRIANGLES,0,s.n)}
   dynT-=dt;const re=dynT<=0;if(re)dynT=.35;
-  for(const it of texFaces){if(re&&it.dyn)bakeFace(it);gl.bindBuffer(gl.ARRAY_BUFFER,it.buf);bindAttribs();gl.uniform3fv(U.uTint,tint[it.grp]);gl.bindTexture(gl.TEXTURE_2D,it.tex);gl.drawArrays(gl.TRIANGLES,0,6)}
+  for(const it of texFaces){if(re&&it.dyn)bakeFace(it);gl.bindBuffer(gl.ARRAY_BUFFER,it.buf);bindAttribs();gl.uniform3fv(U.uTint,tint[it.grp]||ambOut);gl.bindTexture(gl.TEXTURE_2D,it.tex);gl.drawArrays(gl.TRIANGLES,0,6)}
   // billboards (far to near)
   gl.enable(gl.BLEND);
   const bb=[];
@@ -317,9 +305,9 @@ function fpvFrame(dt){
   // overlay
   const d=glc.width/S.width,pN=N;N=ovc;ovc.setTransform(1,0,0,1,0,0);ovc.clearRect(0,0,ovl.width,ovl.height);ovc.setTransform(d,0,0,d,0,0);
   labelRects=[];
-  const inH=w.tile.indoor?w.tile.house:null;
+  const inH=w.tile.indoor?w.tile.bld:null;
   if(L==='en'&&showLabels&&curC.word){const v=curC.word,s=toScreen(v.pos);if(s){tag(s[0],s[1],v.word,'obj');labelRects.push({x:s[0],y:s[1],v})}}
-  if(false)VOCAB.forEach(v=>{if((v.house||null)!==inH)return;const dd=Math.hypot(v.pos[0]-EYE[0],v.pos[1]-EYE[1]);if(dd>4.5)return;const s=toScreen(v.pos);if(!s)return;tag(s[0],s[1],v.word,'obj');labelRects.push({x:s[0],y:s[1],v})});
+  if(false)VOCAB.forEach(v=>{if((v.bld||null)!==inH)return;const dd=Math.hypot(v.pos[0]-EYE[0],v.pos[1]-EYE[1]);if(dd>4.5)return;const s=toScreen(v.pos);if(!s)return;tag(s[0],s[1],v.word,'obj');labelRects.push({x:s[0],y:s[1],v})});
   const sayText=o=>L==='en'?(o.say.en||o.say.ja):(o.say.ja||o.say.en);
   for(const o of walkers){if(o===w)continue;const q=walkerPos(o);if(Math.hypot(q[0]-EYE[0],q[1]-EYE[1])>11)continue;const post=o.kind==='person'?postureOf(o):'stand';
     const hh=o.kind==='cat'?.5:post==='lie'?.45:post==='bath'?.45:post==='sit'?.82:(o.kid?.86:1.02);const s=toScreen([q[0],q[1],q[2]+hh]);if(!s)continue;

@@ -10,8 +10,12 @@ GitHub Pages で公開しています（`main` への push で `.github/workflow
 ```sh
 npm run build   # src/ → index.html を生成
 npm run check   # 外部リソース禁止・秘密情報（全履歴）・構文・ビルド最新かを検査
-npm run smoke   # ヘッドレス Chromium で起動・API キー経路を確認（API はモック、要 Playwright）
 npm run verify  # build + check
+npm test        # check + ブラウザのテスト一式（要 Playwright）
+npm run smoke   # 起動・API キー経路（API はモック）・一人称モード
+npm run sim     # 住人を3日分動かし、生活の行動が一通り起きるか
+npm run test:build  # 設計図の検査・2階建ての建物の配置・階段で2階へ行けるか・撤去
+npm run visual -- index.html out/ base/  # 決まった視点のスクリーンショットを撮り、base/ と比べる
 ```
 
 - 編集は `src/`（`index.template.html` / `styles.css` / `js/NN-*.js`）で行い、`index.html` は直接編集しない
@@ -30,7 +34,7 @@ GitHub Pages 版で Claude を使うには、「町」→「Claude API」に自�
 
 - **自律する住民**: 6人＋猫が、欲求（エネルギー・空腹・社交・楽しさ・トイレ・清潔）に基づく効用AIで行動。関係性・記憶・気分・天気・昼夜・お祭りあり
 - **神の声**: テキスト入力で住民の行動に影響。Claude（`sample`）が解釈。使えない時はキーワードによるオフライン解釈
-- **建物の生成**: 神の声から Claude が部品（box/prism/cylinder/cone）で設計し、検証（`sanitizeSpec`）して村に配置。永続化
+- **建物の生成**: 神の声から Claude が設計図を作り、検証（`sanitizeSpec`）して配置。小物（部品の組み合わせ）から、部屋・家具・階段のある最大3階建ての建物まで。町の家と同じしくみで組み立て、住人が中に入って使う。永続化
 - **英語学習モード**: 生活英語、家の中が見える断面表示、ラベル表示切替、フレーズ帳、音声読み上げ
 - **一人称モード**: 任意の住民を操作。自作 WebGL レンダラー（外部ライブラリなし）
 - **町のブラウザ保存**: 自動保存（10秒ごと／閉じる時）。時刻・天気・住民の状態・建物・町の歩みを復元。「町」ボタンから手動保存・リセット
@@ -51,12 +55,15 @@ GitHub Pages 版で Claude を使うには、「町」→「Claude API」に自�
 9. GitHub リポジトリへ移行（クラウドセッションで開発を続けるため）
 10. Google Fonts を廃止してシステムフォントのみに。`src/` 分割・ビルド・検査・CI を整備
 11. GitHub Pages で公開。各自の API キー（ブラウザ保存）で Claude を使えるように
+12. 町と建物をデータ化。家も神の声の建物も同じ設計図から組み立てる方式に（複数階・家具カタログ・行動場所）。見た目は変えずに作り替え
 
 ## 実装メモ
 
 - 描画: Canvas2D の箱ベース等角投影。位相ソート（`sep()`/`topo()`）。床など `whi.z<=0.2` で面積2.5以上の板は `topo` の外で先に描く
 - 壁: カメラに近い側の壁は `prepBox` で低くカットし、内部が見える
-- ビルド生成: `sanitizeSpec` → `findSpot`/`canPlace`（連結性チェック）→ `placeStructure`。活動は `ACTS` に動的追加
+- 町と建物: 地図は `TOWN`（`11-town.js`）、建物は設計図から `buildBuilding`（`09-builder.js`）で組み立て。家具カタログ（`08-furniture.js`）が行動場所を登録
+- 神の声の建物: `sanitizeSpec` → `findSpot`/`canPlace`（連結性・入口チェック）→ `placeBuilding`。活動は `ACTS` に動的追加
+- 複数階: 階ごとにタイルを持ち、階段のタイル同士をつなぐ。内観では選んだ階より上を描かず、その階の手前の壁だけ低く切る
 - 保存キー（localStorage）: `hakoniwa-save-v1`（町）、`hakoniwa-builds`（建物）、`hakoniwa-book`（フレーズ帳）、`hakoniwa-lang`、`hakoniwa-labels`、`hakoniwa-api-key`・`hakoniwa-api-model`（Claude API）
 - Artifact 制約: 外部CDN・Google Fonts 不可。three.js は使わず自前 WebGL。全体は IIFE 内
 

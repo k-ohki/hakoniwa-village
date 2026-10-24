@@ -46,5 +46,14 @@ const ACTS={
   dance:{label:J('広場で踊る','dancing at the plaza'),glyph:'♪',dur:[.8,1.6],gain:{fun:.5,social:.2,energy:-.1},
     phrase:()=>J('一緒に踊ろう！','Let\'s dance together!')}};
 let ACT_IDS=Object.keys(ACTS);
+// 家の中の行動は「自分の家」の家具を使う
+ACT_IDS.forEach(id=>{if(ACTS[id].indoor)ACTS[id].home=true});
+// 一人称モードのボタン文言
+const USE_T={sleep:J('ベッドで寝る','Go to bed'),toilet:J('トイレを使う','Use the toilet'),bath:J('お風呂に入る','Take a bath'),brush:J('歯をみがく','Brush your teeth'),wash:J('顔を洗う','Wash your face'),
+  cook:J('料理する','Cook a meal'),eat:J('ごはんを食べる','Eat a meal'),sit:J('いすに座る','Sit on the chair'),snack:J('飲み物を出す','Get a drink'),dishes:J('お皿を洗う','Do the dishes'),
+  tv:J('テレビを見る','Watch TV'),rest:J('ソファでくつろぐ','Relax on the sofa'),fish:J('釣りをする','Go fishing'),well:J('水をくむ','Get some water'),field:J('畑の手入れ','Work in the field'),
+  flower:J('花に水をやる','Water the flowers'),bench:J('ベンチで休む','Rest on the bench'),stall:J('果物を買う','Buy some fruit'),dance:J('踊る','Dance'),nap:J('昼寝する','Take a nap')};
+for(const k in USE_T)if(ACTS[k])ACTS[k].use=USE_T[k];
+
 const labelOf=(w,id)=>{const a=ACTS[id];if(!a)return J('ひと休み','taking a break');if(id==='stall'&&w.keeper)return J('屋台の店番','running the stall');if(id==='bench'&&w.name==='ミノリ')return J('ベンチで読書','reading on the bench');if(id==='field'&&w.kid)return J('畑で虫さがし','looking for bugs in the field');return typeof a.label==='function'?a.label():a.label};
 

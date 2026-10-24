@@ -1,6 +1,7 @@
 // ================= input =================
 const pointers=new Map();let drag=null,pinch=null;
-const hiddenW=w=>!interior&&(w.tile.indoor||(w.link&&w.link.to.indoor));
+// 見えない住人: 外観では家の中の人、内観ではほかの階にいる人
+const hiddenW=w=>{const t=w.link&&w.t>.5?w.link.to:w.tile;if(!interior)return!!(w.tile.indoor||(w.link&&w.link.to.indoor));return!!(t.indoor&&t.bld&&t.level!==effFloor(t.bld))};
 cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
   if(pointers.size===2){const[a,b]=[...pointers.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),z:cam.tzoom};drag=null}
   else drag={x:e.clientX,y:e.clientY,az:cam.taz,el:cam.tel,moved:false}});
@@ -11,7 +12,7 @@ function endPointer(e){pointers.delete(e.pointerId);if(pointers.size<2)pinch=nul
   if(drag&&!drag.moved&&e.type==='pointerup'){const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let best=null,bd=Math.max(18,.75*cam.scale);
     walkers.forEach(w=>{if(hiddenW(w))return;const hp=headPoint(w),p=project(walkerPos(w)),cy=(hp[1]+p[1])/2+.15*cam.scale,d=Math.hypot(hp[0]-x,cy-y);if(d<bd){bd=d;best=w}});
     if(best)select(best);
-    else{let bv=null,bvd=Math.max(16,.6*cam.scale);VOCAB.forEach(v=>{if(v.house&&!interior)return;if(v.exterior&&interior)return;if(v.mirror&&dot([0,-1,0],cam.d)>.02)return;const p=project(v.pos),d=Math.hypot(p[0]-x,p[1]-y);if(d<bvd){bvd=d;bv=v}});
+    else{let bv=null,bvd=Math.max(16,.6*cam.scale);VOCAB.forEach(v=>{if(!vocabShown(v))return;const p=project(v.pos),d=Math.hypot(p[0]-x,p[1]-y);if(d<bvd){bvd=d;bv=v}});
       if(bv)openWord(bv);else{select(null);wordCard.hidden=true;logEl.hidden=false}}}
   drag=null}
 cv.addEventListener('pointerup',endPointer);cv.addEventListener('pointercancel',endPointer);
