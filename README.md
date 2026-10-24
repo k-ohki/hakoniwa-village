@@ -1,7 +1,21 @@
 # 箱庭の村 (Hakoniwa Village)
 
-単一HTMLファイル（`index.html`）で動く、等角投影の小さな村の生活シミュレーション。ブラウザで開くだけで動きます。
+単一HTMLファイル（`index.html`、`src/` からビルド）で動く、等角投影の小さな村の生活シミュレーション。ブラウザで開くだけで動きます。
 Claude Artifact としても公開しており、その場合は `index.html` をそのまま公開します（`sample` 機能を宣言）。
+
+> **Google Fonts・外部CDN・外部通信は禁止。** フォントはシステムフォントのみ。`npm run check` で自動検出します。
+
+## 開発
+
+```sh
+npm run build   # src/ → index.html を生成
+npm run check   # 外部リソース禁止・構文・ビルド最新かを検査
+npm run smoke   # ヘッドレス Chromium で起動確認（要 Playwright）
+npm run verify  # build + check
+```
+
+- 編集は `src/`（`index.template.html` / `styles.css` / `js/NN-*.js`）で行い、`index.html` は直接編集しない
+- 開発ルールは `CLAUDE.md`、CI は `.github/workflows/ci.yml`
 
 ## 主な機能
 
@@ -26,6 +40,7 @@ Claude Artifact としても公開しており、その場合は `index.html` �
    - 2回目（真因）: 特定角度で、家の床の板が家より後に描かれ家を覆っていた（描画順の循環）。床など低く広い板を別パスで先に描画して解消
 8. 町のブラウザ保存と、住民の願い・出来事による町の成長を追加
 9. GitHub リポジトリへ移行（クラウドセッションで開発を続けるため）
+10. Google Fonts を廃止してシステムフォントのみに。`src/` 分割・ビルド・検査・CI を整備
 
 ## 実装メモ
 
@@ -33,7 +48,7 @@ Claude Artifact としても公開しており、その場合は `index.html` �
 - 壁: カメラに近い側の壁は `prepBox` で低くカットし、内部が見える
 - ビルド生成: `sanitizeSpec` → `findSpot`/`canPlace`（連結性チェック）→ `placeStructure`。活動は `ACTS` に動的追加
 - 保存キー（localStorage）: `hakoniwa-save-v1`（町）、`hakoniwa-builds`（建物）、`hakoniwa-book`（フレーズ帳）、`hakoniwa-lang`、`hakoniwa-labels`
-- Artifact 制約: 外部CDN不可（ネットワーク制限）。three.js は使わず自前 WebGL。全体は IIFE 内
+- Artifact 制約: 外部CDN・Google Fonts 不可。three.js は使わず自前 WebGL。全体は IIFE 内
 
 ## 検証状況・既知の課題
 
