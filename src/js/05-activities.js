@@ -48,6 +48,8 @@ const ACTS={
 let ACT_IDS=Object.keys(ACTS);
 // 家の中の行動は「自分の家」の家具を使う
 ACT_IDS.forEach(id=>{if(ACTS[id].indoor)ACTS[id].home=true});
+// トイレだけは学校やお店のものも使える（よその家のトイレは使わない）
+ACTS.toilet.home=false;
 // 一人称モードのボタン文言
 const USE_T={sleep:J('ベッドで寝る','Go to bed'),toilet:J('トイレを使う','Use the toilet'),bath:J('お風呂に入る','Take a bath'),brush:J('歯をみがく','Brush your teeth'),wash:J('顔を洗う','Wash your face'),
   cook:J('料理する','Cook a meal'),eat:J('ごはんを食べる','Eat a meal'),sit:J('いすに座る','Sit on the chair'),snack:J('飲み物を出す','Get a drink'),dishes:J('お皿を洗う','Do the dishes'),

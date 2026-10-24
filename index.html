@@ -136,6 +136,12 @@ body.fpv.coarse .joy{display:block}
 #tForm button{font:inherit;font-size:13px;font-weight:700;color:#fff;background:var(--en);border:0;border-radius:10px;padding:8px 12px;cursor:pointer}
 .toast{position:fixed;z-index:6;left:50%;top:42%;transform:translate(-50%,-50%);background:rgba(40,34,56,.86);color:#fff;font-size:13px;padding:8px 14px;border-radius:10px;pointer-events:none}
 .word{z-index:4}
+@media (max-width:640px){
+  /* ボタンが増えても1列に収め、はみ出す分は横にスクロール */
+  .controls{left:max(16px,env(safe-area-inset-left,0px));flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;scrollbar-width:none}
+  .controls::-webkit-scrollbar{display:none}
+  .controls button{flex:none;white-space:nowrap;padding:8px 10px}
+}
 </style>
 
 
@@ -253,7 +259,7 @@ const UI={
   hint:J('ドラッグで回転・ホイールで拡大・住人や物をタップ','Drag to rotate · zoom in to see names · tap people and things to learn words'),
   think:J('心の声を聞く','Inner voice'),follow:J('この人を追う','Follow'),listening:J('耳をすましています…','Listening…'),
   roofOn:J('外観を見る','Show roofs'),roofOff:J('家の中を見る','Show inside'),
-  speed:J('早送り','Speed'),floor:n=>J(`${n}階を表示中`,`Showing floor ${n}`),play:J('この人になる（一人称）','Play as this person'),reset:J('視点を戻す','Reset view'),exSay:J('🔊 例文を聞く','🔊 Example')};
+  speed:J('早送り','Speed'),floor:n=>J(`${n}階`,`${n}F`),floorTip:J('表示する階を切りかえる','Switch the floor to show'),play:J('この人になる（一人称）','Play as this person'),reset:J('視点を戻す','Reset view'),exSay:J('🔊 例文を聞く','🔊 Example')};
 const MOOD_T={happy:J('ごきげん','happy'),excited:J('わくわく','excited'),calm:J('おだやか','calm'),sad:J('しょんぼり','sad'),scared:J('こわがり中','scared'),angry:J('ぷんぷん','angry'),tired:J('くたくた','tired')};
 const WX_T={clear:J('晴れ','Sunny'),rain:J('雨','Rainy'),snow:J('雪','Snowy')};
 const NEED_T={energy:[J('元気','Energy'),'#7fc7a0'],food:[J('満腹','Full'),'#a0b8e8'],social:[J('交流','Social'),'#e8a0b0'],fun:[J('楽しさ','Fun'),'#f0c070'],bladder:[J('トイレ','Bladder'),'#c9b3e8'],hygiene:[J('清潔','Clean'),'#8fd3e0']};
@@ -290,7 +296,12 @@ function project(p){if(projOverride)return projOverride(p);const e=[p[0]-cam.cen
 const isoProj=t=>[.70710678*(t[0]-t[1]),.40824829*(t[0]+t[1])-.81649658*t[2]];
 
 // ================= time & weather =================
-const DAY=180, HR=DAY/24, START_H=6.8;
+// 1日 = 300 秒（1時間 = 12.5 秒）。町が広いので、歩いて移動できる時間を確保している
+const DAY=300, HR=DAY/24, START_H=6.8, OLD_HR=7.5;
+const WEEK=[J('月','Mon'),J('火','Tue'),J('水','Wed'),J('木','Thu'),J('金','Fri'),J('土','Sat'),J('日','Sun')];
+const weekday=()=>(clock.day-1)%7, isWeekend=()=>weekday()>=5;
+// 時間帯 [a,b]（日をまたいでもよい）、または時間帯のリストに今の時刻が入っているか
+const inHours=(h,r)=>Array.isArray(r[0])?r.some(x=>inHours(h,x)):r[0]<=r[1]?h>=r[0]&&h<r[1]:h>=r[0]||h<r[1];
 const clock={sim:0,hour:START_H,day:1,speed:1,lastDay:1,lastHourInt:6};
 const weather={kind:'clear',until:0,rainbowUntil:0,festUntil:0,plan:null};
 function setWeather(kind,hours){weather.kind=kind;weather.until=clock.sim+hours*HR}
@@ -348,6 +359,8 @@ const ACTS={
 let ACT_IDS=Object.keys(ACTS);
 // 家の中の行動は「自分の家」の家具を使う
 ACT_IDS.forEach(id=>{if(ACTS[id].indoor)ACTS[id].home=true});
+// トイレだけは学校やお店のものも使える（よその家のトイレは使わない）
+ACTS.toilet.home=false;
 // 一人称モードのボタン文言
 const USE_T={sleep:J('ベッドで寝る','Go to bed'),toilet:J('トイレを使う','Use the toilet'),bath:J('お風呂に入る','Take a bath'),brush:J('歯をみがく','Brush your teeth'),wash:J('顔を洗う','Wash your face'),
   cook:J('料理する','Cook a meal'),eat:J('ごはんを食べる','Eat a meal'),sit:J('いすに座る','Sit on the chair'),snack:J('飲み物を出す','Get a drink'),dishes:J('お皿を洗う','Do the dishes'),
@@ -477,14 +490,15 @@ const FURN={
     c.seat(.34,'seat');c.spot('tv','self');c.spot('rest','self');c.vocab('sofa','ソファ','Let\'s sit on the sofa and relax.','ソファに座ってくつろごう。',[0,0,.55])}},
   // ---- 学校・お店・公共の建物向け ----
   desk:{ja:'机といす',build(c){const k=c.color(P.woodL);
-    c.B([-.36,-.42,.52],[.36,-.06,.58],{side:P.wood,top:k});c.B([-.3,-.36,FLOOR],[-.24,-.12,.52],{side:P.steel});c.B([.24,-.36,FLOOR],[.3,-.12,.52],{side:P.steel});
-    c.B([-.18,.02,FLOOR],[.18,.32,.32],{side:P.wood,top:P.coral});c.B([-.18,.32,FLOOR],[.18,.38,.7],{side:P.wood,top:P.woodL});
-    c.seat(.32,'seat');c.vocab('desk','机','I study at my desk.','机で勉強します。',[0,-.24,.62])}},
+    // 座る人は正面（+y）の机に向かう
+    c.B([-.36,.06,.52],[.36,.42,.58],{side:P.wood,top:k});c.B([-.3,.12,FLOOR],[-.24,.36,.52],{side:P.steel});c.B([.24,.12,FLOOR],[.3,.36,.52],{side:P.steel});
+    c.B([-.18,-.32,FLOOR],[.18,-.02,.32],{side:P.wood,top:P.coral});c.B([-.18,-.38,FLOOR],[.18,-.32,.7],{side:P.wood,top:P.woodL});
+    c.seat(.32,'seat');c.vocab('desk','机','I study at my desk.','机で勉強します。',[0,.24,.62])}},
   teacherdesk:{ja:'先生の机',build(c){const k=c.color(P.wood);
     c.B([-.44,-.3,FLOOR],[.44,.3,.66],{side:k,top:P.woodL,deco:{py:'cabinet'}});c.B([-.3,-.18,.66],[-.06,.08,.72],{side:P.white,top:P.white});c.solid();
     c.vocab('teacher\'s desk','教卓','The teacher is at the desk.','先生は教卓にいます。',[0,0,.75])}},
   blackboard:{ja:'黒板',build(c){const k=c.color([70,110,96]);
-    c.B([-.48,-.48,.45],[.48,-.4,1.35],{side:P.wood,top:P.wood,deco:{py:'board'},boardC:k,cutWith:[0,-1,0]});
+    c.B([-.48,-.37,.45],[.48,-.31,1.35],{side:P.wood,top:P.wood,deco:{py:'board'},boardC:k,cutWith:[0,-1,0]});
     c.vocab('blackboard','黒板','Look at the blackboard, please.','黒板を見てください。',[0,-.44,1.45])}},
   shelf:{ja:'本だな',build(c){const k=c.color(P.wood);
     c.B([-.44,-.42,FLOOR],[.44,-.06,1.3],{side:k,top:lighten(k,.2),deco:{py:'books'}});c.solid();
@@ -559,7 +573,7 @@ function buildBuilding(spec,pos,o={}){
   const actId={};
   (spec.activities||[]).forEach(a=>{const aid=(o.fixed?id+'.':'g_'+id+'_')+a.key;actId[a.key]=aid;
     ACTS[aid]={label:J(a.label_ja,a.label_en),use:J(a.use_ja||a.label_ja,a.use_en||a.label_en),glyph:a.glyph||'♪',dur:a.dur||[.6,1.3],gain:a.gain||{fun:.3},gen:true,
-      created:o.fixed?null:clock.sim,hours:a.hours||null,who:a.who||'all',staff:!!a.staff,
+      created:o.fixed?null:clock.sim,hours:a.hours||null,who:a.who||'all',staff:!!a.staff,days:a.days||null,
       phrase:()=>a.phrase_en?J(a.phrase_ja||a.phrase_en,a.phrase_en):null};
     ACT_IDS.push(aid);bld.acts.push(aid)});
   const actOf=k=>actId[k]||(ACTS[k]&&!ACTS[k].home?k:null);
@@ -640,17 +654,22 @@ function buildInterior(bld,spec,pos,B,actOf){
         B:(lo,hi,opt={})=>{const a=W3(lo[0],lo[1],lo[2]),b=W3(hi[0],hi[1],hi[2]);
           const deco={};for(const k in opt.deco||{})deco[rotKey(face,k)]=opt.deco[k];
           const ex=opt.cutWith?{cutWith:ctx.dir(opt.cutWith[0],opt.cutWith[1])}:{};
-          return B([Math.min(a[0],b[0]),Math.min(a[1],b[1]),a[2]],[Math.max(a[0],b[0]),Math.max(a[1],b[1]),b[2]],{...opt,...ex,deco,indoor:true,level:lv})},
+          // 壁にめりこむと描く順番が決まらなくなるので、壁の内側に収める
+          const cx_=v=>clamp(v,ox+.121,ox+w-.121),cy_=v=>clamp(v,oy+.121,oy+d-.121);
+          return B([cx_(Math.min(a[0],b[0])),cy_(Math.min(a[1],b[1])),a[2]],[cx_(Math.max(a[0],b[0])),cy_(Math.max(a[1],b[1])),b[2]],{...opt,...ex,deco,indoor:true,level:lv})},
         seat:(z,type,extra={})=>{const f={type,face:fr,...extra};
           if(extra.head)f.head=W3(...extra.head);if(extra.foot)f.foot=W3(...extra.foot);
           if(extra.lo){const a=W3(extra.lo[0],extra.lo[1],0),b=W3(extra.hi[0],extra.hi[1],0);f.lo=[Math.min(a[0],b[0]),Math.min(a[1],b[1])];f.hi=[Math.max(a[0],b[0]),Math.max(a[1],b[1])]}
           uses.set(ck(c0,r0,lv),{z:z+zb,furn:f})},
         solid:()=>solid.add(ck(c0,r0,lv)),
-        spot:(act,where)=>bld.pending.push({act,cell:where==='front'?[c0+fr[0],r0+fr[1]]:[c0,r0],lv}),
+        spot:(act,where)=>bld.pending.push({act,cell:where==='front'?[c0+fr[0],r0+fr[1]]:where==='back'?[c0-fr[0],r0-fr[1]]:[c0,r0],lv}),
         mark:(k,p)=>{if(!bld[k])bld[k]=W3(...p)},
         vocab:(word,ja,ex,exja,p,opt={})=>{if(bld.vocab.some(v=>v.word===word&&v.level===lv))return;bld.vocab.push(vocab(word,ja,ex,exja,W3(...p),{...opt,bld,level:lv}))}};
       def.build(ctx);
-      const aid=it.use&&actOf(it.use);if(aid)ctx.spot(aid,uses.has(ck(c0,r0,lv))?'self':solid.has(ck(c0,r0,lv))?'front':'self');
+      const where=uses.has(ck(c0,r0,lv))?'self':solid.has(ck(c0,r0,lv))?'front':'self';
+      for(const u of[].concat(it.use||[])){const aid=actOf(u);if(aid)ctx.spot(aid,where)}
+      // 店員・先生などが立つ場所（家具の裏側）
+      if(it.staff){const aid=actOf(it.staff);if(aid)ctx.spot(aid,'back')}
     }
     // stairs geometry (steps rise inside the landing cell of the floor below)
     for(const s of stairs.filter(s=>s.floor===lv)){const[lc,lr]=s.land,N=5;
@@ -751,33 +770,113 @@ const BLUEPRINTS={
     parts:[{from:[.12,.32,0],to:[.22,.62,.3],color:P.wood,top:P.wood},{from:[.78,.32,0],to:[.88,.62,.3],color:P.wood,top:P.wood},
       {from:[.06,.3,.3],to:[.94,.68,.37],color:P.wood,top:[214,170,138]},{from:[.06,.24,.37],to:[.94,.3,.72],color:P.wood,top:P.wood}],
     uses:[{act:'bench',at:[[-1,0],[1,0],[0,-1]]}]}),
+  // 学校（2階建て）: 1階は教室と昇降口、2階は図書室と音楽室
+  school:()=>({name_en:'school',name_ja:'学校',example_en:'I go to school every day.',example_ja:'毎日学校に行きます。',
+    footprint:[10,6],enterable:true,floors:2,
+    style:{wall:[246,232,214],roof:[120,170,180],paper:[248,244,236],curtain:[150,186,222],roofShape:'gable'},
+    door:{side:'py',at:8},
+    rooms:[{name_en:'classroom',name_ja:'教室',from:[0,0],to:[6,5],floorStyle:'wood',color:[226,196,160]},
+      {name_en:'entrance',name_ja:'昇降口',from:[7,0],to:[9,5],floorStyle:'stone'},
+      {name_en:'library',name_ja:'図書室',floor:1,from:[0,0],to:[4,5],floorStyle:'carpet',color:[214,200,232]},
+      {name_en:'music room',name_ja:'音楽室',floor:1,from:[5,0],to:[9,5],floorStyle:'wood'}],
+    partitions:[{x:7,y:[0,4]},{floor:1,x:5,y:[0,4]}],
+    stairs:[{at:[8,1],dir:'ny',floor:0}],
+    decals:[{type:'rug',floor:1,x:.6,y:1.6,w:3.8,h:1.8,color:[190,170,220]}],
+    furniture:[{type:'blackboard',at:[3,0]},{type:'teacherdesk',at:[3,2],face:'ny',use:'teach'},
+      ...[[1,3],[2,3],[4,3],[5,3],[1,4],[2,4],[4,4],[5,4]].map(at=>({type:'desk',at,face:'ny',use:['study','lunch']})),
+      {type:'shelf',at:[6,0]},{type:'plant',at:[0,0]},{type:'locker',at:[9,2],face:'nx'},{type:'locker',at:[9,3],face:'nx'},{type:'toilet',at:[9,0],face:'nx'},{type:'toilet',at:[9,5],face:'nx'},
+      ...[0,1,2,3].map(c=>({type:'shelf',at:[c,0],floor:1,use:'read'})),
+      ...[1,2,3].map(c=>({type:'desk',at:[c,3],floor:1,face:'ny',use:'read'})),
+      {type:'piano',at:[6,0],floor:1,use:'music'},{type:'bench',at:[6,2],floor:1,face:'ny',use:'music'},{type:'bench',at:[7,2],floor:1,face:'ny',use:'music'},{type:'toilet',at:[9,5],floor:1,face:'nx'}],
+    activities:[
+      {key:'study',label_en:'studying at school',label_ja:'学校で勉強',use_en:'Study',use_ja:'勉強する',glyph:'✎',phrase_en:'Let\'s open our textbooks.',phrase_ja:'教科書を開こう。',gain:{social:.35,fun:.1,energy:-.04},hours:[[8.5,12],[13,15]],who:'kid',days:'weekday'},
+      {key:'lunch',label_en:'eating school lunch',label_ja:'給食を食べる',use_en:'Eat lunch',use_ja:'給食を食べる',glyph:'♪',phrase_en:'School lunch is yummy!',phrase_ja:'給食おいしい！',gain:{food:1.6,social:.4},hours:[12,13],days:'weekday',dur:[.4,.6]},
+      {key:'teach',label_en:'teaching a class',label_ja:'授業をする',use_en:'Teach',use_ja:'授業をする',glyph:'✎',phrase_en:'Good morning, everyone!',phrase_ja:'みなさん、おはようございます！',gain:{social:.3,fun:.1,energy:-.05},hours:[[8.3,12],[13,15.2]],staff:true,days:'weekday'},
+      {key:'read',label_en:'reading in the library',label_ja:'図書室で読書',use_en:'Read a book',use_ja:'本を読む',glyph:'✎',phrase_en:'This book is so interesting.',phrase_ja:'この本、すごくおもしろい。',gain:{fun:.3,energy:.12},hours:[9,18]},
+      {key:'music',label_en:'playing music',label_ja:'音楽を楽しむ',use_en:'Play music',use_ja:'音楽をする',glyph:'♪',phrase_en:'Let\'s sing together!',phrase_ja:'一緒に歌おう！',gain:{fun:.45,social:.25},hours:[9,18]}],
+    parts:[{from:[4.4,2.6,3.2],to:[5.6,3.4,4.6],color:[252,240,222],top:[252,240,222],pattern:'windows'},{shape:'cone',from:[4.25,2.45,4.6],to:[5.75,3.55,5.4],color:[120,170,180]},
+      {from:[7.1,6,1.25],to:[9.9,6.6,1.38],color:[120,170,180],top:[150,196,204]}]}),
+  // デパート（3階建て）: 1階は食料品、2階は洋服、3階はおもちゃとレストラン
+  store:()=>({name_en:'department store',name_ja:'デパート',example_en:'Let\'s go shopping at the department store.',example_ja:'デパートに買い物に行こう。',
+    footprint:[10,8],enterable:true,floors:3,
+    style:{wall:[244,226,236],roof:[236,140,132],paper:[250,244,246],curtain:[236,150,180],roofShape:'flat'},
+    door:{side:'py',at:4},
+    windows:{nx:[1.5,4,6.5],px:[1.5,4,6.5],ny:[1.5,3.5,5.5,7.5],py:[1.5,7.5]},
+    rooms:[{name_en:'food hall',name_ja:'食品売り場',from:[0,0],to:[9,7],floorStyle:'tile',color:[236,230,214]},
+      {name_en:'clothing',name_ja:'洋服売り場',floor:1,from:[0,0],to:[9,7],floorStyle:'carpet',color:[236,214,226]},
+      {name_en:'toy shop',name_ja:'おもちゃ売り場',floor:2,from:[0,0],to:[4,7],floorStyle:'carpet',color:[206,230,210]},
+      {name_en:'restaurant',name_ja:'レストラン',floor:2,from:[5,0],to:[9,7],floorStyle:'wood'}],
+    partitions:[{floor:2,x:5,y:[0,5]}],
+    stairs:[{at:[8,0],dir:'px',floor:0},{at:[8,3],dir:'px',floor:1}],
+    decals:[{type:'mat',x:3.6,y:7.1,w:1.8,h:.7,color:[236,140,132]}],
+    furniture:[
+      ...[0,1,2,3,4,5].map(c=>({type:'display',at:[c,0],use:'buy_food',color:[250,246,240]})),
+      ...[1,2,3].map(c=>({type:'display',at:[c,3],use:'buy_food',color:[250,246,240]})),
+      {type:'register',at:[2,6],staff:'work'},{type:'register',at:[6,6],staff:'work'},
+      {type:'toilet',at:[9,7],face:'nx'},{type:'plant',at:[0,7]},{type:'plant',at:[9,4]},
+      ...[[1,1],[2,1],[3,1],[5,1],[6,1],[1,4],[2,4],[3,4]].map(at=>({type:'rack',at,floor:1,use:'shop_clothes',color:[[236,150,180],[150,186,222],[244,196,110],[140,199,149]][(at[0]+at[1])%4]})),
+      {type:'register',at:[6,5],floor:1,staff:'work'},{type:'plant',at:[0,7],floor:1},{type:'toilet',at:[9,7],floor:1,face:'nx'},
+      ...[0,1,2,3].map(c=>({type:'display',at:[c,0],floor:2,use:'toys',color:[255,236,210]})),
+      ...[1,2].map(c=>({type:'display',at:[c,3],floor:2,use:'toys',color:[255,236,210]})),
+      {type:'table',at:[6,1],floor:2},{type:'chair',at:[5,1],floor:2,face:'px',use:'restaurant'},{type:'chair',at:[7,1],floor:2,face:'nx',use:'restaurant'},
+      {type:'table',at:[6,4],floor:2},{type:'chair',at:[5,4],floor:2,face:'px',use:'restaurant'},{type:'chair',at:[7,4],floor:2,face:'nx',use:'restaurant'},
+      {type:'table',at:[7,6],floor:2},{type:'chair',at:[6,6],floor:2,face:'px',use:'restaurant'},{type:'chair',at:[8,6],floor:2,face:'nx',use:'restaurant'},
+      {type:'register',at:[9,5],floor:2,face:'ny',staff:'work'},{type:'plant',at:[4,7],floor:2}],
+    activities:[
+      {key:'buy_food',label_en:'shopping for food',label_ja:'食べ物を買う',use_en:'Buy food',use_ja:'食べ物を買う',glyph:'◇',phrase_en:'These strawberries look fresh.',phrase_ja:'このいちご、新鮮そう。',gain:{food:.45,fun:.12},hours:[10,20],dur:[.3,.5]},
+      {key:'shop_clothes',label_en:'shopping for clothes',label_ja:'洋服を選ぶ',use_en:'Try on clothes',use_ja:'洋服を選ぶ',glyph:'◇',phrase_en:'Does this shirt look good on me?',phrase_ja:'このシャツ、似合うかな？',gain:{fun:.4,social:.12},hours:[10,20],dur:[.4,.7]},
+      {key:'toys',label_en:'looking at toys',label_ja:'おもちゃを見る',use_en:'Look at toys',use_ja:'おもちゃを見る',glyph:'!',phrase_en:'I want this robot!',phrase_ja:'このロボットほしい！',gain:{fun:.6},hours:[10,20],who:'kid',dur:[.4,.7]},
+      {key:'restaurant',label_en:'eating at the restaurant',label_ja:'レストランで食事',use_en:'Eat at the restaurant',use_ja:'レストランで食べる',glyph:'♪',phrase_en:'Can I see the menu, please?',phrase_ja:'メニューを見せてください。',gain:{food:1.1,social:.35,fun:.15},hours:[11,20],dur:[.4,.7]},
+      {key:'work',label_en:'working at the store',label_ja:'デパートで働く',use_en:'Work',use_ja:'働く',glyph:'◇',phrase_en:'Welcome! May I help you?',phrase_ja:'いらっしゃいませ！',gain:{social:.3,energy:-.05},hours:[9.5,19.5],staff:true}],
+    parts:[{from:[1.5,8,1.3],to:[6.5,8.7,1.42],color:[236,140,132],top:[244,170,160],pattern:'stripes'},
+      {from:[2.5,8,4.0],to:[7.5,8.12,4.6],color:[252,240,222],top:[252,240,222],pattern:'dots'},
+      {from:[3.5,3,4.8],to:[6.5,5,5.6],color:[236,140,132],top:[244,170,160],pattern:'stripes'}]}),
+  // 校庭の遊具
+  swing:()=>({name_en:'swing',name_ja:'ブランコ',example_en:'Let\'s play on the swing!',example_ja:'ブランコで遊ぼう！',footprint:[2,1],
+    parts:[{from:[.1,.35,0],to:[.2,.65,1.3],color:P.wood,top:P.wood},{from:[1.8,.35,0],to:[1.9,.65,1.3],color:P.wood,top:P.wood},{from:[.1,.35,1.3],to:[1.9,.65,1.4],color:P.coral},{from:[.45,.45,.35],to:[.75,.55,.42],color:P.cream},{from:[1.25,.45,.35],to:[1.55,.55,.42],color:P.cream}],
+    activities:[{key:'swing',label_en:'playing on the swing',label_ja:'ブランコで遊ぶ',use_en:'Play on the swing',use_ja:'ブランコで遊ぶ',glyph:'!',phrase_en:'Wheee! Higher!',phrase_ja:'わーい！もっと高く！',gain:{fun:.55,energy:-.1},who:'kid'}],
+    uses:[{act:'swing',at:[[0,1],[1,1],[0,-1],[1,-1]]}]}),
+  slide:()=>({name_en:'slide',name_ja:'すべり台',example_en:'The slide is so fast!',example_ja:'すべり台、はやい！',footprint:[2,2],
+    parts:[{from:[.2,.6,0],to:[.8,1.4,1.2],color:[150,186,222],pattern:'stripes'},{from:[.2,.6,1.2],to:[.8,1.4,1.3],color:P.coral},{shape:'prism',from:[.8,.7,0],to:[1.9,1.3,1.2],color:[244,196,110],axis:'x'}],
+    activities:[{key:'slide',label_en:'going down the slide',label_ja:'すべり台で遊ぶ',use_en:'Go down the slide',use_ja:'すべる',glyph:'!',phrase_en:'Here I go!',phrase_ja:'いくよー！',gain:{fun:.55,energy:-.1},who:'kid'}],
+    uses:[{act:'slide',at:[[-1,0],[-1,1],[2,0],[2,1]]}]}),
+  sandbox:()=>({name_en:'sandbox',name_ja:'砂場',example_en:'Let\'s build a sand castle.',example_ja:'砂のお城を作ろう。',footprint:[2,2],walkable:true,
+    parts:[{from:[.05,.05,0],to:[1.95,1.95,.1],color:P.wood,top:[240,222,180],topPattern:'dots'}],
+    activities:[{key:'sand',label_en:'playing in the sandbox',label_ja:'砂場で遊ぶ',use_en:'Play in the sand',use_ja:'砂遊びをする',glyph:'!',phrase_en:'Look at my sand castle!',phrase_ja:'砂のお城、見て！',gain:{fun:.45,hygiene:-.1},who:'kid'}],
+    uses:[{act:'sand',at:[[0,0],[1,0],[0,1],[1,1]]}]}),
 };
 // ================= town =================
 // 町の地図。地形・建物・小物はここにデータとして書き、下の assembleTown() が組み立てる。
+// 北西が昔からの村（家A・家B・広場・池・畑）。東に学校と校庭、南に新しい家とデパート。いちばん東は神の声で建物を建てる空き地。
 const TOWN={
-  size:[18,16],
+  size:[38,24],
   // 島の土台（地層）
   island:[
-    {lo:[-.5,-.5,-1],hi:[17.5,15.5,0],top:P.grass,side:P.rock,deco:{top:'ground',px:'strata',py:'strata',nx:'strata',ny:'strata'}},
-    {lo:[.3,.3,-2],hi:[16.7,14.7,-1],side:P.rock,deco:{px:'strata',py:'strata',nx:'strata',ny:'strata'}},
-    {lo:[2,1.8,-3],hi:[14.5,13.5,-2],side:P.rockDark,deco:{px:'strata',py:'strata',nx:'strata',ny:'strata'}},
-    {lo:[5,4.5,-3.8],hi:[11.5,10,-3],side:P.rockDark,deco:{px:'strata',py:'strata'}},
-    {lo:[7,6,-4.4],hi:[9.5,8.5,-3.8],side:P.rockDark}],
+    {lo:[-.5,-.5,-1],hi:[37.5,23.5,0],top:P.grass,side:P.rock,deco:{top:'ground',px:'strata',py:'strata',nx:'strata',ny:'strata'}},
+    {lo:[.3,.3,-2],hi:[36.7,22.7,-1],side:P.rock,deco:{px:'strata',py:'strata',nx:'strata',ny:'strata'}},
+    {lo:[2.5,2,-3],hi:[34.5,21,-2],side:P.rockDark,deco:{px:'strata',py:'strata',nx:'strata',ny:'strata'}},
+    {lo:[8,6,-3.8],hi:[29,17,-3],side:P.rockDark,deco:{px:'strata',py:'strata'}},
+    {lo:[13,9,-4.4],hi:[24,14,-3.8],side:P.rockDark}],
   // 道は [x0,y0,x1,y1] の直線（両端を含む）
-  paths:[[0,8,17,8],[2,7,2,7],[11,7,11,7],[5,9,5,15],[12,9,12,15]],
+  paths:[[0,8,37,8],[2,7,2,7],[11,7,11,7],[28,7,28,7],[5,9,5,22],[12,9,12,22],[19,0,19,22],[0,22,37,22],[30,0,30,22]],
   plaza:{x:7,y:10,w:3,h:3,except:[[8,11]]},
   fields:[{x:0,y:12,w:4,h:3}],
-  flowerbeds:[[0,7],[1,7],[14,7],[15,7],[8,6],[8,7]],
-  ponds:[{x:15.2,y:12.3,rx:2.25,ry:1.7}],
-  trees:[[0,0,.85],[8,0,.7],[17,0,.78],[17,6,.7],[0,10,.62],[7,15,.62],[10,14,.6],[15,15,.6],[17,9,.55]],
-  sakura:[[8,11,1.05]],
-  lanterns:[[4,7],[6,9],[9,7],[13,7],[10,10],[10,13]],
+  flowerbeds:[[0,7],[1,7],[14,7],[15,7],[8,6],[8,7],[20,7],[21,7],[25,7],[26,7],[6,23],[11,23],[13,23],[18,23]],
+  ponds:[{x:15.2,y:12.3,rx:2.25,ry:1.7},{x:27.9,y:11.1,rx:1.4,ry:1.15},{x:36.1,y:3.2,rx:1.3,ry:1.1}],
+  trees:[[0,0,.85],[8,0,.7],[17,0,.78],[17,6,.7],[0,10,.62],[7,15,.62],[10,14,.6],[15,15,.6],[17,9,.55],
+    [20,0,.7],[25,0,.62],[29,0,.75],[29,7,.6],[20,13,.62],[25,13,.55],[29,13,.6],[31,0,.6],[37,7,.55],[37,9,.6],[31,23,.6],[37,23,.55],[0,17,.7],[2,20,.6],[3,16,.55],[0,23,.6]],
+  sakura:[[8,11,1.05],[28,9,.9]],
+  lanterns:[[4,7],[6,9],[9,7],[13,7],[10,10],[10,13],[18,7],[23,7],[26,9],[18,15],[4,21],[3,23],[9,23],[16,23],[22,23],[28,23],[31,4],[31,17],[33,7],[33,9],[33,21],[33,23]],
   poles:[[6.5,9.5],[9.5,9.5],[9.5,12.5],[6.5,12.5]],
-  falls:[{x:17.5,y:12.3,y0:11.6,y1:13}],
+  falls:[{x:37.5,y:3.2,y0:2.6,y1:3.8}],
   buildings:[
     {bp:'house',at:[1,1],id:'A',opts:{wall:P.wall,roof:P.coral,paper:P.paper,curtain:[236,170,160],rug:[214,140,140],blanket:[[244,160,150],[240,200,120],[140,180,230],[236,150,130]]}},
     {bp:'house',at:[10,1],id:'B',noName:true,opts:{wall:P.wall2,roof:P.teal,paper:P.paper2,curtain:[160,200,190],rug:[140,170,200],blanket:[[160,210,200],[190,170,230],[246,180,200],[120,170,180]]}},
-    {bp:'stall',at:[8,3]},{bp:'well',at:[16,3]},{bp:'bench',at:[6,13]}],
+    {bp:'house',at:[6,16],id:'C',noName:true,opts:{wall:[236,224,240],roof:[176,150,206],paper:[246,240,250],curtain:[200,180,230],rug:[190,170,220],blanket:[[200,180,230],[244,196,110],[150,186,222],[176,150,206]]}},
+    {bp:'house',at:[13,16],id:'D',noName:true,opts:{wall:[226,236,214],roof:[150,190,140],paper:[240,246,236],curtain:[176,210,170],rug:[160,200,150],blanket:[[176,210,170],[246,180,200],[240,200,120],[150,190,140]]}},
+    {bp:'stall',at:[8,3]},{bp:'well',at:[16,3]},{bp:'bench',at:[6,13]},
+    {bp:'school',at:[20,1],id:'school'},{bp:'store',at:[20,14],id:'store'},
+    {bp:'swing',at:[21,9],id:'swing'},{bp:'slide',at:[24,10],id:'slide'},{bp:'sandbox',at:[21,11],id:'sandbox'},{bp:'bench',at:[23,12]},{bp:'bench',at:[17,23]}],
   spots:{field:[[4,12],[4,13],[4,14],[0,11],[1,11],[2,11],[3,11]]},
   vocab:[
     ['pond','池','There are fish in the pond.','池には魚がいるよ。',[15,12.3,0]],
@@ -785,13 +884,17 @@ const TOWN={
     ['cherry tree','桜の木','The cherry tree is in full bloom.','桜が満開です。',[8,11,1.7]],
     ['tree','木','I take a nap under the tree.','木の下で昼寝をします。',[0,0,1.3],{showLabel:true}],
     ['street lamp','街灯','The street lamp is on at night.','夜は街灯がつきます。',[4,7,.9],{showLabel:true}],
-    ['waterfall','滝','The waterfall is very loud.','滝の音がとても大きい。',[17.5,12.3,-1]],
+    ['waterfall','滝','The waterfall is very loud.','滝の音がとても大きい。',[37.5,3.2,-1]],
     ['flower bed','花壇','I water the flower bed every day.','毎日花壇に水をやります。',[.5,7,.1]],
     ['plaza','広場','Everyone meets at the plaza.','みんな広場に集まります。',[8,10,0]],
+    ['schoolyard','校庭','The kids play in the schoolyard.','子どもたちは校庭で遊びます。',[24,9.5,0]],
+    ['road','道','Look both ways before you cross the road.','道をわたる前に左右を見てね。',[19,18,0]],
     ['roof','屋根','There is snow on the roof.','屋根に雪が積もっています。',[12.5,3.5,WALL_H+.65],{exterior:true}],
     ['chimney','煙突','Smoke comes out of the chimney.','煙突から煙が出ています。',[14,3,WALL_H+1.25],{exterior:true}]],
+  origin:[8,8],
   // 神の声で建物を置く時の目印
-  landmarks:{plaza:[8,11],pond:[15.2,12.3],field:[1.5,13],houseA:[3.5,3.5],houseB:[12.5,3.5],well:[16,3],stall:[8,3],bench:[6,13],center:[8.5,8],north:[8,1],south:[8,14.5],east:[16.5,8],west:[.5,8]},
+  landmarks:{plaza:[8,11],pond:[15.2,12.3],field:[1.5,13],houseA:[3.5,3.5],houseB:[12.5,3.5],houseC:[8.5,18.5],houseD:[15.5,18.5],well:[16,3],stall:[8,3],bench:[6,13],
+    school:[24.5,3.5],schoolyard:[24,11],store:[24.5,17.5],southroad:[14,22],vacant:[34,15],vacantNorth:[34,4],center:[18.5,11],north:[18,1],south:[9,23],east:[34,15],west:[.5,8]},
 };
 
 // ---------- terrain ----------
@@ -841,13 +944,26 @@ props.forEach((t,i)=>{const big=t.kind==='tree'||t.kind==='sakura',e=big?.25:.08
   t.lo=[t.local[0]-e,t.local[1]-e,t.local[2]];t.hi=[t.local[0]+e,t.local[1]+e,t.local[2]+top];
   if(t.kind==='falls'){t.lo=[t.local[0],t.y0,-5];t.hi=[t.local[0]+.12,t.y1,0]}t.id=1000+i});
 // ================= villagers =================
+// 子どもは平日に学校へ（給食は学校で）
+const SCHOOL_KID={acts:['school.study','school.lunch'],hours:[[7.5,15]],days:'weekday'};
 const PEOPLE=[
   {name:'ハナ',en:'Hana',home:'A',bed:0,cloak:[232,112,100],cap:[255,246,236],persona:J('元気いっぱいで花が大好き。料理も得意。','Cheerful and loves flowers. A good cook.'),likes:{flower:.6,field:.3,chat:.3,cook:.6},wake:6.1,sleep:21.8,speed:1.5,at:[2,4]},
   {name:'ゴロウ',en:'Goro',home:'A',bed:1,cloak:[226,170,84],cap:[120,158,206],persona:J('無口な力持ちの職人。畑と水くみが日課。','A quiet, strong craftsman. Works in the field every day.'),likes:{field:.6,well:.4,chat:-.2,tv:.3},wake:5.5,sleep:21.5,speed:1.2,at:[2,9]},
-  {name:'ケンタ',en:'Kenta',home:'A',bed:2,cloak:[110,160,220],cap:[244,196,110],persona:J('いたずら好きの子ども。テレビとかけっこが好き。','A playful kid who loves TV and running around.'),likes:{play:.9,walk:.3,tv:.6,fish:.2,bench:-.4,field:-.3},wake:7,sleep:20.5,speed:1.75,kid:true,at:[1,5]},
+  {name:'ケンタ',en:'Kenta',home:'A',bed:2,cloak:[110,160,220],cap:[244,196,110],persona:J('いたずら好きの子ども。テレビとかけっこが好き。','A playful kid who loves TV and running around.'),likes:{play:.9,walk:.3,tv:.6,fish:.2,bench:-.4,field:-.3},wake:7,sleep:20.5,speed:1.75,kid:true,at:[1,5],job:SCHOOL_KID},
   {name:'ソラ',en:'Sora',home:'B',bed:0,cloak:[86,170,168],cap:[244,196,110],persona:J('のんびり屋の釣り好き。昼寝の名人。','Easygoing and loves fishing. A champion napper.'),likes:{fish:.7,nap:.5,rest:.3,field:-.2},wake:7.2,sleep:22.5,speed:1.2,at:[13,9]},
   {name:'ミノリ',en:'Minori',home:'B',bed:1,cloak:[150,122,196],cap:[252,236,222],persona:J('物静かな読書家。きれい好きで皆の相談役。','A quiet bookworm. Tidy, and everyone asks her for advice.'),likes:{bench:.7,bath:.4,flower:.2,cook:.4},wake:6.3,sleep:22.8,speed:1.25,at:[12,5]},
-  {name:'ユイ',en:'Yui',home:'B',bed:2,cloak:[236,150,180],cap:[255,240,214],persona:J('明るい商売人。屋台を切り盛りしていて噂話が好き。','A bright shopkeeper who runs the stall and loves gossip.'),likes:{stall:.6,chat:.4,tv:.2},wake:6,sleep:22,speed:1.4,keeper:true,at:[8,4]}];
+  {name:'ユイ',en:'Yui',home:'B',bed:2,cloak:[236,150,180],cap:[255,240,214],persona:J('明るい商売人。屋台を切り盛りしていて噂話が好き。','A bright shopkeeper who runs the stall and loves gossip.'),likes:{stall:.6,chat:.4,tv:.2},wake:6,sleep:22,speed:1.4,keeper:true,at:[8,4]},
+  {name:'アオイ',en:'Aoi',home:'C',bed:0,cloak:[176,150,206],cap:[90,80,110],persona:J('やさしい学校の先生。音楽と本が好き。','A kind school teacher who loves music and books.'),likes:{'school.music':.4,'school.read':.4,chat:.3,cook:.3},wake:6,sleep:22.5,speed:1.3,at:[8,18],
+    job:{acts:['school.teach','school.lunch'],hours:[[7.3,15.4]],days:'weekday'}},
+  {name:'リク',en:'Riku',home:'C',bed:1,cloak:[244,196,110],cap:[110,90,80],persona:J('元気な男の子。外遊びとおもちゃが大好き。','An energetic boy who loves playing outside and toys.'),likes:{play:.8,'store.toys':.6,'swing.swing':.5,'slide.slide':.4,tv:.3},wake:7,sleep:20.5,speed:1.75,kid:true,at:[9,19],job:SCHOOL_KID},
+  {name:'メイ',en:'Mei',home:'C',bed:2,cloak:[150,186,222],cap:[250,230,210],persona:J('絵と音楽が好きな女の子。ちょっと恥ずかしがり屋。','A shy girl who loves drawing and music.'),likes:{'school.music':.6,flower:.5,'sandbox.sand':.4,bench:.2},wake:6.8,sleep:20.8,speed:1.6,kid:true,at:[7,20],job:SCHOOL_KID},
+  {name:'マコト',en:'Makoto',home:'D',bed:0,cloak:[120,160,120],cap:[70,70,90],persona:J('デパートの店長。まじめで話し好き。','The department store manager. Hardworking and chatty.'),likes:{chat:.5,'store.restaurant':.3,tv:.3},wake:6.5,sleep:23,speed:1.35,at:[15,18],
+    job:{acts:['store.work','store.restaurant'],hours:[[9,18.5]]}},
+  {name:'ナナ',en:'Nana',home:'D',bed:1,cloak:[246,180,200],cap:[150,90,70],persona:J('デパートの店員。おしゃれが大好き。','A department store clerk who loves fashion.'),likes:{'store.shop_clothes':.6,chat:.4,bath:.3},wake:7,sleep:23,speed:1.4,at:[16,19],
+    job:{acts:['store.work','store.restaurant'],hours:[[10.5,19.5]]}},
+  {name:'ハル',en:'Haru',home:'D',bed:2,cloak:[200,180,150],cap:[236,236,240],persona:J('のんびりしたおじいさん。読書と釣りと散歩が好き。','A relaxed grandpa who loves reading, fishing and walks.'),likes:{'school.read':.5,fish:.5,bench:.4,walk:.4,field:.2},wake:5.5,sleep:21,speed:1.0,at:[14,20]}];
+// 歩く速さの倍率（町が広いので少し速め）
+const WALK=2.2;
 const walkers=PEOPLE.map((p,i)=>{const h=bldById(p.home);const w={...p,kind:'person',house:h,tile:T(...p.at)||ground[0],
   link:null,t:0,phase:i*1.3,wait:.05*HR*i,path:[],goal:null,target:null,act:null,lastDir:[0,1],lastAct:null,
   needs:{energy:.8,food:.35+.1*hash(i),social:.45+.3*hash(i+3),fun:.5+.3*hash(i+7),bladder:.35+.4*hash(i+11),hygiene:.55+.3*hash(i+13)},
@@ -881,16 +997,26 @@ function planAct(w,id){
   const goal={id,dur:a.dur,run:a.run};
   const busy=taken(w);let target;
   if(a.random){const here=w.tile.pos,c=ground.filter(t=>!busy.has(t)&&Math.abs(t.pos[0]-here[0])+Math.abs(t.pos[1]-here[1])<(a.run?7:10));target=pick(c.length?c:ground)}
-  else{const c=spotsFor(w,id).filter(t=>t&&!busy.has(t));if(!c.length)return null;target=pick(c)}
+  else{const c=spotsFor(w,id).filter(t=>t&&!busy.has(t));if(!c.length)return null;target=a.home?pick(c):nearPick(w,c)}
   return{goal,target};
 }
+// 町の中の場所は、近いところ（上位3つ）から選ぶ
+function nearPick(w,c){const p=w.tile.pos,lv=w.tile.level,d=t=>Math.abs(t.pos[0]-p[0])+Math.abs(t.pos[1]-p[1])+Math.abs(t.level-lv)*4;return pick(c.slice().sort((a,b)=>d(a)-d(b)).slice(0,3))}
+// 仕事・学校の時間か（job.hours は時間帯のリスト、days:'weekday' なら土日は休み）
+const onJob=w=>!!(w.job&&!(w.job.days==='weekday'&&isWeekend())&&inHours(clock.hour,w.job.hours));
 function setPlan(w,p){if(!p)return false;const path=bfs(w.tile,p.target);if(!path)return false;w.path=path;w.goal=p.goal;w.target=p.target;return true}
-const inHours=(h,[a,b])=>a<=b?h>=a&&h<b:h>=a||h<b;
 const mealWindow=h=>(h>=6.3&&h<9)||(h>=11.5&&h<13.5)||(h>=17.5&&h<20);
 
 function score(w,id){
   const a=ACTS[id],h=clock.hour,n=w.needs,hs=w.house;let s=0;
   if(id==='sleep'||id==='sit')return-99;
+  if(a.staff&&!(w.job&&w.job.acts.includes(id)))return-99;
+  if(a.days==='weekday'&&isWeekend())return-99;
+  const duty=onJob(w);let adj=0;
+  // 仕事・学校には始まる1時間前から向かってよい（町が広いので）
+  const early=duty&&w.job.acts.includes(id)&&a.hours&&!inHours(h,a.hours)&&inHours((h+1)%24,a.hours);
+  if(duty&&w.job.acts.includes(id)){if(a.hours&&!inHours(h,a.hours)&&!early)return-99;adj=6}
+  else if(duty&&!['toilet','eat','snack'].includes(id))adj=-2.5;
   switch(id){
     case'toilet':s=n.bladder<.22?5:n.bladder<.45?1.1:-3;break;
     case'eat':s=hs.mealReady>clock.sim&&n.food<.85?2.6+(1-n.food)*2:-3;break;
@@ -903,7 +1029,7 @@ function score(w,id){
     case'tv':s=(h>=18?.8:-.1)+(1-n.fun)*.9;break;
     case'rest':s=(1-n.energy)*1.2-.3+(weather.kind!=='clear'?.4:0);break;
     default:{
-      if(a.gen){if(a.hours&&!inHours(h,a.hours))return-99;if((a.who==='kid'&&!w.kid)||(a.who==='adult'&&w.kid))return-99}
+      if(a.gen){if(a.hours&&!inHours(h,a.hours)&&!early)return-99;if((a.who==='kid'&&!w.kid)||(a.who==='adult'&&w.kid))return-99}
       for(const k in a.gain){const g=a.gain[k];s+=g>0?g*(1-n[k])*2.4:g*(1-n[k])*1.4}
       if(id==='dance')s+=clock.sim<weather.festUntil||(directiveOn(w)&&w.directive.goal==='dance')?1.2:-99;
       if(id==='field'&&(h<6||h>17))s-=2;
@@ -921,7 +1047,7 @@ function score(w,id){
   s+=(w.likes[id]||0);
   if(id===w.lastAct&&id!=='eat')s-=.6;
   if(directiveOn(w)){if(w.directive.goal===id)s+=6;else if(w.directive.goal==='home'&&a.indoor)s+=.8;else s-=.3}
-  return s+Math.random()*.4;
+  return s+adj+Math.random()*.4;
 }
 
 function chatPartner(w){
@@ -948,13 +1074,21 @@ function bedtime(w){
   if(clock.sim-w.brushedAt>4*HR&&setPlan(w,planAct(w,'brush')))return true;
   return false;
 }
+// その人がしてよい行動か（子ども向け・大人向け・店員や先生だけの行動）
+const canDo=(w,id)=>{const a=ACTS[id];return!!a&&!(a.who==='kid'&&!w.kid)&&!(a.who==='adult'&&w.kid)&&!(a.staff&&!(w.job&&w.job.acts.includes(id)))};
+// 遠くへ出かける前に、トイレが近ければ先にすませる
+function tripPrep(w){
+  if(w.path.length<18||w.needs.bladder>.6||!w.goal||w.goal.id==='toilet')return;
+  const p=planAct(w,'toilet');if(!p)return;const keep={path:w.path,goal:w.goal,target:w.target};
+  if(!setPlan(w,p)||w.path.length>8){w.path=keep.path;w.goal=keep.goal;w.target=keep.target}
+}
 function chooseGoal(w){
   if(w.kind==='cat')return catGoal(w);
   if(sleepTime(w)||(directiveOn(w)&&w.directive.goal==='sleep')){if(bedtime(w))return;if(setPlan(w,planAct(w,'sleep')))return;w.wait=.2*HR;return}
   const ranked=ACT_IDS.map(id=>[id,score(w,id)]).sort((a,b)=>b[1]-a[1]);
   for(const[id,s]of ranked){if(s<-50)break;
     if(id==='chat'){if(startChat(w))return;continue}
-    if(setPlan(w,planAct(w,id)))return;
+    if(setPlan(w,planAct(w,id))){tripPrep(w);return}
   }
   w.wait=.3*HR;
 }
@@ -1011,7 +1145,9 @@ function updateWalker(w,sdt){
     if(n.bladder<.06&&!w.player&&!(w.act&&w.act.id==='toilet')&&!(w.goal&&w.goal.id==='toilet')&&!w.link&&!w.forced){const p=planAct(w,'toilet');if(p){w.forced=p;say(w,J('もれちゃう〜！','I really need to go!'))}}
   }
   if(w.player){playerTick(w,sdt);return}
-  if(w.link){const run=w.goal&&w.goal.run;w.phase+=(run?13:9)*sdt;w.t+=sdt*w.speed*(run?1.7:1);if(w.t>=1){w.lastDir=w.link.dir;w.tile=w.link.to;w.link=null;w.t=0}else return}
+  if(w.link){const run=w.goal&&w.goal.run;w.phase+=(run?13:9)*sdt;w.t+=sdt*w.speed*WALK*(run?1.7:1);if(w.t>=1){const extra=w.t-1;w.lastDir=w.link.dir;w.tile=w.link.to;w.link=null;w.t=0;
+    // 余った分はそのまま次のマスへ（早送りでも歩く速さが変わらないように）
+    if(extra>0&&w.path.length&&!w.forced){const Lk=w.tile.links.find(l=>l.to===w.path[0]);if(Lk){w.path.shift();w.link=Lk;w.t=Math.min(extra,.99);return}}}else return}
   if(w.forced){applyForced(w);return}
   if(w.wait>0){w.wait-=sdt;if(w.wait<=0&&w.act)finishAct(w,false);return}
   if(w.path.length){const nx=w.path.shift(),Lk=w.tile.links.find(l=>l.to===nx);if(!Lk){w.path=[];w.goal=null;w.target=null;return}w.link=Lk;w.t=0;return}
@@ -1047,21 +1183,36 @@ function prepBox(b){
   b.skip=false;b.cut=false;let hi=b.hi,lo=b.lo;const h=b.bld;
   if(h&&h.k<1){lo=[b.lo[0],b.lo[1],b.lo[2]*h.k];hi=[b.hi[0],b.hi[1],Math.max(lo[2]+.01,b.hi[2]*h.k)]}
   if(b.exteriorOnly&&interior){b.skip=true;return}
+  // 外観では建物の中身（家具・仕切り・階段）は見えないので描かない。床板は外から縁が見えるので残す
+  if(!interior&&b.indoor&&h&&h.enterable&&b.deco.top!=='floor'){b.skip=true;return}
   // 内観では、見ている階より上は描かず、見ている階の手前の壁だけ低く切る
   const ef=interior&&h&&h.enterable?effFloor(h):-1;
   if(ef>=0&&b.level>ef){b.skip=true;return}
+  // 上の階を見ている時、下の階の中身は床にかくれるので描かない（壁と床板は外から見えるので残す）
+  if(ef>0&&b.level<ef&&b.indoor&&b.deco.top!=='floor'){b.skip=true;return}
   const cn=b.cutN||b.cutWith;
   if(cn&&interior&&b.level===ef&&dot(cn,cam.d)>.02){const zb=b.level*WALL_H;if(b.cutWith||b.lo[2]>zb+FLOOR+.2){b.skip=true;return}hi=[b.hi[0],b.hi[1],zb+FLOOR+.2];b.cut=true}
   b.wc=[];for(let h=0;h<8;h++)b.wc.push(corner(lo,hi,h));b.sc=b.wc.map(project);
   let x0=1/0,y0=1/0,x1=-1/0,y1=-1/0;for(const s of b.sc){x0=Math.min(x0,s[0]);x1=Math.max(x1,s[0]);y0=Math.min(y0,s[1]);y1=Math.max(y1,s[1])}
   b.bb=[x0,y0,x1,y1];b.wlo=lo;b.whi=hi;b.depth=dot([(lo[0]+hi[0])/2,(lo[1]+hi[1])/2,(lo[2]+hi[2])/2],cam.d)}
 function prepItem(t,lo,hi){t.wlo=lo;t.whi=hi;let x0=1/0,y0=1/0,x1=-1/0,y1=-1/0;for(let h=0;h<8;h++){const s=project([h&1?hi[0]:lo[0],h&2?hi[1]:lo[1],h&4?hi[2]:lo[2]]);x0=Math.min(x0,s[0]);x1=Math.max(x1,s[0]);y0=Math.min(y0,s[1]);y1=Math.max(y1,s[1])}const p=cam.scale*.5;t.bb=[x0-p,y0-p,x1+p,y1+p*.3];t.depth=dot([(lo[0]+hi[0])/2,(lo[1]+hi[1])/2,(lo[2]+hi[2])/2],cam.d)}
-function sep(t,e){if(Math.abs(cam.d[2])>1e-4&&t.whi[0]>t.wlo[0]+.02&&e.whi[0]>e.wlo[0]+.02&&t.wlo[0]<e.whi[0]-.02&&e.wlo[0]<t.whi[0]-.02&&t.wlo[1]<e.whi[1]-.02&&e.wlo[1]<t.whi[1]-.02){const s=cam.d[2]>0?1:-1;if(e.wlo[2]>=t.whi[2]-1e-6)return s;if(t.wlo[2]>=e.whi[2]-1e-6)return-s}
-  let l=0,i=-1/0;for(let o=0;o<3;o++){const a=cam.d[o];if(Math.abs(a)<1e-4)continue;const n=a>0?e.wlo[o]-t.whi[o]:t.wlo[o]-e.whi[o],r=a>0?t.wlo[o]-e.whi[o]:e.wlo[o]-t.whi[o];if(n>-1e-6&&n*Math.abs(a)+1>i){i=n*Math.abs(a)+1;l=1}if(r>-1e-6&&r*Math.abs(a)+1>i){i=r*Math.abs(a)+1;l=-1}}return l===0?(t.depth<e.depth?1:-1):l}
-function topo(t){const e=t.length,inD=new Array(e).fill(0),adj=t.map(()=>[]);
-  for(let o=0;o<e;o++){const a=t[o];for(let n=o+1;n<e;n++){const b=t[n];if(a.bb[2]<b.bb[0]||b.bb[2]<a.bb[0]||a.bb[3]<b.bb[1]||b.bb[3]<a.bb[1])continue;if(sep(a,b)>0){adj[o].push(n);inD[n]++}else{adj[n].push(o);inD[o]++}}}
+// 2つの箱のどちらを先に描くか: 1 = t が先、-1 = e が先、0 = 画面上で重ならないので決めない。
+// 軸ごとに「離れているか」を調べ、離れている軸がすべて同じ向きを示す時だけ順番を決める。
+// 向きが食い違う組は投影が重ならない（凸な箱どうしの性質）ので、決めると循環の原因になる。
+function sep(t,e){
+  if(Math.abs(cam.d[2])>1e-4&&t.whi[0]>t.wlo[0]+.02&&e.whi[0]>e.wlo[0]+.02&&t.wlo[0]<e.whi[0]-.02&&e.wlo[0]<t.whi[0]-.02&&t.wlo[1]<e.whi[1]-.02&&e.wlo[1]<t.whi[1]-.02){const s=cam.d[2]>0?1:-1;if(e.wlo[2]>=t.whi[2]-1e-6)return s;if(t.wlo[2]>=e.whi[2]-1e-6)return-s}
+  let dir=0;
+  for(let o=0;o<3;o++){const a=cam.d[o];if(Math.abs(a)<1e-4)continue;
+    const d=t.whi[o]<=e.wlo[o]+1e-6?(a>0?1:-1):e.whi[o]<=t.wlo[o]+1e-6?(a>0?-1:1):0;
+    if(d){if(dir&&d!==dir)return 0;dir=d}}
+  return dir||(t.depth<e.depth?1:-1)}
+function topo(t){const e=t.length,inD=new Array(e).fill(0),adj=t.map(()=>[]),pre=t.map(()=>[]);
+  for(let o=0;o<e;o++){const a=t[o];for(let n=o+1;n<e;n++){const b=t[n];if(a.bb[2]<b.bb[0]||b.bb[2]<a.bb[0]||a.bb[3]<b.bb[1]||b.bb[3]<a.bb[1])continue;const r=sep(a,b);if(r>0){adj[o].push(n);pre[n].push(o);inD[n]++}else if(r<0){adj[n].push(o);pre[o].push(n);inD[o]++}}}
   const out=[],done=new Array(e).fill(false);let q=[];for(let i=0;i<e;i++)if(inD[i]===0)q.push(i);
-  while(out.length<e){if(!q.length){let i=-1;for(let k=0;k<e;k++)if(!done[k]&&(i<0||t[k].depth<t[i].depth))i=k;q.push(i);inD[i]=0}
+  while(out.length<e){if(!q.length){let i=-1;for(let k=0;k<e;k++)if(!done[k]&&(i<0||t[k].depth<t[i].depth))i=k;
+    // 循環がある時: まだ描いていない「先に描くべき箱」をたどり、同じ箱に戻ったら循環の中なのでそこを切る
+    const seen=new Set();while(!seen.has(i)){seen.add(i);const u=pre[i].find(p=>!done[p]);if(u===undefined)break;i=u}
+    q.push(i);inD[i]=0}
     q.sort((x,y)=>t[y].depth-t[x].depth);const r=q.pop();if(done[r])continue;done[r]=true;out.push(t[r]);for(const k of adj[r]){inD[k]--;if(inD[k]===0&&!done[k])q.push(k)}}
   return out}
 
@@ -1069,19 +1220,22 @@ function topo(t){const e=t.length,inD=new Array(e).fill(0),adj=t.map(()=>[]);
 const FACES=[{n:[1,0,0],o:3,u:1,v:7,key:'px'},{n:[0,1,0],o:2,u:3,v:6,key:'py'},{n:[-1,0,0],o:0,u:2,v:4,key:'nx'},{n:[0,-1,0],o:1,u:0,v:5,key:'ny'},{n:[0,0,1],o:4,u:5,v:6,key:'top'}];
 function faceXform(e,l,i){const o=S.dpr;N.setTransform(o*(l[0]-e[0]),o*(l[1]-e[1]),o*(i[0]-e[0]),o*(i[1]-e[1]),o*e[0],o*e[1])}
 function arch(t,e,l,i){const o=l/2;N.moveTo(t-o,e);N.lineTo(t-o,e+i-o);for(let k=0;k<=10;k++){const a=Math.PI-k/10*Math.PI;N.lineTo(t+Math.cos(a)*o,e+i-o+Math.sin(a)*o)}N.lineTo(t+o,e);N.closePath()}
-function rr(x,y,w,h,r){N.beginPath();if(N.roundRect)N.roundRect(x,y,w,h,r);else N.rect(x,y,w,h)}
+function rr(x,y,w,h,r){N.beginPath();rrAdd(x,y,w,h,r)}
+function rrAdd(x,y,w,h,r){if(N.roundRect)N.roundRect(x,y,w,h,r);else N.rect(x,y,w,h)}
 const faceU=(b,k,X)=>k==='px'?b.hi[1]-X:k==='nx'?X-b.lo[1]:k==='py'?X-b.lo[0]:b.hi[0]-X;
 const houseAmb=h=>h&&h.enterable?mix(mix(ambOut,[.5,.5,.62],nightK*.4),[1.04,.95,.84],h.glow):ambOut;
 
 function drawGround(b,f,W,H){
   const a=b.lo,n=f.n;snowOn=true;
-  N.fillStyle=rgb(shade(snowy(P.path),n));for(const[x,y]of pathCells){rr(x-a[0]-.46,y-a[1]-.46,.92,.92,.18);N.fill()}
+  // 同じ色の小さな形はまとめて1回で塗る（描画回数を減らす）
+  N.fillStyle=rgb(shade(snowy(P.path),n));N.beginPath();for(const[x,y]of pathCells)rrAdd(x-a[0]-.46,y-a[1]-.46,.92,.92,.18);N.fill();
   {const pz=TOWN.plaza,px0=pz.x-.5-a[0],py0=pz.y-.5-a[1];N.fillStyle=rgb(shade(snowy(P.plaza),n));rr(pz.x-a[0]-.5,pz.y-a[1]-.5,pz.w,pz.h,.3);N.fill();
   N.strokeStyle=rgb(shade(snowy(P.plaza),n),.9);N.lineWidth=.03;for(let k=1;k<pz.w*2;k++){N.beginPath();N.moveTo(px0+k*.5,py0);N.lineTo(px0+k*.5,py0+pz.h);N.stroke()}
   for(let k=1;k<pz.h*2;k++){N.beginPath();N.moveTo(px0,py0+k*.5);N.lineTo(px0+pz.w,py0+k*.5);N.stroke()}}
-  for(const[x,y]of fieldCells){N.fillStyle=rgb(shade(snowy(P.soil),n));rr(x-a[0]-.46,y-a[1]-.46,.92,.92,.12);N.fill();N.fillStyle=rgb(shade(snowy(P.soil),n),.84);for(let k=0;k<3;k++)N.fillRect(x-a[0]-.36,y-a[1]-.28+k*.26,.72,.05)}
-  for(const[x,y]of bedCells){N.fillStyle=rgb(shade(snowy([160,128,104]),n));rr(x-a[0]-.44,y-a[1]-.44,.88,.88,.2);N.fill();
-    for(let k=0;k<9;k++){const c=[[255,150,170],[255,214,110],[200,160,240],[255,255,255]][k%4];N.fillStyle=rgbA(c);N.beginPath();N.arc(x-a[0]-.3+hash(k*3+x*7+y)*.6,y-a[1]-.3+hash(k*5+y*11+x)*.6,.09,0,2*Math.PI);N.fill()}}
+  N.fillStyle=rgb(shade(snowy(P.soil),n));N.beginPath();for(const[x,y]of fieldCells)rrAdd(x-a[0]-.46,y-a[1]-.46,.92,.92,.12);N.fill();
+  N.fillStyle=rgb(shade(snowy(P.soil),n),.84);for(const[x,y]of fieldCells)for(let k=0;k<3;k++)N.fillRect(x-a[0]-.36,y-a[1]-.28+k*.26,.72,.05);
+  N.fillStyle=rgb(shade(snowy([160,128,104]),n));N.beginPath();for(const[x,y]of bedCells)rrAdd(x-a[0]-.44,y-a[1]-.44,.88,.88,.2);N.fill();
+  [[255,150,170],[255,214,110],[200,160,240],[255,255,255]].forEach((c,ci)=>{N.fillStyle=rgbA(c);N.beginPath();for(const[x,y]of bedCells)for(let k=ci;k<9;k+=4){const px=x-a[0]-.3+hash(k*3+x*7+y)*.6,py=y-a[1]-.3+hash(k*5+y*11+x)*.6;N.moveTo(px+.09,py);N.arc(px,py,.09,0,2*Math.PI)}N.fill()});
   for(const POND of PONDS){const px=POND.x-a[0],py=POND.y-a[1];
   N.fillStyle=rgb(shade(snowy([214,200,170]),n));N.beginPath();N.ellipse(px,py,POND.rx+.16,POND.ry+.16,0,0,2*Math.PI);N.fill();
   N.fillStyle=rgb(mix(A(P.water),[60,80,140],nightK*.35));N.beginPath();N.ellipse(px,py,POND.rx,POND.ry,0,0,2*Math.PI);N.fill();
@@ -1091,19 +1245,23 @@ function drawGround(b,f,W,H){
   N.fillStyle=rgb(shade([120,186,130],n));[[-.9,.4],[-.4,.8],[.5,-.4]].forEach(([dx,dy])=>{N.beginPath();N.arc(px+dx,py+dy,.14,.3,2*Math.PI-.1);N.lineTo(px+dx,py+dy);N.fill()})}
   const open=(wx,wy)=>{const k=key(Math.round(wx),Math.round(wy));return!pathSet.has(k)&&!plazaSet.has(k)&&!fieldSet.has(k)&&!bedSet.has(k)&&!occupied.has(k)&&!inPond(wx,wy,.2)&&!sakuraSet.has(k)};
   N.fillStyle=rgb(shade(snowy(P.grass),n),.9);
-  for(let t=0;t<W*H*1.2;t++){const x=hash(1.7*t+b.id)*W,y=hash(2.3*t+3*b.id)*H;if(!open(x+a[0],y+a[1]))continue;N.beginPath();N.arc(x,y,.08+.06*hash(t),0,2*Math.PI);N.fill()}
-  if(snowCover<.6)for(let t=0;t<W*H*.3;t++){const x=hash(5.3*t+b.id)*W,y=hash(4.1*t+7*b.id)*H;if(!open(x+a[0],y+a[1]))continue;N.fillStyle=rgbA(t%3===0?[255,236,150]:t%3===1?[255,214,226]:[255,255,255],1,.9*(1-snowCover));N.beginPath();N.arc(x,y,.05,0,2*Math.PI);N.fill()}
+  N.beginPath();for(let t=0;t<W*H*1.2;t++){const x=hash(1.7*t+b.id)*W,y=hash(2.3*t+3*b.id)*H;if(!open(x+a[0],y+a[1]))continue;const r=.08+.06*hash(t);N.moveTo(x+r,y);N.arc(x,y,r,0,2*Math.PI)}N.fill();
+  if(snowCover<.6)[[255,236,150],[255,214,226],[255,255,255]].forEach((c,ci)=>{N.fillStyle=rgbA(c,1,.9*(1-snowCover));N.beginPath();for(let t=ci;t<W*H*.3;t+=3){const x=hash(5.3*t+b.id)*W,y=hash(4.1*t+7*b.id)*H;if(!open(x+a[0],y+a[1]))continue;N.moveTo(x+.05,y);N.arc(x,y,.05,0,2*Math.PI)}N.fill()});
   if(festK>0){const pz=TOWN.plaza;N.fillStyle=`rgba(255,200,210,${.8*festK})`;for(let k=0;k<26;k++){N.beginPath();N.arc(pz.x-a[0]-.4+hash(k*9)*(pz.w-.2),pz.y-a[1]-.4+hash(k*13)*(pz.h-.2),.07,0,2*Math.PI);N.fill()}}
   snowOn=false;
 }
 // 床: 部屋ごとの床の種類で塗り、そのあと床の模様（ラグなど）を描く。面の座標は床板の左上角が 0
 function drawFloor(b,f){
   const h=b.bld,n=f.n,lv=b.level,u0=b.lo[0]-(h.cx-.5),v0=b.lo[1]-(h.cy-.5),W=Math.round(b.hi[0]-b.lo[0]),D=Math.round(b.hi[1]-b.lo[1]);
-  for(let i=0;i<W;i++)for(let j=0;j<D;j++){const c=Math.round(u0)+i,r=Math.round(v0)+j,room=h.roomAt(c,r,lv),x=i,y=j,fs=room?room.floorStyle:'wood';
-    if(fs==='tile'){const col=room.color||P.tileK;for(let p=0;p<2;p++)for(let q=0;q<2;q++){N.fillStyle=rgb(shade((p+q)%2?col:mix(col,[255,255,255],.35),n));N.fillRect(x+p*.5,y+q*.5,.51,.51)}}
-    else if(fs==='carpet'){N.fillStyle=rgb(shade(room.color||[200,170,190],n));N.fillRect(x,y,1.01,1.01)}
-    else if(fs==='stone'){N.fillStyle=rgb(shade(room.color||[226,222,230],n));N.fillRect(x,y,1.01,1.01);N.fillStyle=rgb(shade(room.color||[226,222,230],n),.9);N.fillRect(x,y,1,.02);N.fillRect(x,y,.02,1)}
-    else{N.fillStyle=rgb(shade(room&&room.color||P.floorW,n));N.fillRect(x,y,1.01,1.01);N.fillStyle=rgb(shade(P.wood,n),.5);for(let k=0;k<4;k++)N.fillRect(x,y+k*.25,1,.02)}}
+  // 行ごとに、同じ床の種類が続くマスをまとめて塗る
+  for(let j=0;j<D;j++){const r=Math.round(v0)+j,y=j;let i=0;
+    while(i<W){const room=h.roomAt(Math.round(u0)+i,r,lv);let e=i+1;while(e<W&&h.roomAt(Math.round(u0)+e,r,lv)===room)e++;
+      const x=i,len=e-i,fs=room?room.floorStyle:'wood';
+      if(fs==='tile'){const c=room.color||P.tileK;N.fillStyle=rgb(shade(c,n));N.fillRect(x,y,len+.01,1.01);N.fillStyle=rgb(shade(mix(c,[255,255,255],.35),n));for(let k=0;k<len;k++){N.fillRect(x+k,y,.51,.51);N.fillRect(x+k+.5,y+.5,.51,.51)}}
+      else if(fs==='carpet'){N.fillStyle=rgb(shade(room.color||[200,170,190],n));N.fillRect(x,y,len+.01,1.01)}
+      else if(fs==='stone'){const c=room.color||[226,222,230];N.fillStyle=rgb(shade(c,n));N.fillRect(x,y,len+.01,1.01);N.fillStyle=rgb(shade(c,n),.9);N.fillRect(x,y,len,.02);for(let k=0;k<len;k++)N.fillRect(x+k,y,.02,1)}
+      else{N.fillStyle=rgb(shade(room&&room.color||P.floorW,n));N.fillRect(x,y,len+.01,1.01);N.fillStyle=rgb(shade(P.wood,n),.5);for(let k=0;k<4;k++)N.fillRect(x,y+k*.25,len,.02)}
+      i=e}}
   for(const d of h.spec.decals||[]){if((d.floor||0)!==lv)continue;const x=d.x-u0,y=d.y-v0;if(x+d.w<0||y+d.h<0||x>W||y>D)continue;
     if(d.type==='rug'){N.fillStyle=rgb(shade(col(d.color,[214,140,140]),n));rr(x,y,d.w,d.h,.25);N.fill();N.strokeStyle=rgb(shade([255,240,220],n));N.lineWidth=.04;rr(x+.1,y+.1,d.w-.2,d.h-.2,.2);N.stroke()}
     else{N.fillStyle=rgb(shade(col(d.color,[180,210,230]),n));rr(x,y,d.w,d.h,.1);N.fill()}}
@@ -1396,6 +1554,7 @@ function updateWeather(sdt){
 }
 
 // ================= layout =================
+const ZOOM_MAX=5;
 const hudTop=document.getElementById('hudTop'),controls=document.getElementById('controls'),logEl=document.getElementById('log');
 function fit(){
   let x0=1/0,y0=1/0,x1=-1/0,y1=-1/0,sx=0,sy=0,sz=0,n=0;
@@ -1480,7 +1639,7 @@ $('bookClose').addEventListener('click',()=>{$('book').hidden=true});
 $('bookN').textContent=book.length;
 
 function updateHud(){
-  const h=clock.hour;dayEl.textContent=L==='en'?`Day ${clock.day}`:`${clock.day}日目`;timeEl.textContent=hhmm(h);
+  const h=clock.hour;dayEl.textContent=L==='en'?`Day ${clock.day} (${WEEK[weekday()].en})`:`${clock.day}日目（${WEEK[weekday()].ja}）`;timeEl.textContent=hhmm(h);
   periodEl.textContent=tr(h<4.5?J('夜','Night'):h<10?J('朝','Morning'):h<16?J('昼','Daytime'):h<19?J('夕方','Evening'):J('夜','Night'));
   wxEl.textContent=(clock.sim<weather.festUntil?tr(J('お祭り・','Festival · ')):'')+tr(WX_T[weather.kind]);
   updateCard();
@@ -1505,11 +1664,11 @@ $('roofBtn').addEventListener('click',()=>{interior=!interior;$('roofBtn').textC
 // 2階建て以上の建物がある時だけ、内観で見る階を切りかえるボタンを出す
 const maxFloors=()=>Math.max(1,...buildings.map(b=>b.floors));
 function setViewFloor(n){viewFloor=clamp(n,0,maxFloors()-1);updateFloorBtn()}
-function updateFloorBtn(){const b=$('floorBtn'),m=maxFloors();if(viewFloor>m-1)viewFloor=m-1;b.hidden=!interior||m<2;b.textContent=tr(UI.floor(viewFloor+1))}
+function updateFloorBtn(){const b=$('floorBtn'),m=maxFloors();if(viewFloor>m-1)viewFloor=m-1;b.hidden=!interior||m<2;b.textContent=tr(UI.floor(viewFloor+1));b.title=tr(UI.floorTip);b.setAttribute('aria-label',tr(UI.floorTip)+': '+tr(UI.floor(viewFloor+1)))}
 $('floorBtn').addEventListener('click',()=>setViewFloor((viewFloor+1)%maxFloors()));
 $('reset').addEventListener('click',()=>{cam.taz=ISO_AZ;cam.tel=ISO_EL;cam.tzoom=1;cam.follow=null;cFollow.setAttribute('aria-pressed','false')});
-$('zoomIn').addEventListener('click',()=>{cam.tzoom=clamp(cam.tzoom*1.35,.7,3.5)});
-$('zoomOut').addEventListener('click',()=>{cam.tzoom=clamp(cam.tzoom/1.35,.7,3.5)});
+$('zoomIn').addEventListener('click',()=>{cam.tzoom=clamp(cam.tzoom*1.35,.7,ZOOM_MAX)});
+$('zoomOut').addEventListener('click',()=>{cam.tzoom=clamp(cam.tzoom/1.35,.7,ZOOM_MAX)});
 
 // ================= Claude API (own key, stored only in this browser) =================
 // Claude Artifact では host の `sample` を使う。それ以外（GitHub Pages など）では、
@@ -1589,6 +1748,8 @@ const MOODS=['happy','excited','calm','sad','scared','angry'];
 function worldSummary(){
   return people.map(w=>{const n=w.needs;return`- ${w.name} (${w.en}) ${w.persona.en}${w.kid?' [child]':''} mood:${moodOf(w)} energy${n.energy.toFixed(1)} food${n.food.toFixed(1)} social${n.social.toFixed(1)} fun${n.fun.toFixed(1)} bladder${n.bladder.toFixed(1)} clean${n.hygiene.toFixed(1)} now:${statusOf(w).en} (${placeOf(w)})`}).join('\n')+`\n- タマ (Tama) the cat. now:${statusOf(cat).en}`;
 }
+// 町の建物でできること（神の声・会話の「行き先」に使える）
+const townGoals=()=>ACT_IDS.filter(id=>ACTS[id].gen&&!ACTS[id].staff).map(id=>`${id} (${ACTS[id].label.en}${ACTS[id].who==='kid'?', kids':''})`).join(', ');
 function godPrompt(text){
   return `You interpret the "Voice of God" in a cozy village life simulation. The player (God) spoke to the village from the sky. Decide how each villager reacts, based on personality and state. The player is learning English, so every line you write comes in simple everyday English (CEFR A2) AND natural Japanese.
 
@@ -1603,11 +1764,12 @@ ${structSummary()}
 Landmarks for placing things: ${Object.keys(LANDMARKS).join(', ')}.
 
 Goal IDs. At home: sleep (go to bed), toilet, bath, brush (brush teeth), wash (wash face), cook, eat (at the dining table), snack (drink from the fridge), dishes, tv, rest (sofa), home (stay indoors). Outside: field, fish, well, nap (under a tree), chat, flower, bench, stall, play (tag), walk, plaza, dance. none = carry on.
+Town places: ${townGoals()}.
 
 Reply with JSON only, in this shape:
 {"narration_en":"one short sentence describing the village","narration_ja":"同じ内容の日本語","weather":"clear|rain|snow|rainbow|null","event":"festival|null","timeSkipTo":null,"build":null,"remove":null,"villagers":[{"name":"ハナ","say_en":"short line in simple English","say_ja":"そのセリフの自然な日本語","mood":"happy|excited|calm|sad|scared|angry","goal":"goal ID","hours":2,"needs":{"energy":0,"food":0,"social":0,"fun":0,"bladder":0,"hygiene":0}}]}
 
-Rules: include all 6 villagers plus Tama (use the Japanese name as listed). Named villagers react strongly. Someone may hesitate or choose differently if the order doesn't fit them. Set weather only if the voice changes it, else null. If the voice moves time forward, set timeSkipTo to an hour 0-23, else null. needs are changes from -0.5 to 0.5. hours 0.5-6. Each say_en is at most 10 words of natural spoken English. Tama only makes cat sounds ("Meow!" / 「にゃー」).
+Rules: include all ${people.length} villagers plus Tama (use the Japanese name as listed). Named villagers react strongly. Someone may hesitate or choose differently if the order doesn't fit them. Set weather only if the voice changes it, else null. If the voice moves time forward, set timeSkipTo to an hour 0-23, else null. needs are changes from -0.5 to 0.5. hours 0.5-6. Each say_en is at most 10 words of natural spoken English. Tama only makes cat sounds ("Meow!" / 「にゃー」).
 If the voice asks to build, create, place or plant anything (a building, statue, fountain, tower, shrine, garden, playground, anything at all), set build to a clear English design brief: what it is, its style, main colors, rough size in cells (1-4 wide), and where (near which landmark). Villagers react to it with excitement or surprise. If the voice asks to remove or destroy a built structure, set remove to its id. Otherwise both are null.`;
 }
 function offlineInterpret(text){
@@ -1620,7 +1782,9 @@ function offlineInterpret(text){
     [['歯','teeth'],'brush',J('歯をみがこう。','Let\'s brush our teeth.')],[['料理','作','cook'],'cook',J('料理しよう！','Let\'s cook!')],[['食べ','ごはん','eat','dinner','lunch','breakfast'],'eat',J('ごはんにしよう！','Let\'s eat!')],
     [['テレビ','tv'],'tv',J('テレビを見よう！','Let\'s watch TV!')],[['帰','家','home','house','inside'],'home',J('家に帰ろう。','Let\'s go home.')],[['畑','働','work','field'],'field',J('よし、ひと仕事だ。','OK, time to work.')],
     [['釣','魚','fish'],'fish',J('釣りに行こう。','Let\'s go fishing.')],[['花','flower'],'flower',J('お花に水をあげなきゃ。','I need to water the flowers.')],[['話','仲良','おしゃべり','talk','chat','friend'],'chat',J('誰かと話したいな。','I want to talk with someone.')],
-    [['遊','走','鬼ごっこ','play','run'],'play',J('遊ぼう！','Let\'s play!')],[['買','店','屋台','shop','buy','stall'],'stall',J('屋台に行こう。','Let\'s go to the stall.')]];
+    [['遊','走','鬼ごっこ','play','run'],'play',J('遊ぼう！','Let\'s play!')],[['勉強','学校','school','study'],'school.study',J('学校で勉強しよう。','Let\'s study at school.')],[['本','図書','read','library'],'school.read',J('本を読みに行こう。','Let\'s go read a book.')],[['音楽','歌','music','sing'],'school.music',J('歌おう！','Let\'s sing!')],
+    [['レストラン','外食','restaurant'],'store.restaurant',J('レストランに行こう！','Let\'s go to the restaurant!')],[['デパート','洋服','department','clothes'],'store.shop_clothes',J('デパートに行こう。','Let\'s go to the department store.')],[['おもちゃ','toy'],'store.toys',J('おもちゃを見に行こう！','Let\'s go see the toys!')],
+    [['買','店','屋台','shop','buy','stall'],'stall',J('屋台に行こう。','Let\'s go to the stall.')]];
   if(has('建て','作って','つくって','置いて','たてて','建設','build','make a','create','place','put a'))r.build=text;
   if(has('壊','撤去','なくして','remove','destroy','demolish')&&genBuildings().length){const s2=genBuildings().find(s=>text.includes(s.spec.name_ja)||t.includes(s.spec.name_en.toLowerCase()))||genBuildings().slice(-1)[0];r.remove=s2.id;r.build=null}
   if(!r.build&&!r.remove)for(const[keys,g,p]of G)if(has(...keys)){goal=g;sayP=p;if(g==='dance')r.event='festival';if(g==='sleep'||g==='home')mood='calm';break}
@@ -1650,7 +1814,7 @@ function applyDivine(r,text){
       if(v.needs&&typeof v.needs==='object')for(const k in w.needs){const d=Number(v.needs[k]);if(isFinite(d))w.needs[k]=clamp(w.needs[k]+clamp(d,-.5,.5),0,1)}
       remember(w,`神の声「${text.slice(0,20)}」を聞いた`);
       const g=String(v.goal||'none'),hrs=clamp(Number(v.hours)||2,.5,6);
-      if((ACTS[g]||g==='home')&&g!=='none'){
+      if(((ACTS[g]&&canDo(w,g))||g==='home')&&g!=='none'){
         w.directive={goal:g,until:clock.sim+hrs*HR};
         if(g==='home'){const p=planAct(w,pick(['tv','rest','snack']));if(p)w.forced=p}
         else if(g==='chat'){if(!w.link){w.act&&finishAct(w,true);w.path=[];w.goal=null;w.wait=0}}
@@ -1703,7 +1867,7 @@ cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);pointers
   if(pointers.size===2){const[a,b]=[...pointers.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),z:cam.tzoom};drag=null}
   else drag={x:e.clientX,y:e.clientY,az:cam.taz,el:cam.tel,moved:false}});
 cv.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  if(pinch&&pointers.size>=2){const[a,b]=[...pointers.values()];cam.tzoom=clamp(pinch.z*Math.hypot(a.x-b.x,a.y-b.y)/pinch.d,.7,3.5);cam.zoom=cam.tzoom;return}
+  if(pinch&&pointers.size>=2){const[a,b]=[...pointers.values()];cam.tzoom=clamp(pinch.z*Math.hypot(a.x-b.x,a.y-b.y)/pinch.d,.7,ZOOM_MAX);cam.zoom=cam.tzoom;return}
   if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!drag.moved&&Math.hypot(dx,dy)>6)drag.moved=true;if(drag.moved){cam.taz=drag.az+.006*dx;cam.tel=clamp(drag.el+.005*dy,.25,1.1)}});
 function endPointer(e){pointers.delete(e.pointerId);if(pointers.size<2)pinch=null;
   if(drag&&!drag.moved&&e.type==='pointerup'){const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let best=null,bd=Math.max(18,.75*cam.scale);
@@ -1713,11 +1877,11 @@ function endPointer(e){pointers.delete(e.pointerId);if(pointers.size<2)pinch=nul
       if(bv)openWord(bv);else{select(null);wordCard.hidden=true;logEl.hidden=false}}}
   drag=null}
 cv.addEventListener('pointerup',endPointer);cv.addEventListener('pointercancel',endPointer);
-cv.addEventListener('wheel',e=>{e.preventDefault();cam.tzoom=clamp(cam.tzoom*Math.exp(-e.deltaY*.0015),.7,3.5)},{passive:false});
+cv.addEventListener('wheel',e=>{e.preventDefault();cam.tzoom=clamp(cam.tzoom*Math.exp(-e.deltaY*.0015),.7,ZOOM_MAX)},{passive:false});
 window.addEventListener('keydown',e=>{if(fpv.on||e.target.tagName==='INPUT')return;const k=e.key;
   if(k==='ArrowLeft'||k==='ArrowRight'){cam.taz+=k==='ArrowLeft'?.15:-.15;e.preventDefault()}
   else if(k==='ArrowUp'||k==='ArrowDown'){cam.tel=clamp(cam.tel+(k==='ArrowUp'?.08:-.08),.25,1.1);e.preventDefault()}
-  else if(k==='+'||k==='=')cam.tzoom=clamp(cam.tzoom*1.25,.7,3.5);else if(k==='-')cam.tzoom=clamp(cam.tzoom/1.25,.7,3.5)});
+  else if(k==='+'||k==='=')cam.tzoom=clamp(cam.tzoom*1.25,.7,ZOOM_MAX);else if(k==='-')cam.tzoom=clamp(cam.tzoom/1.25,.7,ZOOM_MAX)});
 window.addEventListener('resize',resize);
 
 // ================= clock =================
@@ -1764,9 +1928,13 @@ function frame(dt){
     const post=w.kind==='person'?postureOf(w):'stand';
     if(post==='lie'||post==='bath'){const f=w.tile.furn;prepItem(w.item,[f.lo[0],f.lo[1],z+.001],[f.hi[0],f.hi[1],z+(post==='lie'?.2:.35)])}
     else prepItem(w.item,[e[0]-.04,e[1]-.04,z+.001],[e[0]+.04,e[1]+.04,z+(w.kind==='cat'?.4:.75)]);items.push(w.item)});
+  // 画面の外の箱は描かない
+  const onScreen=t=>t.bb[2]>=-20&&t.bb[0]<=S.width+20&&t.bb[3]>=-20&&t.bb[1]<=S.height+20;
+  for(let i=items.length-1;i>=0;i--)if(!onScreen(items[i]))items.splice(i,1);
   const isBase=t=>t.kind==='box'&&t.whi[2]<=.2&&(t.whi[0]-t.wlo[0])*(t.whi[1]-t.wlo[1])>=2.5;
   const baseI=items.filter(isBase),restI=items.filter(t=>!isBase(t));
-  for(const t of topo(baseI).concat(topo(restI))){if(t.kind==='box')drawBox(t);else if(t.kind==='walker'){t.w.kind==='cat'?drawCat(t.w):drawPerson(t.w)}else if(t.kind==='poly')drawPoly(t);else drawProp(t)}
+  const order=topo(baseI).concat(topo(restI));if(TEST)TEST.order=order;
+  for(const t of order){if(t.kind==='box')drawBox(t);else if(t.kind==='walker'){t.w.kind==='cat'?drawCat(t.w):drawPerson(t.w)}else if(t.kind==='poly')drawPoly(t);else drawProp(t)}
 
   if(interior)for(const hs of buildings){
     if(hs.tvOn&&hs.tvP){const p=project(hs.tvP),r=cam.scale*1.6;const g=N.createRadialGradient(p[0],p[1],0,p[0],p[1],r);const a=.12+.2*nightK;g.addColorStop(0,`rgba(140,190,255,${a+.05*Math.sin(S.time*7)})`);g.addColorStop(1,'rgba(140,190,255,0)');N.fillStyle=g;N.fillRect(p[0]-r,p[1]-r,2*r,2*r)}
@@ -1808,9 +1976,10 @@ function sanAct(a,i){
   if(!a||typeof a!=='object'||!a.label_en)return null;
   const g={};GAINS.forEach(k=>{const v=Number(a.gain&&a.gain[k]);if(isFinite(v)&&v)g[k]=clamp(v,-.3,.8)});if(!Object.keys(g).length)g.fun=.3;
   const key=/^[a-z0-9_]{1,20}$/.test(String(a.key||''))?a.key:'a'+i;
-  const h=Array.isArray(a.hours)&&a.hours.length===2?[num(a.hours[0],0,24,0),num(a.hours[1],0,24,24)]:null;
+  const rng=r=>Array.isArray(r)&&r.length===2?[num(r[0],0,24,0),num(r[1],0,24,24)]:null;
+  let h=Array.isArray(a.hours)&&Array.isArray(a.hours[0])?a.hours.slice(0,4).map(rng).filter(Boolean):rng(a.hours);if(h&&!h.length)h=null;
   return{key,label_en:str(a.label_en,60),label_ja:str(a.label_ja||a.label_en,40),use_en:str(a.use_en||a.label_en,60),use_ja:str(a.use_ja||a.label_ja||a.label_en,40),
-    phrase_en:str(a.phrase_en,90),phrase_ja:str(a.phrase_ja,60),gain:g,hours:h&&!(h[0]===0&&h[1]===24)?h:null,who:['kid','adult'].includes(a.who)?a.who:'all'};
+    phrase_en:str(a.phrase_en,90),phrase_ja:str(a.phrase_ja,60),gain:g,hours:h&&!(h[0]===0&&h[1]===24)?h:null,who:['kid','adult'].includes(a.who)?a.who:'all',days:a.days==='weekday'?'weekday':null};
 }
 function sanParts(list,[w,d,zmax],max,lo0=0){
   const out=[];
@@ -1868,7 +2037,7 @@ function sanitizeSpec(sp){
       const keys=[ck(at,f),ck(land,f),ck(at,f+1),ck(land,f+1)];if(keys.some(k=>used.has(k)))continue;keys.forEach(k=>used.add(k));out.stairs.push({at,dir,floor:f});break}}
   out.furniture=[];
   for(const it of(Array.isArray(sp.furniture)?sp.furniture:[]).slice(0,90)){if(!it||!FURN[it.type])continue;const at=cellIn(it.at,w,d);if(!at)continue;const f=fl(it.floor);if(used.has(ck(at,f)))continue;used.add(ck(at,f));
-    const o={type:it.type,at,floor:f,face:SIDES.includes(it.face)?it.face:'py'};const c=hexOut(it.color);if(c)o.color=c;if(usable(it.use))o.use=it.use;
+    const o={type:it.type,at,floor:f,face:SIDES.includes(it.face)?it.face:'py'};const c=hexOut(it.color);if(c)o.color=c;const us=[].concat(it.use||[]).filter(usable).slice(0,3);if(us.length)o.use=us.length===1?us[0]:us;
     if(it.type==='custom'){o.parts=sanParts(it.parts,[.5,.5,2.4],12,-.5);if(!o.parts.length)continue;o.solid=!!it.solid;if(it.seat)o.seat=num(it.seat,.2,.9,.34);if(it.name_en){o.name_en=str(it.name_en,40);o.name_ja=str(it.name_ja,30)}}
     out.furniture.push(o)}
   out.decals=(Array.isArray(sp.decals)?sp.decals:[]).slice(0,12).map(g=>g&&{type:g.type==='mat'?'mat':'rug',floor:fl(g.floor),x:num(g.x,0,w,0),y:num(g.y,0,d,0),w:num(g.w,.2,w,1),h:num(g.h,.2,d,1),color:hexOut(g.color)}).filter(Boolean);
@@ -1882,6 +2051,8 @@ function canPlace(spec,cx,cy){
   const[w,d]=spec.footprint;
   for(let x=cx;x<cx+w;x++)for(let y=cy;y<cy+d;y++){const t=T(x,y);if(!t||t.tag!=='ground'||t.gen)return false}
   if(!spec.enterable&&spec.walkable)return true;
+  // 道と広場の上には建てない
+  for(let x=cx;x<cx+w;x++)for(let y=cy;y<cy+d;y++){const k=key(x,y);if(pathSet.has(k)||plazaSet.has(k))return false}
   const cells=new Set();for(let x=cx;x<cx+w;x++)for(let y=cy;y<cy+d;y++)cells.add(key(x,y));
   const start=townOrigin();if(!start||cells.has(key(start.pos[0],start.pos[1])))return false;
   const reach=skip=>{const seen=new Set([start]),q=[start];while(q.length){const o=q.shift();for(const l of o.links){const t=l.to;if(t.tag!=='ground'||seen.has(t)||(skip&&skip.has(key(t.pos[0],t.pos[1]))))continue;seen.add(t);q.push(t)}}return seen};
@@ -1895,7 +2066,7 @@ function findSpot(spec){
   for(let x=0;x<=MW-w;x++)for(let y=0;y<=MH-d;y++){let pen=0;for(let i=x;i<x+w;i++)for(let j=y;j<y+d;j++){const k=key(i,j);if(pathSet.has(k)||plazaSet.has(k))pen+=spec.walkable?0:2.5}
     c.push({x,y,s:Math.hypot(x+(w-1)/2-tgt[0],y+(d-1)/2-tgt[1])+pen})}
   c.sort((a,b)=>a.s-b.s);
-  for(const k of c.slice(0,400))if(canPlace(spec,k.x,k.y))return k;
+  for(const k of c)if(canPlace(spec,k.x,k.y))return k;
   return null;
 }
 function moveOff(o,cells,to){const inside=t=>t&&cells.has(key(t.pos[0],t.pos[1]));if(!inside(o.tile)&&!(o.link&&inside(o.link.to)))return;
@@ -1952,7 +2123,7 @@ Request from ${who||'the town god'}: "${voice}"
 Design brief: ${desc}${note?`\n${note}`:''}
 
 Scale: 1 unit = one grid cell. A person is about 1 unit tall. One storey is ${WALL_H} high, a door is about 1.1 high, a tree is about 1.6 tall.
-The town is ${MW}x${MH} cells, so keep the footprint modest (a big building is 6x5 to 10x8 cells).
+The town is ${MW}x${MH} cells and mostly built up. Big buildings (6x5 to 7x10 cells) fit only on the vacant land in the east: use "near":"vacant" or "vacantNorth" for them.
 
 Two kinds of design:
 A) Object (statue, fountain, playground, tower, sign...): "enterable": false. Built only from "parts".
@@ -2281,7 +2452,7 @@ ${me.en}: ${msg}
 
 Reply in character with 1-2 short sentences of natural, simple spoken English (CEFR A2) about everyday life, and give a natural Japanese translation.
 "tip": if ${me.en}'s last message has an English mistake or sounds unnatural, write one short, kind correction in Japanese like 「◯◯ より △△ が自然だよ」. If they wrote in Japanese, show how to say it in English in Japanese, like 「英語では "…" と言えるよ」. Otherwise "".
-"goal": if they invite you to do something together right now and you agree, one of: fish, walk, plaza, stall, bench, field, flower, eat, cook, tv, bath, sleep, play, dance. Otherwise null.
+"goal": if they invite you to do something together right now and you agree, one of: fish, walk, plaza, stall, bench, field, flower, eat, cook, tv, bath, sleep, play, dance, or a town place: ${townGoals()}. Otherwise null.
 Reply with JSON only: {"en":"…","ja":"…","tip":"…","goal":null}`;
 }
 async function sendTalk(text){
@@ -2297,7 +2468,7 @@ async function sendTalk(text){
   const i=talk.turns.indexOf(wait);const tt={who:'npc',en:String(r.en||'').slice(0,160),ja:String(r.ja||'').slice(0,100)};if(i>=0)talk.turns.splice(i,1);talk.turns.push(tt);
   if(r.tip)talk.turns[talk.turns.length-2]&&(talk.turns.filter(t=>t.who==='me').slice(-1)[0].tip=String(r.tip).slice(0,120));
   talk.busy=false;say(npc,{en:tt.en,ja:tt.ja},6);addPhrase({en:tt.en,ja:tt.ja});renderTalk();
-  if(r.goal&&ACTS[r.goal]&&npc.kind==='person'){npc.wait=0;const p=planAct(npc,r.goal);if(p){npc.directive={goal:r.goal,until:clock.sim+2*HR};npc.forced=p;toast(J(`${npc.name}が「${tr(labelOf(npc,r.goal))}」に向かった`,`${npc.en} is heading off: ${labelOf(npc,r.goal).en}`))}}
+  if(r.goal&&ACTS[r.goal]&&canDo(npc,r.goal)&&npc.kind==='person'){npc.wait=0;const p=planAct(npc,r.goal);if(p){npc.directive={goal:r.goal,until:clock.sim+2*HR};npc.forced=p;toast(J(`${npc.name}が「${tr(labelOf(npc,r.goal))}」に向かった`,`${npc.en} is heading off: ${labelOf(npc,r.goal).en}`))}}
 }
 tForm.addEventListener('submit',e=>{e.preventDefault();sendTalk(tInput.value)});
 tInput.addEventListener('focus',()=>{fpv.typing=true;fpv.keys.clear()});tInput.addEventListener('blur',()=>{fpv.typing=false});
@@ -2395,7 +2566,7 @@ const TUI={btn:J('町','Town'),title:J('町の保存と歩み','Town: save & his
 let lastSaveAt=0,saveErr=false;
 function snapshot(){
   const n=clock.sim;
-  return{v:1,at:Date.now(),sim:n,
+  return{v:1,hr:HR,at:Date.now(),sim:n,
     weather:{kind:weather.kind,left:Math.max(0,weather.until-n),fest:Math.max(0,weather.festUntil-n),rb:Math.max(0,weather.rainbowUntil-n)},
     walkers:walkers.map(w=>({n:w.name,pos:w.tile.pos.slice(),needs:w.needs?{...w.needs}:null,rel:w.rel&&w.kind==='person'?{...w.rel}:null,mem:(w.memory||[]).slice(-8),mood:w.mood||null,moodLeft:Math.max(0,(w.moodUntil||0)-n)})),
     growth:{log:grow.log.slice(-40),since:n-grow.lastAt,wishes:grow.wishes}};
@@ -2404,9 +2575,13 @@ function saveTown(manual){
   try{localStorage.setItem(SAVE_KEY,JSON.stringify(snapshot()));saveBuilds();lastSaveAt=Date.now();saveErr=false;if(manual)toast(TUI.saved);renderTown();return true}
   catch(e){saveErr=true;if(manual)toast(TUI.fail);return false}
 }
+function scaleTimes(s,k){if(k===1)return s;const x=JSON.parse(JSON.stringify(s));x.sim*=k;const wx=x.weather||{};['left','fest','rb'].forEach(f=>{if(isFinite(wx[f]))wx[f]*=k});
+  (x.walkers||[]).forEach(r=>{if(isFinite(r.moodLeft))r.moodLeft*=k});if(x.growth&&isFinite(x.growth.since))x.growth.since*=k;return x}
 function readSave(){try{const s=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');return s&&s.v===1&&isFinite(s.sim)?s:null}catch(e){return null}}
 function findTile(p){if(!Array.isArray(p))return null;return tiles.find(t=>Math.abs(t.pos[0]-p[0])<.01&&Math.abs(t.pos[1]-p[1])<.01&&Math.abs(t.pos[2]-p[2])<.01&&t.links.length&&(t.indoor||tileAt.get(key(t.pos[0],t.pos[1]))===t))||null}
 function restoreTown(s){
+  // 保存した時と1時間の長さが違えば、時刻や残り時間を今の長さに直す
+  const k=HR/(Number(s.hr)||OLD_HR);s=scaleTimes(s,k);
   clock.sim=Math.max(0,Number(s.sim)||0);tickClock();clock.lastDay=clock.day;clock.lastHourInt=Math.floor(clock.hour);
   const wx=s.weather||{};weather.kind=['clear','rain','snow'].includes(wx.kind)?wx.kind:'clear';weather.until=clock.sim+(Number(wx.left)||0);weather.festUntil=clock.sim+(Number(wx.fest)||0);weather.rainbowUntil=clock.sim+(Number(wx.rb)||0);weather.plan=null;
   (s.walkers||[]).forEach(r=>{const w=byName(String(r.n));if(!w)return;
@@ -2560,7 +2735,7 @@ const _sv=readSave();if(_sv){restoreTown(_sv)}
 let last=performance.now();
 function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;S.time+=dt;frame(dt);requestAnimationFrame(loop)}
 resize();basis();tickClock();applyLang();if(_sv){log(TUI.resumed)}else log(J('1日目の朝。村の一日がはじまる','Day 1. A new day begins in the village.'));started=true;
-if(TEST)TEST.api={cam,clock,walkers,S,boxes,tiles,buildings,SPOTS,ACTS,sanitizeSpec,findSpot,placeBuilding,removeBuilding,offlineSpec,planAct,setPlan,setViewFloor,bfs,step(n,dt){for(let i=0;i<n;i++){S.time+=dt;frame(dt)}},
+if(TEST)TEST.api={cam,clock,walkers,S,boxes,tiles,buildings,SPOTS,ACTS,sep,sanitizeSpec,findSpot,placeBuilding,removeBuilding,offlineSpec,planAct,setPlan,setViewFloor,bfs,step(n,dt){for(let i=0;i<n;i++){S.time+=dt;frame(dt)}},
   setView(o){if('interior'in o){interior=o.interior;updateFloorBtn()}if('floor'in o)setViewFloor(o.floor);if('az'in o)cam.az=cam.taz=o.az;if('el'in o)cam.el=cam.tel=o.el;if('zoom'in o)cam.zoom=cam.tzoom=o.zoom;basis()}};
 else requestAnimationFrame(loop);
 })();

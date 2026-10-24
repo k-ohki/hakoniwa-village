@@ -1,4 +1,5 @@
 // ================= layout =================
+const ZOOM_MAX=5;
 const hudTop=document.getElementById('hudTop'),controls=document.getElementById('controls'),logEl=document.getElementById('log');
 function fit(){
   let x0=1/0,y0=1/0,x1=-1/0,y1=-1/0,sx=0,sy=0,sz=0,n=0;

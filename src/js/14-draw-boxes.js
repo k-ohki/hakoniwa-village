@@ -2,19 +2,22 @@
 const FACES=[{n:[1,0,0],o:3,u:1,v:7,key:'px'},{n:[0,1,0],o:2,u:3,v:6,key:'py'},{n:[-1,0,0],o:0,u:2,v:4,key:'nx'},{n:[0,-1,0],o:1,u:0,v:5,key:'ny'},{n:[0,0,1],o:4,u:5,v:6,key:'top'}];
 function faceXform(e,l,i){const o=S.dpr;N.setTransform(o*(l[0]-e[0]),o*(l[1]-e[1]),o*(i[0]-e[0]),o*(i[1]-e[1]),o*e[0],o*e[1])}
 function arch(t,e,l,i){const o=l/2;N.moveTo(t-o,e);N.lineTo(t-o,e+i-o);for(let k=0;k<=10;k++){const a=Math.PI-k/10*Math.PI;N.lineTo(t+Math.cos(a)*o,e+i-o+Math.sin(a)*o)}N.lineTo(t+o,e);N.closePath()}
-function rr(x,y,w,h,r){N.beginPath();if(N.roundRect)N.roundRect(x,y,w,h,r);else N.rect(x,y,w,h)}
+function rr(x,y,w,h,r){N.beginPath();rrAdd(x,y,w,h,r)}
+function rrAdd(x,y,w,h,r){if(N.roundRect)N.roundRect(x,y,w,h,r);else N.rect(x,y,w,h)}
 const faceU=(b,k,X)=>k==='px'?b.hi[1]-X:k==='nx'?X-b.lo[1]:k==='py'?X-b.lo[0]:b.hi[0]-X;
 const houseAmb=h=>h&&h.enterable?mix(mix(ambOut,[.5,.5,.62],nightK*.4),[1.04,.95,.84],h.glow):ambOut;
 
 function drawGround(b,f,W,H){
   const a=b.lo,n=f.n;snowOn=true;
-  N.fillStyle=rgb(shade(snowy(P.path),n));for(const[x,y]of pathCells){rr(x-a[0]-.46,y-a[1]-.46,.92,.92,.18);N.fill()}
+  // 同じ色の小さな形はまとめて1回で塗る（描画回数を減らす）
+  N.fillStyle=rgb(shade(snowy(P.path),n));N.beginPath();for(const[x,y]of pathCells)rrAdd(x-a[0]-.46,y-a[1]-.46,.92,.92,.18);N.fill();
   {const pz=TOWN.plaza,px0=pz.x-.5-a[0],py0=pz.y-.5-a[1];N.fillStyle=rgb(shade(snowy(P.plaza),n));rr(pz.x-a[0]-.5,pz.y-a[1]-.5,pz.w,pz.h,.3);N.fill();
   N.strokeStyle=rgb(shade(snowy(P.plaza),n),.9);N.lineWidth=.03;for(let k=1;k<pz.w*2;k++){N.beginPath();N.moveTo(px0+k*.5,py0);N.lineTo(px0+k*.5,py0+pz.h);N.stroke()}
   for(let k=1;k<pz.h*2;k++){N.beginPath();N.moveTo(px0,py0+k*.5);N.lineTo(px0+pz.w,py0+k*.5);N.stroke()}}
-  for(const[x,y]of fieldCells){N.fillStyle=rgb(shade(snowy(P.soil),n));rr(x-a[0]-.46,y-a[1]-.46,.92,.92,.12);N.fill();N.fillStyle=rgb(shade(snowy(P.soil),n),.84);for(let k=0;k<3;k++)N.fillRect(x-a[0]-.36,y-a[1]-.28+k*.26,.72,.05)}
-  for(const[x,y]of bedCells){N.fillStyle=rgb(shade(snowy([160,128,104]),n));rr(x-a[0]-.44,y-a[1]-.44,.88,.88,.2);N.fill();
-    for(let k=0;k<9;k++){const c=[[255,150,170],[255,214,110],[200,160,240],[255,255,255]][k%4];N.fillStyle=rgbA(c);N.beginPath();N.arc(x-a[0]-.3+hash(k*3+x*7+y)*.6,y-a[1]-.3+hash(k*5+y*11+x)*.6,.09,0,2*Math.PI);N.fill()}}
+  N.fillStyle=rgb(shade(snowy(P.soil),n));N.beginPath();for(const[x,y]of fieldCells)rrAdd(x-a[0]-.46,y-a[1]-.46,.92,.92,.12);N.fill();
+  N.fillStyle=rgb(shade(snowy(P.soil),n),.84);for(const[x,y]of fieldCells)for(let k=0;k<3;k++)N.fillRect(x-a[0]-.36,y-a[1]-.28+k*.26,.72,.05);
+  N.fillStyle=rgb(shade(snowy([160,128,104]),n));N.beginPath();for(const[x,y]of bedCells)rrAdd(x-a[0]-.44,y-a[1]-.44,.88,.88,.2);N.fill();
+  [[255,150,170],[255,214,110],[200,160,240],[255,255,255]].forEach((c,ci)=>{N.fillStyle=rgbA(c);N.beginPath();for(const[x,y]of bedCells)for(let k=ci;k<9;k+=4){const px=x-a[0]-.3+hash(k*3+x*7+y)*.6,py=y-a[1]-.3+hash(k*5+y*11+x)*.6;N.moveTo(px+.09,py);N.arc(px,py,.09,0,2*Math.PI)}N.fill()});
   for(const POND of PONDS){const px=POND.x-a[0],py=POND.y-a[1];
   N.fillStyle=rgb(shade(snowy([214,200,170]),n));N.beginPath();N.ellipse(px,py,POND.rx+.16,POND.ry+.16,0,0,2*Math.PI);N.fill();
   N.fillStyle=rgb(mix(A(P.water),[60,80,140],nightK*.35));N.beginPath();N.ellipse(px,py,POND.rx,POND.ry,0,0,2*Math.PI);N.fill();
@@ -24,19 +27,23 @@ function drawGround(b,f,W,H){
   N.fillStyle=rgb(shade([120,186,130],n));[[-.9,.4],[-.4,.8],[.5,-.4]].forEach(([dx,dy])=>{N.beginPath();N.arc(px+dx,py+dy,.14,.3,2*Math.PI-.1);N.lineTo(px+dx,py+dy);N.fill()})}
   const open=(wx,wy)=>{const k=key(Math.round(wx),Math.round(wy));return!pathSet.has(k)&&!plazaSet.has(k)&&!fieldSet.has(k)&&!bedSet.has(k)&&!occupied.has(k)&&!inPond(wx,wy,.2)&&!sakuraSet.has(k)};
   N.fillStyle=rgb(shade(snowy(P.grass),n),.9);
-  for(let t=0;t<W*H*1.2;t++){const x=hash(1.7*t+b.id)*W,y=hash(2.3*t+3*b.id)*H;if(!open(x+a[0],y+a[1]))continue;N.beginPath();N.arc(x,y,.08+.06*hash(t),0,2*Math.PI);N.fill()}
-  if(snowCover<.6)for(let t=0;t<W*H*.3;t++){const x=hash(5.3*t+b.id)*W,y=hash(4.1*t+7*b.id)*H;if(!open(x+a[0],y+a[1]))continue;N.fillStyle=rgbA(t%3===0?[255,236,150]:t%3===1?[255,214,226]:[255,255,255],1,.9*(1-snowCover));N.beginPath();N.arc(x,y,.05,0,2*Math.PI);N.fill()}
+  N.beginPath();for(let t=0;t<W*H*1.2;t++){const x=hash(1.7*t+b.id)*W,y=hash(2.3*t+3*b.id)*H;if(!open(x+a[0],y+a[1]))continue;const r=.08+.06*hash(t);N.moveTo(x+r,y);N.arc(x,y,r,0,2*Math.PI)}N.fill();
+  if(snowCover<.6)[[255,236,150],[255,214,226],[255,255,255]].forEach((c,ci)=>{N.fillStyle=rgbA(c,1,.9*(1-snowCover));N.beginPath();for(let t=ci;t<W*H*.3;t+=3){const x=hash(5.3*t+b.id)*W,y=hash(4.1*t+7*b.id)*H;if(!open(x+a[0],y+a[1]))continue;N.moveTo(x+.05,y);N.arc(x,y,.05,0,2*Math.PI)}N.fill()});
   if(festK>0){const pz=TOWN.plaza;N.fillStyle=`rgba(255,200,210,${.8*festK})`;for(let k=0;k<26;k++){N.beginPath();N.arc(pz.x-a[0]-.4+hash(k*9)*(pz.w-.2),pz.y-a[1]-.4+hash(k*13)*(pz.h-.2),.07,0,2*Math.PI);N.fill()}}
   snowOn=false;
 }
 // 床: 部屋ごとの床の種類で塗り、そのあと床の模様（ラグなど）を描く。面の座標は床板の左上角が 0
 function drawFloor(b,f){
   const h=b.bld,n=f.n,lv=b.level,u0=b.lo[0]-(h.cx-.5),v0=b.lo[1]-(h.cy-.5),W=Math.round(b.hi[0]-b.lo[0]),D=Math.round(b.hi[1]-b.lo[1]);
-  for(let i=0;i<W;i++)for(let j=0;j<D;j++){const c=Math.round(u0)+i,r=Math.round(v0)+j,room=h.roomAt(c,r,lv),x=i,y=j,fs=room?room.floorStyle:'wood';
-    if(fs==='tile'){const col=room.color||P.tileK;for(let p=0;p<2;p++)for(let q=0;q<2;q++){N.fillStyle=rgb(shade((p+q)%2?col:mix(col,[255,255,255],.35),n));N.fillRect(x+p*.5,y+q*.5,.51,.51)}}
-    else if(fs==='carpet'){N.fillStyle=rgb(shade(room.color||[200,170,190],n));N.fillRect(x,y,1.01,1.01)}
-    else if(fs==='stone'){N.fillStyle=rgb(shade(room.color||[226,222,230],n));N.fillRect(x,y,1.01,1.01);N.fillStyle=rgb(shade(room.color||[226,222,230],n),.9);N.fillRect(x,y,1,.02);N.fillRect(x,y,.02,1)}
-    else{N.fillStyle=rgb(shade(room&&room.color||P.floorW,n));N.fillRect(x,y,1.01,1.01);N.fillStyle=rgb(shade(P.wood,n),.5);for(let k=0;k<4;k++)N.fillRect(x,y+k*.25,1,.02)}}
+  // 行ごとに、同じ床の種類が続くマスをまとめて塗る
+  for(let j=0;j<D;j++){const r=Math.round(v0)+j,y=j;let i=0;
+    while(i<W){const room=h.roomAt(Math.round(u0)+i,r,lv);let e=i+1;while(e<W&&h.roomAt(Math.round(u0)+e,r,lv)===room)e++;
+      const x=i,len=e-i,fs=room?room.floorStyle:'wood';
+      if(fs==='tile'){const c=room.color||P.tileK;N.fillStyle=rgb(shade(c,n));N.fillRect(x,y,len+.01,1.01);N.fillStyle=rgb(shade(mix(c,[255,255,255],.35),n));for(let k=0;k<len;k++){N.fillRect(x+k,y,.51,.51);N.fillRect(x+k+.5,y+.5,.51,.51)}}
+      else if(fs==='carpet'){N.fillStyle=rgb(shade(room.color||[200,170,190],n));N.fillRect(x,y,len+.01,1.01)}
+      else if(fs==='stone'){const c=room.color||[226,222,230];N.fillStyle=rgb(shade(c,n));N.fillRect(x,y,len+.01,1.01);N.fillStyle=rgb(shade(c,n),.9);N.fillRect(x,y,len,.02);for(let k=0;k<len;k++)N.fillRect(x+k,y,.02,1)}
+      else{N.fillStyle=rgb(shade(room&&room.color||P.floorW,n));N.fillRect(x,y,len+.01,1.01);N.fillStyle=rgb(shade(P.wood,n),.5);for(let k=0;k<4;k++)N.fillRect(x,y+k*.25,len,.02)}
+      i=e}}
   for(const d of h.spec.decals||[]){if((d.floor||0)!==lv)continue;const x=d.x-u0,y=d.y-v0;if(x+d.w<0||y+d.h<0||x>W||y>D)continue;
     if(d.type==='rug'){N.fillStyle=rgb(shade(col(d.color,[214,140,140]),n));rr(x,y,d.w,d.h,.25);N.fill();N.strokeStyle=rgb(shade([255,240,220],n));N.lineWidth=.04;rr(x+.1,y+.1,d.w-.2,d.h-.2,.2);N.stroke()}
     else{N.fillStyle=rgb(shade(col(d.color,[180,210,230]),n));rr(x,y,d.w,d.h,.1);N.fill()}}

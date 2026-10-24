@@ -22,7 +22,7 @@ await page.waitForFunction(() => window.__HAKONIWA_TEST__ && window.__HAKONIWA_T
 const seen = await page.evaluate((days) => {
   const api = window.__HAKONIWA_TEST__.api, seen = {};
   api.clock.speed = 8;
-  const frames = Math.ceil((days * 180) / (8 / 30));
+  const frames = Math.ceil((days * 300) / (8 / 30));
   for (let i = 0; i < frames; i++) {
     api.step(1, 1 / 30);
     for (const w of api.walkers) if (w.act && !w.link) seen[w.act.id] = (seen[w.act.id] || 0) + 1;
@@ -30,7 +30,7 @@ const seen = await page.evaluate((days) => {
   return seen;
 }, days);
 await browser.close();
-const want = ['sleep', 'eat', 'cook', 'toilet', 'chat'];
+const want = ['sleep', 'eat', 'cook', 'toilet', 'chat', 'school.study', 'school.teach', 'school.lunch', 'store.work'];
 const missing = want.filter((k) => !seen[k]);
 console.log('行動:', Object.keys(seen).sort().join(', '));
 if (errors.length) console.error(errors.slice(0, 5).join('\n'));
