@@ -1,5 +1,4 @@
 // ================= Claude: god's voice & inner voice =================
-if(window.claude&&window.claude.use)window.claude.use('sample').then(s=>{sample=s}).catch(()=>{});
 const godForm=$('godForm'),godInput=$('godInput'),godSend=$('godSend');
 const GOAL_IDS=[...ACT_IDS,'home','none'];
 const MOODS=['happy','excited','calm','sad','scared','angry'];
