@@ -43,6 +43,17 @@
   <p id="townNote"></p>
   <div class="townbtns"><button class="pill" id="townSave" type="button"></button><button class="pill" id="townReset" type="button"></button></div>
   <p id="townStamp"></p>
+  <div class="apibox" id="apiBox" hidden>
+    <h3 id="apiTitle">Claude API</h3>
+    <p id="apiNote"></p>
+    <form id="apiForm" autocomplete="off">
+      <input id="apiKey" type="password" autocomplete="off" spellcheck="false" aria-label="API key">
+      <select id="apiModel" aria-label="Model"></select>
+      <button class="pill" id="apiSave" type="submit"></button>
+      <button class="pill" id="apiClear" type="button"></button>
+    </form>
+    <p id="apiState"></p>
+  </div>
   <ul id="townList"></ul>
 </section>
 <section class="hud book panel" id="book" hidden>

@@ -33,6 +33,7 @@ function restoreTown(s){
   lastSaveAt=Number(s.at)||0;
 }
 function renderTown(){
+  renderApiPanel();
   if(!$('town'))return;
   $('townBtn').textContent=tr(TUI.btn);$('townTitle').textContent=tr(TUI.title);$('townSave').textContent=tr(TUI.save);$('townNote').textContent=tr(TUI.note);
   $('townReset').textContent=tr(resetArmed?TUI.reset2:TUI.reset);

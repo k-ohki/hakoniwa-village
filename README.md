@@ -1,21 +1,30 @@
 # 箱庭の村 (Hakoniwa Village)
 
 単一HTMLファイル（`index.html`、`src/` からビルド）で動く、等角投影の小さな村の生活シミュレーション。ブラウザで開くだけで動きます。
-Claude Artifact としても公開しており、その場合は `index.html` をそのまま公開します（`sample` 機能を宣言）。
+GitHub Pages で公開しています（`main` への push で `.github/workflows/pages.yml` が `index.html` だけを配信）。Claude Artifact としても公開でき、その場合は `index.html` をそのまま公開します（`sample` 機能を宣言）。
 
-> **Google Fonts・外部CDN・外部通信は禁止。** フォントはシステムフォントのみ。`npm run check` で自動検出します。
+> **Google Fonts・外部CDNは禁止。外部通信は Claude API のみ。APIキーはリポジトリに入れない。** フォントはシステムフォントのみ。`npm run check` で自動検出します。
 
 ## 開発
 
 ```sh
 npm run build   # src/ → index.html を生成
-npm run check   # 外部リソース禁止・構文・ビルド最新かを検査
-npm run smoke   # ヘッドレス Chromium で起動確認（要 Playwright）
+npm run check   # 外部リソース禁止・秘密情報（全履歴）・構文・ビルド最新かを検査
+npm run smoke   # ヘッドレス Chromium で起動・API キー経路を確認（API はモック、要 Playwright）
 npm run verify  # build + check
 ```
 
 - 編集は `src/`（`index.template.html` / `styles.css` / `js/NN-*.js`）で行い、`index.html` は直接編集しない
 - 開発ルールは `CLAUDE.md`、CI は `.github/workflows/ci.yml`
+
+## Claude API キー
+
+GitHub Pages 版で Claude を使うには、「町」→「Claude API」に自分の [Anthropic API キー](https://console.anthropic.com/) を入れます。
+
+- キーはそのブラウザの localStorage にだけ保存され、`api.anthropic.com` へ直接送られます。サーバーやリポジトリには残りません
+- 共用の端末では入れないでください。不要になったら「キーを削除」、心配なら Console でキーを無効化
+- モデルは Opus 5.5（既定）／Sonnet 5.5／Haiku 5.5 から選べます。料金は各自のキーに課金されます
+- キーが無い時は従来どおりオフラインの簡易解釈で動きます。Claude Artifact 上では host の `sample` を使うため、この欄は出ません
 
 ## 主な機能
 
@@ -41,13 +50,14 @@ npm run verify  # build + check
 8. 町のブラウザ保存と、住民の願い・出来事による町の成長を追加
 9. GitHub リポジトリへ移行（クラウドセッションで開発を続けるため）
 10. Google Fonts を廃止してシステムフォントのみに。`src/` 分割・ビルド・検査・CI を整備
+11. GitHub Pages で公開。各自の API キー（ブラウザ保存）で Claude を使えるように
 
 ## 実装メモ
 
 - 描画: Canvas2D の箱ベース等角投影。位相ソート（`sep()`/`topo()`）。床など `whi.z<=0.2` で面積2.5以上の板は `topo` の外で先に描く
 - 壁: カメラに近い側の壁は `prepBox` で低くカットし、内部が見える
 - ビルド生成: `sanitizeSpec` → `findSpot`/`canPlace`（連結性チェック）→ `placeStructure`。活動は `ACTS` に動的追加
-- 保存キー（localStorage）: `hakoniwa-save-v1`（町）、`hakoniwa-builds`（建物）、`hakoniwa-book`（フレーズ帳）、`hakoniwa-lang`、`hakoniwa-labels`
+- 保存キー（localStorage）: `hakoniwa-save-v1`（町）、`hakoniwa-builds`（建物）、`hakoniwa-book`（フレーズ帳）、`hakoniwa-lang`、`hakoniwa-labels`、`hakoniwa-api-key`・`hakoniwa-api-model`（Claude API）
 - Artifact 制約: 外部CDN・Google Fonts 不可。three.js は使わず自前 WebGL。全体は IIFE 内
 
 ## 検証状況・既知の課題
