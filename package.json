@@ -1,0 +1,14 @@
+{
+  "name": "hakoniwa-village",
+  "version": "9.0.0",
+  "private": true,
+  "description": "箱庭の村: 単一HTMLで動く等角投影の村の生活シミュレーション",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/check.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "verify": "npm run build && npm run check"
+  },
+  "engines": { "node": ">=20" }
+}

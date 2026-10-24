@@ -1,0 +1,82 @@
+<title>箱庭の村</title>
+<style>
+/*@inline styles.css*/
+</style>
+
+
+<canvas id="scene" aria-label="住人たちが暮らす小さな箱庭の村"></canvas>
+<div class="hud top" id="hudTop">
+  <div class="row1">
+    <div class="clock panel"><span class="day" id="day">1日目</span><b id="time">07:00</b><span class="period" id="period">朝</span><span class="wx" id="wx">晴れ</span></div>
+    <button class="pill lang" id="langBtn" type="button">English</button>
+    <button class="pill" id="labelBtn" type="button" aria-pressed="false" hidden>Labels: Off</button>
+    <button class="pill" id="townBtn" type="button">町</button>
+    <button class="pill" id="bookBtn" type="button"><span id="bookLbl">フレーズ帳</span><span class="n" id="bookN">0</span></button>
+    <form class="god panel" id="godForm" autocomplete="off">
+      <label for="godInput" id="godLbl">神の声</label>
+      <input id="godInput" maxlength="140" placeholder="例：今日はお祭りだ！みんな広場に集まれ">
+      <button id="godSend" type="submit">告げる</button>
+    </form>
+  </div>
+  <ul id="roster"></ul>
+  <p class="hint" id="hint">ドラッグで回転・ホイールで拡大・住人や物をタップ</p>
+</div>
+<ul class="hud log panel" id="log"></ul>
+<section class="hud sheet panel" id="card" hidden>
+  <header><span class="dot" id="cDot"></span><h2 id="cName"></h2><span class="mood" id="cMood"></span><button class="x" id="cClose" type="button" aria-label="閉じる">×</button></header>
+  <p class="persona" id="cPersona"></p>
+  <p class="persona wish" id="cWish" hidden></p>
+  <p class="status"><span id="cStatus"></span><button class="say-btn" id="cSay" type="button" aria-label="Listen">🔊</button><span class="ja" id="cStatusJa"></span></p>
+  <div class="needs" id="cNeeds"></div>
+  <div class="acts"><button id="cThink" type="button">心の声を聞く</button><button id="cFollow" type="button" aria-pressed="false">この人を追う</button><button id="cPlay" class="play" type="button">この人になる（一人称）</button></div>
+  <p class="thought" id="cThought" hidden></p>
+</section>
+<section class="hud sheet panel word" id="wordCard" hidden>
+  <header><h2 id="wWord"></h2><button class="say-btn" id="wSay" type="button" aria-label="Listen">🔊</button><button class="x" id="wClose" type="button" aria-label="閉じる">×</button></header>
+  <p class="exja" id="wJa"></p>
+  <p class="ex" id="wEx"></p>
+  <p class="exja" id="wExJa"></p>
+  <div class="acts"><button id="wExSay" type="button">🔊 例文を聞く</button></div>
+</section>
+<section class="hud book panel" id="town" hidden>
+  <header><h2 id="townTitle">町の保存と歩み</h2><button class="x" id="townClose" type="button" aria-label="閉じる">×</button></header>
+  <p id="townNote"></p>
+  <div class="townbtns"><button class="pill" id="townSave" type="button"></button><button class="pill" id="townReset" type="button"></button></div>
+  <p id="townStamp"></p>
+  <ul id="townList"></ul>
+</section>
+<section class="hud book panel" id="book" hidden>
+  <header><h2 id="bookTitle">フレーズ帳</h2><button class="x" id="bookClose" type="button" aria-label="閉じる">×</button></header>
+  <p id="bookNote">村で聞こえた英語のフレーズがたまっていきます。🔊で発音を聞けます。</p>
+  <ul id="bookList"></ul>
+</section>
+<div class="hud controls" id="controls">
+  <button id="zoomOut" type="button" aria-label="縮小">－</button>
+  <button id="zoomIn" type="button" aria-label="拡大">＋</button>
+  <button id="roofBtn" type="button">外観を見る</button>
+  <button id="speed" type="button">早送り ×1</button>
+  <button id="reset" type="button">視点を戻す</button>
+</div>
+
+<div id="fpv" hidden><canvas id="fpvOverlay"></canvas></div>
+<section class="hud fpvhud panel" id="fpvHud" hidden>
+  <div class="fpvtop"><span class="dot" id="fpvDot"></span><b id="fpvName"></b><div class="fneeds" id="fpvNeeds"></div></div>
+  <p class="fsub" id="fpvSub" hidden></p>
+  <div class="facts" id="fpvActs"></div>
+  <div class="fctl"><span class="fhint" id="fpvHint"></span><button id="fpvSpeed" type="button">×1</button><button id="fpvExit" type="button">戻る</button></div>
+</section>
+<div class="joy" id="joy"><span id="joyKnob"></span></div>
+<section class="hud talk panel" id="talk" hidden>
+  <header><span class="dot" id="tDot"></span><h2 id="tName"></h2><button class="x" id="tClose" type="button" aria-label="閉じる">×</button></header>
+  <ul id="tList"></ul>
+  <div class="chips" id="tChips"></div>
+  <form id="tForm" autocomplete="off"><input id="tInput" maxlength="160" aria-label="message"><button id="tSend" type="submit">送る</button></form>
+</section>
+<div class="toast" id="toast" hidden></div>
+
+
+<script>
+(() => {
+/*@inline js/*/
+})();
+</script>
