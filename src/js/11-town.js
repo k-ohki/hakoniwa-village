@@ -21,7 +21,6 @@ const TOWN={
   sakura:[[8,11,1.05],[28,9,.9]],
   lanterns:[[4,7],[6,9],[9,7],[13,7],[10,10],[10,13],[18,7],[23,7],[26,9],[18,15],[4,21],[3,23],[9,23],[16,23],[22,23],[28,23],[31,4],[31,17],[33,7],[33,9],[33,21],[33,23]],
   poles:[[6.5,9.5],[9.5,9.5],[9.5,12.5],[6.5,12.5]],
-  falls:[{x:37.5,y:3.2,y0:2.6,y1:3.8}],
   buildings:[
     {bp:'house',at:[1,1],id:'A',opts:{wall:P.wall,roof:P.coral,paper:P.paper,curtain:[236,170,160],rug:[214,140,140],blanket:[[244,160,150],[240,200,120],[140,180,230],[236,150,130]]}},
     {bp:'house',at:[10,1],id:'B',noName:true,opts:{wall:P.wall2,roof:P.teal,paper:P.paper2,curtain:[160,200,190],rug:[140,170,200],blanket:[[160,210,200],[190,170,230],[246,180,200],[120,170,180]]}},
@@ -37,7 +36,6 @@ const TOWN={
     ['cherry tree','桜の木','The cherry tree is in full bloom.','桜が満開です。',[8,11,1.7]],
     ['tree','木','I take a nap under the tree.','木の下で昼寝をします。',[0,0,1.3],{showLabel:true}],
     ['street lamp','街灯','The street lamp is on at night.','夜は街灯がつきます。',[4,7,.9],{showLabel:true}],
-    ['waterfall','滝','The waterfall is very loud.','滝の音がとても大きい。',[37.5,3.2,-1]],
     ['flower bed','花壇','I water the flower bed every day.','毎日花壇に水をやります。',[.5,7,.1]],
     ['plaza','広場','Everyone meets at the plaza.','みんな広場に集まります。',[8,10,0]],
     ['schoolyard','校庭','The kids play in the schoolyard.','子どもたちは校庭で遊びます。',[24,9.5,0]],
@@ -90,9 +88,7 @@ const props=[];
 TREES.forEach(([x,y,r])=>props.push({kind:'tree',local:[x,y,0],r}));
 TOWN.sakura.forEach(([x,y,r])=>props.push({kind:'sakura',local:[x,y,0],r}));
 LANTERNS.forEach(([x,y])=>props.push({kind:'lantern',local:[x,y,0]}));
-TOWN.falls.forEach(f=>props.push({kind:'falls',local:[f.x,f.y,0],y0:f.y0,y1:f.y1}));
 fieldCells.forEach(([x,y])=>props.push({kind:'crop',local:[x,y,0],type:(x+y)%2}));
 TOWN.poles.forEach(([x,y])=>props.push({kind:'pole',local:[x,y,0]}));
 props.forEach((t,i)=>{const big=t.kind==='tree'||t.kind==='sakura',e=big?.25:.08;const top=big?1.9*t.r:t.kind==='pole'?1.7:.8;
-  t.lo=[t.local[0]-e,t.local[1]-e,t.local[2]];t.hi=[t.local[0]+e,t.local[1]+e,t.local[2]+top];
-  if(t.kind==='falls'){t.lo=[t.local[0],t.y0,-5];t.hi=[t.local[0]+.12,t.y1,0]}t.id=1000+i});
+  t.lo=[t.local[0]-e,t.local[1]-e,t.local[2]];t.hi=[t.local[0]+e,t.local[1]+e,t.local[2]+top];t.id=1000+i});

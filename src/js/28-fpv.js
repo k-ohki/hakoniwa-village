@@ -81,7 +81,7 @@ function buildWorld(){
   const pA=amb;amb=[1,1,1];bakePolysGL(polys.filter(p=>p.bld.fixed));amb=pA;
   genBuildings().forEach(addStructGL);
   // props as billboards
-  props.forEach(e=>{if(e.kind==='falls'||e.kind==='pole')return;
+  props.forEach(e=>{if(e.kind==='pole')return;
     const s=e.kind==='crop'?110:80;let w_=140,h_=180,by=15;
     if(e.kind==='tree'||e.kind==='sakura'){const t=e.r*s;w_=Math.ceil(2.1*t);h_=Math.ceil(2.25*t)+by}
     else if(e.kind==='lantern'){w_=140;h_=150;by=12}else if(e.kind==='crop'){w_=110;h_=60;by=10}

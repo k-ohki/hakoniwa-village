@@ -316,13 +316,20 @@ function project(p){if(projOverride)return projOverride(p);const e=[p[0]-cam.cen
 const isoProj=t=>[.70710678*(t[0]-t[1]),.40824829*(t[0]+t[1])-.81649658*t[2]];
 
 // ================= time & weather =================
-// 1日 = 300 秒（1時間 = 12.5 秒）。町が広いので、歩いて移動できる時間を確保している
-const DAY=300, HR=DAY/24, START_H=6.8, OLD_HR=7.5;
+// HR = 夜の1時間の秒数（12.5 秒）。昼（SLOW_H）は時計を 1/SLOW の速さにして、ゆっくり眺められるようにする
+// 住人の動き・待ち時間・気分などの長さは実時間（clock.sim、HR 単位）で数え、時刻だけが clock.gh（経過した時間数）で進む
+const HR=12.5, START_H=6.8, OLD_HR=7.5, SLOW_H=[5,22], SLOW=3;
 const WEEK=[J('月','Mon'),J('火','Tue'),J('水','Wed'),J('木','Thu'),J('金','Fri'),J('土','Sat'),J('日','Sun')];
 const weekday=()=>(clock.day-1)%7, isWeekend=()=>weekday()>=5;
 // 時間帯 [a,b]（日をまたいでもよい）、または時間帯のリストに今の時刻が入っているか
 const inHours=(h,r)=>Array.isArray(r[0])?r.some(x=>inHours(h,x)):r[0]<=r[1]?h>=r[0]&&h<r[1]:h>=r[0]||h<r[1];
-const clock={sim:0,hour:START_H,day:1,speed:1,lastDay:1,lastHourInt:6};
+const clock={sim:0,gh:0,hour:START_H,day:1,speed:1,lastDay:1,lastHourInt:6};
+// 時刻 h の1時間が何秒か／時刻 h から dh 時間たつまでの秒数
+const hourLen=h=>inHours(h,SLOW_H)?SLOW*HR:HR;
+function simFor(h,dh){let s=0;while(dh>1e-9){h=(h%24+24)%24;const edge=h<SLOW_H[0]?SLOW_H[0]:h<SLOW_H[1]?SLOW_H[1]:24+SLOW_H[0],d=Math.min(dh,edge-h);s+=d*hourLen(h);dh-=d;h+=d}return s}
+const DAY=simFor(0,24);
+// 町の成長などの「時刻で数える」間隔用（夜の速さに直した経過秒）
+const gameT=()=>clock.gh*HR;
 const weather={kind:'clear',until:0,rainbowUntil:0,festUntil:0,plan:null};
 function setWeather(kind,hours){weather.kind=kind;weather.until=clock.sim+hours*HR}
 const mealName=()=>{const h=clock.hour;return h<10.5?J('朝ごはん','breakfast'):h<15.5?J('お昼ごはん','lunch'):J('夕ごはん','dinner')};
@@ -888,7 +895,6 @@ const TOWN={
   sakura:[[8,11,1.05],[28,9,.9]],
   lanterns:[[4,7],[6,9],[9,7],[13,7],[10,10],[10,13],[18,7],[23,7],[26,9],[18,15],[4,21],[3,23],[9,23],[16,23],[22,23],[28,23],[31,4],[31,17],[33,7],[33,9],[33,21],[33,23]],
   poles:[[6.5,9.5],[9.5,9.5],[9.5,12.5],[6.5,12.5]],
-  falls:[{x:37.5,y:3.2,y0:2.6,y1:3.8}],
   buildings:[
     {bp:'house',at:[1,1],id:'A',opts:{wall:P.wall,roof:P.coral,paper:P.paper,curtain:[236,170,160],rug:[214,140,140],blanket:[[244,160,150],[240,200,120],[140,180,230],[236,150,130]]}},
     {bp:'house',at:[10,1],id:'B',noName:true,opts:{wall:P.wall2,roof:P.teal,paper:P.paper2,curtain:[160,200,190],rug:[140,170,200],blanket:[[160,210,200],[190,170,230],[246,180,200],[120,170,180]]}},
@@ -904,7 +910,6 @@ const TOWN={
     ['cherry tree','桜の木','The cherry tree is in full bloom.','桜が満開です。',[8,11,1.7]],
     ['tree','木','I take a nap under the tree.','木の下で昼寝をします。',[0,0,1.3],{showLabel:true}],
     ['street lamp','街灯','The street lamp is on at night.','夜は街灯がつきます。',[4,7,.9],{showLabel:true}],
-    ['waterfall','滝','The waterfall is very loud.','滝の音がとても大きい。',[37.5,3.2,-1]],
     ['flower bed','花壇','I water the flower bed every day.','毎日花壇に水をやります。',[.5,7,.1]],
     ['plaza','広場','Everyone meets at the plaza.','みんな広場に集まります。',[8,10,0]],
     ['schoolyard','校庭','The kids play in the schoolyard.','子どもたちは校庭で遊びます。',[24,9.5,0]],
@@ -957,12 +962,10 @@ const props=[];
 TREES.forEach(([x,y,r])=>props.push({kind:'tree',local:[x,y,0],r}));
 TOWN.sakura.forEach(([x,y,r])=>props.push({kind:'sakura',local:[x,y,0],r}));
 LANTERNS.forEach(([x,y])=>props.push({kind:'lantern',local:[x,y,0]}));
-TOWN.falls.forEach(f=>props.push({kind:'falls',local:[f.x,f.y,0],y0:f.y0,y1:f.y1}));
 fieldCells.forEach(([x,y])=>props.push({kind:'crop',local:[x,y,0],type:(x+y)%2}));
 TOWN.poles.forEach(([x,y])=>props.push({kind:'pole',local:[x,y,0]}));
 props.forEach((t,i)=>{const big=t.kind==='tree'||t.kind==='sakura',e=big?.25:.08;const top=big?1.9*t.r:t.kind==='pole'?1.7:.8;
-  t.lo=[t.local[0]-e,t.local[1]-e,t.local[2]];t.hi=[t.local[0]+e,t.local[1]+e,t.local[2]+top];
-  if(t.kind==='falls'){t.lo=[t.local[0],t.y0,-5];t.hi=[t.local[0]+.12,t.y1,0]}t.id=1000+i});
+  t.lo=[t.local[0]-e,t.local[1]-e,t.local[2]];t.hi=[t.local[0]+e,t.local[1]+e,t.local[2]+top];t.id=1000+i});
 // ================= villagers =================
 // 子どもは平日に学校へ（給食は学校で）
 const SCHOOL_KID={acts:['school.study','school.lunch'],hours:[[7.5,15]],days:'weekday'};
@@ -1003,7 +1006,7 @@ const taken=w=>{const s=new Set();walkers.forEach(o=>{if(o===w)return;if(o.targe
 const remember=(w,txt)=>{if(!w.memory)return;w.memory.push(`${hhmm(clock.hour)} ${txt}`);if(w.memory.length>8)w.memory.shift()};
 const say=(w,phrase,secs=4)=>{if(!phrase)return;w.say={...phrase,until:S.time+secs};addPhrase(phrase)};
 // villagers who start the day still in bed
-people.forEach(w=>{if(sleepTime(w)){w.tile=w.house.spots.sleep[w.bed];w.act={id:'sleep'};w.wait=(((w.wake-clock.hour)%24+24)%24)*HR;w.lastDir=[0,1]}});
+people.forEach(w=>{if(sleepTime(w)){w.tile=w.house.spots.sleep[w.bed];w.act={id:'sleep'};w.wait=simFor(clock.hour,((w.wake-clock.hour)%24+24)%24);w.lastDir=[0,1]}});
 
 // その行動ができる場所: 家の中の行動は自分の家の家具、それ以外は町中の場所（よその家の中は除く）
 function spotsFor(w,id){
@@ -1123,7 +1126,7 @@ function catGoal(w){
 function startAct(w,g){
   w.act=g;
   const a=ACTS[g.id];
-  if(g.id==='sleep'){const left=((w.wake-clock.hour)%24+24)%24;w.wait=(directiveOn(w)&&w.directive.goal==='sleep'?Math.max(.3,(w.directive.until-clock.sim)/HR):Math.max(.3,left))*HR;say(w,a.phrase(w),3);w.lastDir=[0,1];return}
+  if(g.id==='sleep'){const left=((w.wake-clock.hour)%24+24)%24;w.wait=directiveOn(w)&&w.directive.goal==='sleep'?Math.max(.3*HR,w.directive.until-clock.sim):simFor(clock.hour,Math.max(.3,left));say(w,a.phrase(w),3);w.lastDir=[0,1];return}
   w.wait=rand(g.dur||[.3,.6])*HR;
   const hs=g.hs||w.house;if(!hs)return;
   if(g.id==='cook'){hs.cooking=w;hs.cookName=mealName()}
@@ -1413,11 +1416,7 @@ function drawProp(e){
     for(const dx of[-.22,.22]){const x=i[0]+dx*l*.9;
       if(e.type===0){[[0,-.12,.17,[124,190,116]],[-.09,-.08,.12,[150,206,128]],[.09,-.09,.12,[140,200,124]],[0,-.17,.1,[178,224,150]]].forEach(([ox,oy,r,c])=>{N.fillStyle=rgbA(snowy(c));N.beginPath();N.arc(x+ox*t,y+oy*t,r*t,0,2*Math.PI);N.fill()})}
       else{N.fillStyle=rgbA([238,140,74]);N.beginPath();N.ellipse(x,y-.02*t,.06*t,.04*t,0,0,2*Math.PI);N.fill();N.strokeStyle=rgbA([110,180,104]);N.lineWidth=Math.max(1,.04*l);N.beginPath();for(const a of[-.5,0,.5]){N.moveTo(x,y-.04*t);N.lineTo(x+a*.18*t+sw,y-.36*t)}N.stroke()}}snowOn=false;
-  }else if(e.kind==='falls'){const a=project([e.local[0]+.02,e.y0,0]),b=project([e.local[0]+.02,e.y1,0]),o=5*l;
-    const g=N.createLinearGradient(0,a[1],0,a[1]+o);const wc=mix(A([176,222,240]),[90,110,170],nightK*.3);g.addColorStop(0,rgb(wc,1,.95));g.addColorStop(.7,rgb(wc,1.05,.55));g.addColorStop(1,rgb(wc,1.1,0));
-    N.fillStyle=g;N.beginPath();N.moveTo(a[0],a[1]);N.lineTo(b[0],b[1]);N.lineTo(b[0]+.08*l,b[1]+o);N.lineTo(a[0]-.08*l,a[1]+o);N.closePath();N.fill();
-    N.save();N.clip();N.strokeStyle=`rgba(255,255,255,${.5+.25*dayK})`;N.lineWidth=Math.max(1,.035*l);
-    for(let k=0;k<8;k++){const n=(k+.5)/8,x=lerp(a[0],b[0],n),y=lerp(a[1],b[1],n),c=(.9*S.time+hash(9.1*k))%1*o;N.beginPath();N.moveTo(x,y+c-.6*l);N.lineTo(x,y+c);N.stroke()}N.restore()}
+  }
 }
 
 // ================= drawing: people =================
@@ -1830,7 +1829,7 @@ function offlineInterpret(text){
 function applyDivine(r,text){
   if(!r||typeof r!=='object')return;
   if(r.narration_en||r.narration_ja)log(J(String(r.narration_ja||r.narration_en).slice(0,70),String(r.narration_en||r.narration_ja).slice(0,90)),'god-line');
-  const skip=Number(r.timeSkipTo);if(r.timeSkipTo!==null&&r.timeSkipTo!==undefined&&r.timeSkipTo!==''&&isFinite(skip)){const d=((clamp(Math.round(skip),0,23)-clock.hour)%24+24)%24;if(d>.2){clock.sim+=d*HR;tickClock()}}
+  const skip=Number(r.timeSkipTo);if(r.timeSkipTo!==null&&r.timeSkipTo!==undefined&&r.timeSkipTo!==''&&isFinite(skip)){const d=((clamp(Math.round(skip),0,23)-clock.hour)%24+24)%24;if(d>.2){clock.sim+=simFor(clock.hour,d);clock.gh+=d;tickClock()}}
   if(r.weather==='rain'){setWeather('rain',3);log(J('雨が降りはじめた','It started to rain.'))}else if(r.weather==='snow'){setWeather('snow',4);log(J('雪が降りはじめた','It started to snow.'))}
   else if(r.weather==='clear'){weather.kind='clear'}else if(r.weather==='rainbow'){weather.kind='clear';weather.rainbowUntil=clock.sim+2*HR}
   if(r.build)buildFromVoice(String(r.build).slice(0,400),text);
@@ -1917,8 +1916,9 @@ window.addEventListener('keydown',e=>{if(fpv.on||e.target.tagName==='INPUT')retu
 window.addEventListener('resize',resize);
 
 // ================= clock =================
+function advanceClock(sdt){clock.gh+=sdt/hourLen(clock.hour);clock.sim+=sdt;tickClock()}
 function tickClock(){
-  const total=START_H+clock.sim/HR;clock.hour=total%24;clock.day=1+Math.floor(total/24);
+  const total=START_H+clock.gh;clock.hour=total%24;clock.day=1+Math.floor(total/24);
   if(clock.day!==clock.lastDay){clock.lastDay=clock.day;const roll=Math.random();weather.plan=roll<.22?{kind:'rain',at:9+Math.random()*7,hours:2+Math.random()*2}:roll<.27&&clock.day%3===0?{kind:'snow',at:8+Math.random()*6,hours:3}:null}
   const hi=Math.floor(clock.hour);if(hi!==clock.lastHourInt){clock.lastHourInt=hi;if(hi===6)log(J(`${clock.day}日目の朝。村が目をさました`,`Day ${clock.day}. Good morning, village!`));if(hi===23)log(J('夜がふけて、家の明かりが消えていく','It\'s late. The lights in the houses go out.'));if(typeof growthCheck==='function'&&started)growthCheck()}
 }
@@ -2164,7 +2164,7 @@ $('cDlg').addEventListener('click',()=>{const w=selected;if(!w||!w.act)return;ca
 // ================= frame =================
 let hudT=0;
 function frame(dt){
-  const sdt=dt*clock.speed;clock.sim+=sdt;tickClock();
+  const sdt=dt*clock.speed;advanceClock(sdt);
   updateWeather(sdt);updateLight(dt);
   updateCamera(dt,!!drag);
   if(!(TEST&&TEST.freeze))walkers.forEach(w=>updateWalker(w,sdt));
@@ -2536,7 +2536,7 @@ function buildWorld(){
   const pA=amb;amb=[1,1,1];bakePolysGL(polys.filter(p=>p.bld.fixed));amb=pA;
   genBuildings().forEach(addStructGL);
   // props as billboards
-  props.forEach(e=>{if(e.kind==='falls'||e.kind==='pole')return;
+  props.forEach(e=>{if(e.kind==='pole')return;
     const s=e.kind==='crop'?110:80;let w_=140,h_=180,by=15;
     if(e.kind==='tree'||e.kind==='sakura'){const t=e.r*s;w_=Math.ceil(2.1*t);h_=Math.ceil(2.25*t)+by}
     else if(e.kind==='lantern'){w_=140;h_=150;by=12}else if(e.kind==='crop'){w_=110;h_=60;by=10}
@@ -2821,10 +2821,10 @@ const TUI={btn:J('町','Town'),title:J('町の保存と歩み','Town: save & his
 let lastSaveAt=0,saveErr=false;
 function snapshot(){
   const n=clock.sim;
-  return{v:1,hr:HR,at:Date.now(),sim:n,
+  return{v:1,hr:HR,at:Date.now(),sim:n,gh:clock.gh,
     weather:{kind:weather.kind,left:Math.max(0,weather.until-n),fest:Math.max(0,weather.festUntil-n),rb:Math.max(0,weather.rainbowUntil-n)},
     walkers:walkers.map(w=>({n:w.name,pos:w.tile.pos.slice(),needs:w.needs?{...w.needs}:null,rel:w.rel&&w.kind==='person'?{...w.rel}:null,mem:(w.memory||[]).slice(-8),mood:w.mood||null,moodLeft:Math.max(0,(w.moodUntil||0)-n)})),
-    growth:{log:grow.log.slice(-40),since:n-grow.lastAt,wishes:grow.wishes}};
+    growth:{log:grow.log.slice(-40),since:gameT()-grow.lastAt,wishes:grow.wishes}};
 }
 function saveTown(manual){
   try{localStorage.setItem(SAVE_KEY,JSON.stringify(snapshot()));saveBuilds();lastSaveAt=Date.now();saveErr=false;if(manual)toast(TUI.saved);renderTown();return true}
@@ -2837,7 +2837,8 @@ function findTile(p){if(!Array.isArray(p))return null;return tiles.find(t=>Math.
 function restoreTown(s){
   // 保存した時と1時間の長さが違えば、時刻や残り時間を今の長さに直す
   const k=HR/(Number(s.hr)||OLD_HR);s=scaleTimes(s,k);
-  clock.sim=Math.max(0,Number(s.sim)||0);tickClock();clock.lastDay=clock.day;clock.lastHourInt=Math.floor(clock.hour);
+  // gh が無いのは時刻が一定の速さだった頃の保存（時刻 = sim/HR）
+  clock.sim=Math.max(0,Number(s.sim)||0);clock.gh=Number.isFinite(s.gh)&&s.gh>=0?s.gh:clock.sim/HR;tickClock();clock.lastDay=clock.day;clock.lastHourInt=Math.floor(clock.hour);
   const wx=s.weather||{};weather.kind=['clear','rain','snow'].includes(wx.kind)?wx.kind:'clear';weather.until=clock.sim+(Number(wx.left)||0);weather.festUntil=clock.sim+(Number(wx.fest)||0);weather.rainbowUntil=clock.sim+(Number(wx.rb)||0);weather.plan=null;
   (s.walkers||[]).forEach(r=>{const w=byName(String(r.n));if(!w)return;
     const t=findTile(r.pos);if(t){w.tile=t;w.link=null;w.path=[];w.goal=null;w.target=null;w.act=null;w.forced=null;w.wait=.05*HR;w.t=0}
@@ -2846,7 +2847,7 @@ function restoreTown(s){
     if(Array.isArray(r.mem)&&w.memory)w.memory=r.mem.map(String).slice(-8);
     if(r.mood&&MOODS.includes(r.mood)){w.mood=r.mood;w.moodUntil=clock.sim+(Number(r.moodLeft)||0)}});
   const g=s.growth||{};grow.log=Array.isArray(g.log)?g.log.filter(x=>x&&x.ja&&x.en).map(x=>({day:Number(x.day)||1,ja:String(x.ja).slice(0,90),en:String(x.en).slice(0,110)})):[];
-  grow.lastAt=clock.sim-(Number(g.since)||0);grow.wishes=g.wishes&&typeof g.wishes==='object'?g.wishes:{};
+  grow.lastAt=gameT()-(Number(g.since)||0);grow.wishes=g.wishes&&typeof g.wishes==='object'?g.wishes:{};
   lastSaveAt=Number(s.at)||0;
 }
 function renderTown(){
@@ -2940,9 +2941,9 @@ async function growthStep(){
   if(grow.busy)return;grow.busy=true;
   try{
     const ev=growEvent();let plan=null,spec=null,usedAI=false;
-    if(sample){try{const r=await sample.json(growPrompt(ev),{modelTier:'default',cache:false});if(r&&typeof r==='object')plan=r,usedAI=true}catch(err){const c=err&&err.code;if(c==='not_granted'||c==='sampling_disabled')sample=null;if(c==='rate_limited'){grow.lastAt=clock.sim-12*HR;return}}}
-    if(plan){if(!['add','upgrade','none'].includes(plan.action))plan=null;else if(plan.action==='none'){grow.lastAt=clock.sim-9*HR;return}}
-    if(!plan){plan=offlinePlan();if(!plan){grow.lastAt=clock.sim-9*HR;return}}
+    if(sample){try{const r=await sample.json(growPrompt(ev),{modelTier:'default',cache:false});if(r&&typeof r==='object')plan=r,usedAI=true}catch(err){const c=err&&err.code;if(c==='not_granted'||c==='sampling_disabled')sample=null;if(c==='rate_limited'){grow.lastAt=gameT()-12*HR;return}}}
+    if(plan){if(!['add','upgrade','none'].includes(plan.action))plan=null;else if(plan.action==='none'){grow.lastAt=gameT()-9*HR;return}}
+    if(!plan){plan=offlinePlan();if(!plan){grow.lastAt=gameT()-9*HR;return}}
     const w=byName(String(plan.wisher||''))||pick(people.filter(p=>!p.player));
     const wish=plan.key?plan.wish:J(String(plan.wish_ja||plan.wish_en||'').slice(0,60)||'何か変えたいな。',String(plan.wish_en||plan.wish_ja||'').slice(0,90)||'I want something new.');
     grow.wishes[w.name]={ja:wish.ja,en:wish.en,day:clock.day};say(w,wish,7);
@@ -2956,19 +2957,19 @@ async function growthStep(){
           finishGrowth(w,ns2,J(String(plan.log_ja||`${w.name}の願いで${oldName}が変わった`).slice(0,80),String(plan.log_en||`${w.en}'s wish changed the ${ns.name_en}.`).slice(0,100)),false);return}}
       plan.action='add'}
     if(plan.action==='add'){
-      if(genBuildings().length>=MAX_GEN||gen>=14){grow.lastAt=clock.sim;return}
+      if(genBuildings().length>=MAX_GEN||gen>=14){grow.lastAt=gameT();return}
       if(plan.key)spec=smallSpec(plan.key);
       else if(sample&&usedAI){try{spec=sanitizeSpec(await sample.json(buildPrompt(String(plan.brief||'').slice(0,300),wish.en,'Keep it small: footprint at most 2x2 cells and 6-20 parts.','a villager'),{model:MODELS.build,modelTier:'default',cache:false}))}catch(err){}}
       if(!spec){plan=offlinePlan();if(!plan)return;spec=smallSpec(plan.key)}
       if(spec&&(spec.enterable||spec.footprint[0]>2||spec.footprint[1]>2))spec=null;
       if(!spec){plan=offlinePlan();if(!plan)return;spec=smallSpec(plan.key)}
-      const pos=findSpot(spec);if(!pos){grow.lastAt=clock.sim-6*HR;return}
+      const pos=findSpot(spec);if(!pos){grow.lastAt=gameT()-6*HR;return}
       const st=placeBuilding(spec,pos,null,true);st.by=w.name;st.wish=wish.ja;saveBuilds();
       finishGrowth(w,st,J(String(plan.log_ja||`${w.name}の願いで${spec.name_ja}ができた`).slice(0,80),String(plan.log_en||`${w.en}'s wish came true: a ${spec.name_en}.`).slice(0,100)),true)}
   }catch(e){}finally{grow.busy=false}
 }
 function finishGrowth(w,st,msg,isNew){
-  grow.lastAt=clock.sim;grow.log.push({day:clock.day,ja:msg.ja,en:msg.en});if(grow.log.length>40)grow.log.shift();
+  grow.lastAt=gameT();grow.log.push({day:clock.day,ja:msg.ja,en:msg.en});if(grow.log.length>40)grow.log.shift();
   log(msg,'god-line');remember(w,'願いがかなった');
   const thanks=pick([J('わあ、ありがとう！','Thank you so much!'),J('うれしい！','I\'m so happy!'),J('ずっとほしかったんだ。','I wanted this for so long.')]);
   setTimeout(()=>{say(w,thanks,5);if(st.acts[0]&&!w.tile.stop&&!w.player){const p=planAct(w,st.acts[0]);if(p)w.forced=p}},2500);
@@ -2979,7 +2980,7 @@ function growthCheck(){
   if(grow.busy)return;
   const h=clock.hour;if(h<8||h>20)return;
   const ev=growEvent();const gap=(ev==='festival'||ev==='rainbow')?7*HR:18*HR;
-  if(clock.sim-grow.lastAt<gap||Math.random()<.35)return;
+  if(gameT()-grow.lastAt<gap||Math.random()<.35)return;
   growthStep();
 }
 
@@ -2990,7 +2991,7 @@ const _sv=readSave();if(_sv){restoreTown(_sv)}
 let last=performance.now();
 function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;S.time+=dt;frame(dt);requestAnimationFrame(loop)}
 resize();basis();tickClock();applyLang();if(_sv){log(TUI.resumed)}else log(J('1日目の朝。村の一日がはじまる','Day 1. A new day begins in the village.'));started=true;
-if(TEST)TEST.api={cam,clock,walkers,S,boxes,tiles,buildings,SPOTS,ACTS,sep,dlg,maybeDialog,buildFromVoice,sanitizeSpec,findSpot,placeBuilding,removeBuilding,offlineSpec,planAct,setPlan,setViewFloor,bfs,step(n,dt){for(let i=0;i<n;i++){S.time+=dt;frame(dt)}},
+if(TEST)TEST.api={cam,clock,DAY,simFor,walkers,S,boxes,tiles,buildings,SPOTS,ACTS,sep,dlg,maybeDialog,buildFromVoice,sanitizeSpec,findSpot,placeBuilding,removeBuilding,offlineSpec,planAct,setPlan,setViewFloor,bfs,step(n,dt){for(let i=0;i<n;i++){S.time+=dt;frame(dt)}},
   setView(o){if('interior'in o){interior=o.interior;updateFloorBtn()}if('floor'in o)setViewFloor(o.floor);if('az'in o)cam.az=cam.taz=o.az;if('el'in o)cam.el=cam.tel=o.el;if('zoom'in o)cam.zoom=cam.tzoom=o.zoom;basis()}};
 else requestAnimationFrame(loop);
 })();

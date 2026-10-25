@@ -22,7 +22,7 @@ await page.waitForFunction(() => window.__HAKONIWA_TEST__ && window.__HAKONIWA_T
 const seen = await page.evaluate((days) => {
   const api = window.__HAKONIWA_TEST__.api, seen = {};
   api.clock.speed = 8;
-  const frames = Math.ceil((days * 300) / (8 / 30));
+  const frames = Math.ceil((days * api.DAY) / (8 / 30));
   for (let i = 0; i < frames; i++) {
     api.step(1, 1 / 30);
     for (const w of api.walkers) if (w.act && !w.link) seen[w.act.id] = (seen[w.act.id] || 0) + 1;
