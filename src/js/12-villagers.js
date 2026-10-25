@@ -163,10 +163,11 @@ function startAct(w,g){
   const hs=g.hs||w.house;if(!hs)return;
   if(g.id==='cook'){hs.cooking=w;hs.cookName=mealName()}
   if(g.id==='tv')hs.tvOn=true;
-  if(g.id==='chat'&&g.partner){const d=[g.partner.tile.pos[0]-w.tile.pos[0],g.partner.tile.pos[1]-w.tile.pos[1]];if(d[0]||d[1])w.lastDir=[Math.sign(d[0]),Math.sign(d[1])];return}
+  if(g.id==='chat'&&g.partner){const d=[g.partner.tile.pos[0]-w.tile.pos[0],g.partner.tile.pos[1]-w.tile.pos[1]];if(d[0]||d[1])w.lastDir=[Math.sign(d[0]),Math.sign(d[1])];if(g.lead)maybeDialog(w,'chat',{partner:g.partner});return}
   if(w.tile.furn&&w.tile.furn.face)w.lastDir=w.tile.furn.face;
   if(a&&a.phrase&&(w.player||Math.random()<.8)){houseMealCtx=hs;say(w,a.phrase(w));houseMealCtx=null}
   if(g.id==='brush')w.brushedAt=clock.sim;if(g.id==='wash')w.washedAt=clock.sim;
+  if(!w.player)maybeDialog(w,g.id);
 }
 function finishAct(w,interrupted){
   const a=w.act;w.act=null;w.target=null;if(!a||!w.house)return;

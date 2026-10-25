@@ -5,8 +5,9 @@ function frame(dt){
   updateWeather(sdt);updateLight(dt);
   updateCamera(dt,!!drag);
   if(!(TEST&&TEST.freeze))walkers.forEach(w=>updateWalker(w,sdt));
-  people.forEach(w=>{const a=w.act;if(!a||a.id!=='chat'||!a.lead||w.link)return;const p=a.partner;if(!p.act||p.act.id!=='chat'||p.act.partner!==w||p.link)return;
+  people.forEach(w=>{const a=w.act;if(!a||a.id!=='chat'||!a.lead||w.link||(dlg.cur&&dlg.cur.c.sp.includes(w)))return;const p=a.partner;if(!p.act||p.act.id!=='chat'||p.act.partner!==w||p.link)return;
     w.chatT-=dt;if(w.chatT<=0){const sp=w.turn%2?p:w;w.turn++;say(sp,chatLine(sp,sp===w?p:w),2.8);w.chatT=3.3}});
+  updateDialog(dt);
 
   if(fpv.on){fpvFrame(dt);hudT-=dt;if(hudT<=0){updateHud();hudT=.25}return}
   N.setTransform(S.dpr,0,0,S.dpr,0,0);

@@ -57,7 +57,7 @@ else {
   if (!h['anthropic-version']) problems.push('anthropic-version がありません');
   if (!JSON.parse(apiCalls[0].postData()).model) problems.push('model がありません');
 }
-const logText = await page.evaluate(() => document.body.innerText);
+const logText = await page.evaluate(() => document.getElementById('log').textContent);
 // 一人称モード（WebGL）に入って少し歩き、戻る
 await page.click('#roster button');
 await page.click('#cPlay');

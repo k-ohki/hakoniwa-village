@@ -25,8 +25,12 @@
   - 行動（`ACTS`）は場所（`SPOTS`）と結びつく。家の中の行動は自分の家の家具だけを使う（`bld.spots`）。
 - 新しい建物の種類を足す時は、まず `10-blueprints.js` に設計図を書く。足りない家具だけ `08-furniture.js` に足す。描画コードは原則さわらない。
 - 住人の仕事・学校は `PEOPLE` の `job`（行動ID・時間帯・平日だけか）で書く。建物の行動は `hours`（営業時間）・`who`（kid/adult）・`staff`（働く人だけ）・`days` を持てる。
-- Claude が返す設計図は信用しない。必ず `sanitizeSpec`（`26-god-build.js`）を通す。
+- Claude が返す設計図は信用しない。必ず `sanitizeSpec`（`27-god-build.js`）を通す。
 - 描画を変えたら `npm run visual -- index.html <出力先> <比較元>` で、決まった視点の見た目を前後で比べる。
+
+## 会話
+- 場面の会話は `25-dialogs.js` の `SCENES`（行動ID → 役割・話題・組み込みの会話）。新しい行動を足したら場面も足す。
+- 会話の生成は `MODELS.talk`（Haiku）、建物の設計は `MODELS.build`（Sonnet）。固定の指示は `system`（キャッシュされる）に、場面・人物・話題・口調・使用済みの書き出しなど変わる部分は prompt に入れて、同じ prompt を送らない。
 
 ## 作業の流れ
 1. `src/` を編集
