@@ -38,7 +38,7 @@ const taken=w=>{const s=new Set();walkers.forEach(o=>{if(o===w)return;if(o.targe
 const remember=(w,txt)=>{if(!w.memory)return;w.memory.push(`${hhmm(clock.hour)} ${txt}`);if(w.memory.length>8)w.memory.shift()};
 const say=(w,phrase,secs=4)=>{if(!phrase)return;w.say={...phrase,until:S.time+secs};addPhrase(phrase)};
 // villagers who start the day still in bed
-people.forEach(w=>{if(sleepTime(w)){w.tile=w.house.spots.sleep[w.bed];w.act={id:'sleep'};w.wait=simFor(clock.hour,((w.wake-clock.hour)%24+24)%24);w.lastDir=[0,1]}});
+people.forEach(w=>{if(sleepTime(w)){w.tile=w.house.spots.sleep[w.bed];w.act={id:'sleep'};w.wait=(((w.wake-clock.hour)%24+24)%24)*HR;w.lastDir=[0,1]}});
 
 // その行動ができる場所: 家の中の行動は自分の家の家具、それ以外は町中の場所（よその家の中は除く）
 function spotsFor(w,id){
@@ -158,7 +158,7 @@ function catGoal(w){
 function startAct(w,g){
   w.act=g;
   const a=ACTS[g.id];
-  if(g.id==='sleep'){const left=((w.wake-clock.hour)%24+24)%24;w.wait=directiveOn(w)&&w.directive.goal==='sleep'?Math.max(.3*HR,w.directive.until-clock.sim):simFor(clock.hour,Math.max(.3,left));say(w,a.phrase(w),3);w.lastDir=[0,1];return}
+  if(g.id==='sleep'){const left=((w.wake-clock.hour)%24+24)%24;w.wait=directiveOn(w)&&w.directive.goal==='sleep'?Math.max(.3*HR,w.directive.until-clock.sim):Math.max(.3,left)*HR;say(w,a.phrase(w),3);w.lastDir=[0,1];return}
   w.wait=rand(g.dur||[.3,.6])*HR;
   const hs=g.hs||w.house;if(!hs)return;
   if(g.id==='cook'){hs.cooking=w;hs.cookName=mealName()}

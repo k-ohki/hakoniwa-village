@@ -55,7 +55,7 @@ function offlineInterpret(text){
 function applyDivine(r,text){
   if(!r||typeof r!=='object')return;
   if(r.narration_en||r.narration_ja)log(J(String(r.narration_ja||r.narration_en).slice(0,70),String(r.narration_en||r.narration_ja).slice(0,90)),'god-line');
-  const skip=Number(r.timeSkipTo);if(r.timeSkipTo!==null&&r.timeSkipTo!==undefined&&r.timeSkipTo!==''&&isFinite(skip)){const d=((clamp(Math.round(skip),0,23)-clock.hour)%24+24)%24;if(d>.2){clock.sim+=simFor(clock.hour,d);clock.gh+=d;tickClock()}}
+  const skip=Number(r.timeSkipTo);if(r.timeSkipTo!==null&&r.timeSkipTo!==undefined&&r.timeSkipTo!==''&&isFinite(skip)){const d=((clamp(Math.round(skip),0,23)-clock.hour)%24+24)%24;if(d>.2){clock.sim+=d*HR;clock.gh+=d;tickClock()}}
   if(r.weather==='rain'){setWeather('rain',3);log(J('雨が降りはじめた','It started to rain.'))}else if(r.weather==='snow'){setWeather('snow',4);log(J('雪が降りはじめた','It started to snow.'))}
   else if(r.weather==='clear'){weather.kind='clear'}else if(r.weather==='rainbow'){weather.kind='clear';weather.rainbowUntil=clock.sim+2*HR}
   if(r.build)buildFromVoice(String(r.build).slice(0,400),text);
