@@ -147,7 +147,7 @@ function findPartner(role,actor,id){
   return c.sort((a,b)=>d(a)-d(b))[0]||null;
 }
 const nameIn=(r,w)=>w?(L==='en'?`${r.en} ${w.en}`:`${r.ja} ${w.name}`):(L==='en'?r.en:r.ja);
-function fillName(s,bld){return bld?s.replace(/\{en\}/g,bld.spec.name_en).replace(/\{ja\}/g,bld.spec.name_ja):s}
+function fillName(s,bld){return fitGreeting(bld?s.replace(/\{en\}/g,bld.spec.name_en).replace(/\{ja\}/g,bld.spec.name_ja):s)}
 // 見ている人の近くの出来事か（会話は見える場所のものだけ流す）
 function inView(w){
   if(fpv.on)return!!fpv.w&&w!==fpv.w&&Math.hypot(w.tile.pos[0]-fpv.w.tile.pos[0],w.tile.pos[1]-fpv.w.tile.pos[1])<7;
