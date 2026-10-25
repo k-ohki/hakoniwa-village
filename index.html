@@ -316,19 +316,19 @@ function project(p){if(projOverride)return projOverride(p);const e=[p[0]-cam.cen
 const isoProj=t=>[.70710678*(t[0]-t[1]),.40824829*(t[0]+t[1])-.81649658*t[2]];
 
 // ================= time & weather =================
-// HR = 夜の1時間の秒数（12.5 秒）。昼（SLOW_H）は時計を 1/SLOW の速さにして、ゆっくり眺められるようにする
-// 住人の動き・待ち時間・気分などの長さは実時間（clock.sim、HR 単位）で数え、時刻だけが clock.gh（経過した時間数）で進む
-const HR=12.5, START_H=6.8, OLD_HR=7.5, SLOW_H=[5,22], SLOW=3;
+// HR = 1時間の秒数（12.5 秒）。昼（5〜22時）は町全体（時計も住人の動きも）を 1/SLOW の速さにして、のんびり眺められるようにする。夜はそのまま
+// clock.sim は町の中の経過秒（HR 単位）、clock.gh は経過した時間数。どちらも昼はゆっくり進む
+const HR=12.5, START_H=6.8, OLD_HR=7.5, SLOW=3;
 const WEEK=[J('月','Mon'),J('火','Tue'),J('水','Wed'),J('木','Thu'),J('金','Fri'),J('土','Sat'),J('日','Sun')];
 const weekday=()=>(clock.day-1)%7, isWeekend=()=>weekday()>=5;
 // 時間帯 [a,b]（日をまたいでもよい）、または時間帯のリストに今の時刻が入っているか
 const inHours=(h,r)=>Array.isArray(r[0])?r.some(x=>inHours(h,x)):r[0]<=r[1]?h>=r[0]&&h<r[1]:h>=r[0]||h<r[1];
 const clock={sim:0,gh:0,hour:START_H,day:1,speed:1,lastDay:1,lastHourInt:6};
-// 時刻 h の1時間が何秒か／時刻 h から dh 時間たつまでの秒数
-const hourLen=h=>inHours(h,SLOW_H)?SLOW*HR:HR;
-function simFor(h,dh){let s=0;while(dh>1e-9){h=(h%24+24)%24;const edge=h<SLOW_H[0]?SLOW_H[0]:h<SLOW_H[1]?SLOW_H[1]:24+SLOW_H[0],d=Math.min(dh,edge-h);s+=d*hourLen(h);dh-=d;h+=d}return s}
-const DAY=simFor(0,24);
-// 町の成長などの「時刻で数える」間隔用（夜の速さに直した経過秒）
+// 時刻 h での町の進む速さ（夜 1、昼 1/SLOW。5時・22時の前後30分でなめらかに切りかえる）
+const paceAt=h=>1-(1-1/SLOW)*clamp(Math.min(h-4.5,22.5-h),0,1);
+// 等速（×1）で1日にかかる実時間の秒数
+const DAY=(()=>{let s=0;for(let i=0;i<240;i++)s+=HR*.1/paceAt(i*.1+.05);return s})();
+// 町の成長などの「時刻で数える」間隔用（以前の保存では sim と時刻がずれていることがあるので gh から求める）
 const gameT=()=>clock.gh*HR;
 const weather={kind:'clear',until:0,rainbowUntil:0,festUntil:0,plan:null};
 function setWeather(kind,hours){weather.kind=kind;weather.until=clock.sim+hours*HR}
@@ -1006,7 +1006,7 @@ const taken=w=>{const s=new Set();walkers.forEach(o=>{if(o===w)return;if(o.targe
 const remember=(w,txt)=>{if(!w.memory)return;w.memory.push(`${hhmm(clock.hour)} ${txt}`);if(w.memory.length>8)w.memory.shift()};
 const say=(w,phrase,secs=4)=>{if(!phrase)return;w.say={...phrase,until:S.time+secs};addPhrase(phrase)};
 // villagers who start the day still in bed
-people.forEach(w=>{if(sleepTime(w)){w.tile=w.house.spots.sleep[w.bed];w.act={id:'sleep'};w.wait=simFor(clock.hour,((w.wake-clock.hour)%24+24)%24);w.lastDir=[0,1]}});
+people.forEach(w=>{if(sleepTime(w)){w.tile=w.house.spots.sleep[w.bed];w.act={id:'sleep'};w.wait=(((w.wake-clock.hour)%24+24)%24)*HR;w.lastDir=[0,1]}});
 
 // その行動ができる場所: 家の中の行動は自分の家の家具、それ以外は町中の場所（よその家の中は除く）
 function spotsFor(w,id){
@@ -1126,7 +1126,7 @@ function catGoal(w){
 function startAct(w,g){
   w.act=g;
   const a=ACTS[g.id];
-  if(g.id==='sleep'){const left=((w.wake-clock.hour)%24+24)%24;w.wait=directiveOn(w)&&w.directive.goal==='sleep'?Math.max(.3*HR,w.directive.until-clock.sim):simFor(clock.hour,Math.max(.3,left));say(w,a.phrase(w),3);w.lastDir=[0,1];return}
+  if(g.id==='sleep'){const left=((w.wake-clock.hour)%24+24)%24;w.wait=directiveOn(w)&&w.directive.goal==='sleep'?Math.max(.3*HR,w.directive.until-clock.sim):Math.max(.3,left)*HR;say(w,a.phrase(w),3);w.lastDir=[0,1];return}
   w.wait=rand(g.dur||[.3,.6])*HR;
   const hs=g.hs||w.house;if(!hs)return;
   if(g.id==='cook'){hs.cooking=w;hs.cookName=mealName()}
@@ -1829,7 +1829,7 @@ function offlineInterpret(text){
 function applyDivine(r,text){
   if(!r||typeof r!=='object')return;
   if(r.narration_en||r.narration_ja)log(J(String(r.narration_ja||r.narration_en).slice(0,70),String(r.narration_en||r.narration_ja).slice(0,90)),'god-line');
-  const skip=Number(r.timeSkipTo);if(r.timeSkipTo!==null&&r.timeSkipTo!==undefined&&r.timeSkipTo!==''&&isFinite(skip)){const d=((clamp(Math.round(skip),0,23)-clock.hour)%24+24)%24;if(d>.2){clock.sim+=simFor(clock.hour,d);clock.gh+=d;tickClock()}}
+  const skip=Number(r.timeSkipTo);if(r.timeSkipTo!==null&&r.timeSkipTo!==undefined&&r.timeSkipTo!==''&&isFinite(skip)){const d=((clamp(Math.round(skip),0,23)-clock.hour)%24+24)%24;if(d>.2){clock.sim+=d*HR;clock.gh+=d;tickClock()}}
   if(r.weather==='rain'){setWeather('rain',3);log(J('雨が降りはじめた','It started to rain.'))}else if(r.weather==='snow'){setWeather('snow',4);log(J('雪が降りはじめた','It started to snow.'))}
   else if(r.weather==='clear'){weather.kind='clear'}else if(r.weather==='rainbow'){weather.kind='clear';weather.rainbowUntil=clock.sim+2*HR}
   if(r.build)buildFromVoice(String(r.build).slice(0,400),text);
@@ -1916,7 +1916,8 @@ window.addEventListener('keydown',e=>{if(fpv.on||e.target.tagName==='INPUT')retu
 window.addEventListener('resize',resize);
 
 // ================= clock =================
-function advanceClock(sdt){clock.gh+=sdt/hourLen(clock.hour);clock.sim+=sdt;tickClock()}
+// 実時間 dt だけ町を進め、町の中で進んだ秒数を返す
+function advanceClock(dt){const sdt=dt*paceAt(clock.hour);clock.sim+=sdt;clock.gh+=sdt/HR;tickClock();return sdt}
 function tickClock(){
   const total=START_H+clock.gh;clock.hour=total%24;clock.day=1+Math.floor(total/24);
   if(clock.day!==clock.lastDay){clock.lastDay=clock.day;const roll=Math.random();weather.plan=roll<.22?{kind:'rain',at:9+Math.random()*7,hours:2+Math.random()*2}:roll<.27&&clock.day%3===0?{kind:'snow',at:8+Math.random()*6,hours:3}:null}
@@ -2164,7 +2165,7 @@ $('cDlg').addEventListener('click',()=>{const w=selected;if(!w||!w.act)return;ca
 // ================= frame =================
 let hudT=0;
 function frame(dt){
-  const sdt=dt*clock.speed;advanceClock(sdt);
+  const sdt=advanceClock(dt*clock.speed);
   updateWeather(sdt);updateLight(dt);
   updateCamera(dt,!!drag);
   if(!(TEST&&TEST.freeze))walkers.forEach(w=>updateWalker(w,sdt));
@@ -2991,7 +2992,7 @@ const _sv=readSave();if(_sv){restoreTown(_sv)}
 let last=performance.now();
 function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;S.time+=dt;frame(dt);requestAnimationFrame(loop)}
 resize();basis();tickClock();applyLang();if(_sv){log(TUI.resumed)}else log(J('1日目の朝。村の一日がはじまる','Day 1. A new day begins in the village.'));started=true;
-if(TEST)TEST.api={cam,clock,DAY,simFor,walkers,S,boxes,tiles,buildings,SPOTS,ACTS,sep,dlg,maybeDialog,buildFromVoice,sanitizeSpec,findSpot,placeBuilding,removeBuilding,offlineSpec,planAct,setPlan,setViewFloor,bfs,step(n,dt){for(let i=0;i<n;i++){S.time+=dt;frame(dt)}},
+if(TEST)TEST.api={cam,clock,DAY,walkers,S,boxes,tiles,buildings,SPOTS,ACTS,sep,dlg,maybeDialog,buildFromVoice,sanitizeSpec,findSpot,placeBuilding,removeBuilding,offlineSpec,planAct,setPlan,setViewFloor,bfs,step(n,dt){for(let i=0;i<n;i++){S.time+=dt;frame(dt)}},
   setView(o){if('interior'in o){interior=o.interior;updateFloorBtn()}if('floor'in o)setViewFloor(o.floor);if('az'in o)cam.az=cam.taz=o.az;if('el'in o)cam.el=cam.tel=o.el;if('zoom'in o)cam.zoom=cam.tzoom=o.zoom;basis()}};
 else requestAnimationFrame(loop);
 })();

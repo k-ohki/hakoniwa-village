@@ -1,7 +1,7 @@
 // ================= frame =================
 let hudT=0;
 function frame(dt){
-  const sdt=dt*clock.speed;advanceClock(sdt);
+  const sdt=advanceClock(dt*clock.speed);
   updateWeather(sdt);updateLight(dt);
   updateCamera(dt,!!drag);
   if(!(TEST&&TEST.freeze))walkers.forEach(w=>updateWalker(w,sdt));
