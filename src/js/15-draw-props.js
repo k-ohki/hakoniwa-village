@@ -20,10 +20,6 @@ function drawProp(e){
     for(const dx of[-.22,.22]){const x=i[0]+dx*l*.9;
       if(e.type===0){[[0,-.12,.17,[124,190,116]],[-.09,-.08,.12,[150,206,128]],[.09,-.09,.12,[140,200,124]],[0,-.17,.1,[178,224,150]]].forEach(([ox,oy,r,c])=>{N.fillStyle=rgbA(snowy(c));N.beginPath();N.arc(x+ox*t,y+oy*t,r*t,0,2*Math.PI);N.fill()})}
       else{N.fillStyle=rgbA([238,140,74]);N.beginPath();N.ellipse(x,y-.02*t,.06*t,.04*t,0,0,2*Math.PI);N.fill();N.strokeStyle=rgbA([110,180,104]);N.lineWidth=Math.max(1,.04*l);N.beginPath();for(const a of[-.5,0,.5]){N.moveTo(x,y-.04*t);N.lineTo(x+a*.18*t+sw,y-.36*t)}N.stroke()}}snowOn=false;
-  }else if(e.kind==='falls'){const a=project([e.local[0]+.02,e.y0,0]),b=project([e.local[0]+.02,e.y1,0]),o=5*l;
-    const g=N.createLinearGradient(0,a[1],0,a[1]+o);const wc=mix(A([176,222,240]),[90,110,170],nightK*.3);g.addColorStop(0,rgb(wc,1,.95));g.addColorStop(.7,rgb(wc,1.05,.55));g.addColorStop(1,rgb(wc,1.1,0));
-    N.fillStyle=g;N.beginPath();N.moveTo(a[0],a[1]);N.lineTo(b[0],b[1]);N.lineTo(b[0]+.08*l,b[1]+o);N.lineTo(a[0]-.08*l,a[1]+o);N.closePath();N.fill();
-    N.save();N.clip();N.strokeStyle=`rgba(255,255,255,${.5+.25*dayK})`;N.lineWidth=Math.max(1,.035*l);
-    for(let k=0;k<8;k++){const n=(k+.5)/8,x=lerp(a[0],b[0],n),y=lerp(a[1],b[1],n),c=(.9*S.time+hash(9.1*k))%1*o;N.beginPath();N.moveTo(x,y+c-.6*l);N.lineTo(x,y+c);N.stroke()}N.restore()}
+  }
 }
 
