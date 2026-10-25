@@ -28,8 +28,14 @@
   <p class="persona wish" id="cWish" hidden></p>
   <p class="status"><span id="cStatus"></span><button class="say-btn" id="cSay" type="button" aria-label="Listen">🔊</button><span class="ja" id="cStatusJa"></span></p>
   <div class="needs" id="cNeeds"></div>
-  <div class="acts"><button id="cThink" type="button">心の声を聞く</button><button id="cFollow" type="button" aria-pressed="false">この人を追う</button><button id="cPlay" class="play" type="button">この人になる（一人称）</button></div>
+  <div class="acts"><button id="cThink" type="button">心の声を聞く</button><button id="cDlg" type="button" hidden>会話を聞く</button><button id="cFollow" type="button" aria-pressed="false">この人を追う</button><button id="cPlay" class="play" type="button">この人になる（一人称）</button></div>
   <p class="thought" id="cThought" hidden></p>
+</section>
+<section class="hud sheet panel dlg" id="dlg" hidden aria-live="polite">
+  <header><h2 id="dTitle"></h2><button class="say-btn" id="dSayAll" type="button" aria-label="全部聞く">🔊</button><button class="x" id="dClose" type="button" aria-label="閉じる">×</button></header>
+  <p class="src" id="dSrc"></p>
+  <ol id="dList"></ol>
+  <p class="key" id="dKey" hidden></p>
 </section>
 <section class="hud sheet panel word" id="wordCard" hidden>
   <header><h2 id="wWord"></h2><button class="say-btn" id="wSay" type="button" aria-label="Listen">🔊</button><button class="x" id="wClose" type="button" aria-label="閉じる">×</button></header>

@@ -27,7 +27,8 @@ function select(w){
   cFollow.setAttribute('aria-pressed',String(cam.follow===w));
   updateCard();
 }
-function updateCard(){if(!selected)return;const w=selected;const st=statusOf(w);const wi=typeof grow!=='undefined'&&grow.wishes[w.name];$('cWish').hidden=!wi;if(wi)$('cWish').textContent=`${tr(TUI.wish)}: ${tr(wi)}`;
+function updateCard(){if(!selected)return;const w=selected;
+  const cd=$('cDlg');cd.hidden=!!dlg.cur||!(w.act&&!w.link&&sceneOf(w.act.id)&&(w.act.id!=='chat'||w.act.partner));cd.textContent=tr(J('会話を聞く','Hear a conversation'));const st=statusOf(w);const wi=typeof grow!=='undefined'&&grow.wishes[w.name];$('cWish').hidden=!wi;if(wi)$('cWish').textContent=`${tr(TUI.wish)}: ${tr(wi)}`;
   cName.textContent=nameOf(w);cPersona.textContent=tr(w.persona);
   cStatus.textContent=L==='en'?cap(st.en):st.ja;cStatusJa.textContent=L==='en'?st.ja:'';cStatusJa.hidden=L!=='en';cSay.hidden=L!=='en'||!canSpeak;
   cMood.textContent=w.needs?tr(MOOD_T[moodOf(w)]):'';

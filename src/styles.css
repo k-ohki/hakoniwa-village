@@ -94,7 +94,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 #fpv canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #fpvCanvas{touch-action:none;cursor:grab}
 #fpvOverlay{pointer-events:none}
-body.fpv .log,body.fpv .controls,body.fpv .hint,body.fpv #card{display:none!important}
+body.fpv .log,body.fpv .controls,body.fpv .hint,body.fpv #card,body.fpv #dlg{display:none!important}
 .acts button.play{background:var(--en);color:#fff;border-color:transparent}
 .fpvhud{z-index:3;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 12px);width:min(640px,calc(100% - 32px));padding:10px 12px;display:flex;flex-direction:column;gap:8px}
 body.coarse .fpvhud{left:auto;right:max(16px,env(safe-area-inset-right,0px));transform:none;width:calc(100% - 184px)}
@@ -134,6 +134,20 @@ body.fpv.coarse .joy{display:block}
 #tForm button{font:inherit;font-size:13px;font-weight:700;color:#fff;background:var(--en);border:0;border-radius:10px;padding:8px 12px;cursor:pointer}
 .toast{position:fixed;z-index:6;left:50%;top:42%;transform:translate(-50%,-50%);background:rgba(40,34,56,.86);color:#fff;font-size:13px;padding:8px 14px;border-radius:10px;pointer-events:none}
 .word{z-index:4}
+/* 場面の会話カード */
+.dlg{z-index:4}
+.dlg h2{font-size:15px}
+.dlg .src{margin:0;font-size:12px;color:var(--ink-soft)}
+.dlg .src:empty{display:none}
+.dlg ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;overflow:auto;max-height:46vh}
+.dlg li{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:7px 9px;border-radius:10px;background:rgba(63,127,168,.07)}
+.dlg li.me{background:rgba(200,144,46,.1)}
+.dlg li b{grid-column:1/-1;font-size:11px;color:var(--ink-soft)}
+.dlg li .en{font-size:14px;font-weight:700;line-height:1.45;min-width:0}
+.dlg li .ja{grid-column:1;font-size:12px;color:var(--ink-soft);min-width:0}
+.dlg li .say-btn{grid-column:2;grid-row:2/4;align-self:center}
+.dlg .key{margin:0;padding:8px 10px;border-radius:10px;background:rgba(200,144,46,.14);display:flex;flex-direction:column;gap:2px;font-size:12px}
+.dlg .key b{font-size:13px;color:var(--gold)}
 @media (max-width:640px){
   /* ボタンが増えても1列に収め、はみ出す分は横にスクロール */
   .controls{left:max(16px,env(safe-area-inset-left,0px));flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;scrollbar-width:none}

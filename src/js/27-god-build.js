@@ -222,7 +222,7 @@ function offlineSpec(text){
 async function buildFromVoice(desc,voice){
   log(J('建設中…','Building...'),'god-line');
   let spec=null;
-  if(sample){try{const r=await sample.json(buildPrompt(desc,voice),{modelTier:'default',cache:false});spec=sanitizeSpec(r)}catch(err){const c=err&&err.code;if(c==='not_granted'||c==='sampling_disabled')sample=null;if(c==='rate_limited'){log(J('いまは建てられません。少し待ってからもう一度','Cannot build right now. Try again in a moment.'));return}}}
+  if(sample){try{const r=await sample.json(buildPrompt(desc,voice),{model:MODELS.build,modelTier:'default',cache:false});spec=sanitizeSpec(r)}catch(err){const c=err&&err.code;if(c==='not_granted'||c==='sampling_disabled')sample=null;if(c==='rate_limited'){log(J('いまは建てられません。少し待ってからもう一度','Cannot build right now. Try again in a moment.'));return}}}
   if(!spec)spec=sanitizeSpec(offlineSpec(voice));
   if(!spec)return;
   if(genBuildings().length>=MAX_GEN){log(J('これ以上は建てられません。何か壊してから建ててください','There is no more room. Remove something first.'));return}

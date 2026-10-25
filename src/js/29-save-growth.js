@@ -137,7 +137,7 @@ async function growthStep(){
     if(plan.action==='upgrade'){
       const st=genBuildings().find(s=>s.id===String(plan.target));
       if(st&&usedAI&&sample){
-        let ns=null;try{ns=sanitizeSpec(await sample.json(revisePrompt(st,String(plan.brief||'').slice(0,300),wish.en),{modelTier:'default',cache:false}))}catch(err){}
+        let ns=null;try{ns=sanitizeSpec(await sample.json(revisePrompt(st,String(plan.brief||'').slice(0,300),wish.en),{model:MODELS.build,modelTier:'default',cache:false}))}catch(err){}
         if(ns&&ns.footprint[0]===st.spec.footprint[0]&&ns.footprint[1]===st.spec.footprint[1]){
           const{cx,cy,id,by}=st,oldName=st.spec.name_ja;removeBuilding(id);ns.near=st.spec.near;const ns2=placeBuilding(ns,{x:cx,y:cy},id,true);ns2.by=by||w.name;ns2.wish=wish.ja;saveBuilds();
           finishGrowth(w,ns2,J(String(plan.log_ja||`${w.name}の願いで${oldName}が変わった`).slice(0,80),String(plan.log_en||`${w.en}'s wish changed the ${ns.name_en}.`).slice(0,100)),false);return}}
@@ -145,7 +145,7 @@ async function growthStep(){
     if(plan.action==='add'){
       if(genBuildings().length>=MAX_GEN||gen>=14){grow.lastAt=clock.sim;return}
       if(plan.key)spec=smallSpec(plan.key);
-      else if(sample&&usedAI){try{spec=sanitizeSpec(await sample.json(buildPrompt(String(plan.brief||'').slice(0,300),wish.en,'Keep it small: footprint at most 2x2 cells and 6-20 parts.','a villager'),{modelTier:'default',cache:false}))}catch(err){}}
+      else if(sample&&usedAI){try{spec=sanitizeSpec(await sample.json(buildPrompt(String(plan.brief||'').slice(0,300),wish.en,'Keep it small: footprint at most 2x2 cells and 6-20 parts.','a villager'),{model:MODELS.build,modelTier:'default',cache:false}))}catch(err){}}
       if(!spec){plan=offlinePlan();if(!plan)return;spec=smallSpec(plan.key)}
       if(spec&&(spec.enterable||spec.footprint[0]>2||spec.footprint[1]>2))spec=null;
       if(!spec){plan=offlinePlan();if(!plan)return;spec=smallSpec(plan.key)}

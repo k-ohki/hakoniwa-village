@@ -4,6 +4,9 @@
 const API_KEY_STORE='hakoniwa-api-key',API_MODEL_STORE='hakoniwa-api-model';
 const API_MODELS=[['claude-opus-5-5','Claude Opus 5.5'],['claude-sonnet-5-5','Claude Sonnet 5.5'],['claude-haiku-5-5','Claude Haiku 5.5']];
 const FALLBACK_MODELS=new Set(['claude-opus-5-5','claude-sonnet-5-5']);
+// 用途ごとのモデル: 会話は軽くて速い Haiku、建物の設計は Sonnet。それ以外（神の声の解釈など）は設定で選んだモデル
+const MODELS={talk:'claude-haiku-5-5',build:'claude-sonnet-5-5'};
+const JSON_RULE='Reply with exactly one JSON value and nothing else: no prose, no code fences.';
 let hostSample=null;
 const lsGet=k=>{try{return localStorage.getItem(k)||''}catch(e){return''}};
 const lsSet=(k,v)=>{try{v?localStorage.setItem(k,v):localStorage.removeItem(k);return true}catch(e){return false}};
@@ -22,9 +25,10 @@ function parseJSONText(t){
 
 async function apiCall(prompt,opts={}){
   const key=apiKey();if(!key)throw apiErr('not_granted','API キーが未設定です');
-  const model=apiModel();
-  const body={model,max_tokens:16000,
-    system:'Reply with exactly one JSON value and nothing else: no prose, no code fences.',
+  const model=opts.model||apiModel();
+  // 毎回同じ指示（opts.system）はプロンプトキャッシュに載せ、変わる部分だけを user に置く
+  const sys={type:'text',text:opts.system?JSON_RULE+'\n\n'+opts.system:JSON_RULE};if(opts.system)sys.cache_control={type:'ephemeral'};
+  const body={model,max_tokens:16000,system:[sys],
     messages:[{role:'user',content:String(prompt)}],
     output_config:{effort:opts.modelTier==='quick'?'low':'medium'}};
   const headers={'content-type':'application/json','x-api-key':key,'anthropic-version':'2026-10-21',
@@ -45,13 +49,19 @@ async function apiCall(prompt,opts={}){
 }
 // host の sample と同じ形（sample.json(prompt, opts)）にそろえる
 const apiSample=()=>apiKey()?{json:async(p,o)=>parseJSONText(await apiCall(p,o))}:null;
+// 固定の指示（system）つきで JSON を頼む。host の sample には system が無いので、前に足して送る
+function askJSON(prompt,o={}){
+  if(!sample)return Promise.reject(apiErr('not_granted','Claude が使えません'));
+  if(sample===hostSample){const{system,...rest}=o;return sample.json(system?system+'\n\n---\n\n'+prompt:prompt,rest)}
+  return sample.json(prompt,o);
+}
 function refreshSample(){sample=hostSample||apiSample();renderApiPanel()}
 
 function renderApiPanel(){
   const box=$('apiBox');if(!box)return;
   box.hidden=!!hostSample;
   $('apiTitle').textContent='Claude API';
-  $('apiNote').textContent=tr(J('自分の API キーを入れると、神の声・会話・建物の設計・町の成長に Claude を使います。キーはこのブラウザにだけ保存され、Anthropic に直接送られます。共用の端末では入れないでください。','Enter your own API key to use Claude for the Voice of God, talks, building design and town growth. The key is stored only in this browser and sent straight to Anthropic. Do not enter it on a shared device.'));
+  $('apiNote').textContent=tr(J('自分の API キーを入れると、神の声・会話・建物の設計・町の成長に Claude を使います。会話は Haiku 5.5、建物の設計は Sonnet 5.5、神の声の解釈は下で選んだモデルを使います。キーはこのブラウザにだけ保存され、Anthropic に直接送られます。共用の端末では入れないでください。','Enter your own API key to use Claude for the Voice of God, talks, building design and town growth. Conversations use Haiku 5.5, building design uses Sonnet 5.5, and the Voice of God uses the model below. The key is stored only in this browser and sent straight to Anthropic. Do not enter it on a shared device.'));
   const has=!!apiKey();
   $('apiState').textContent=tr(has?J('設定済み（キーは表示しません）','Saved (the key is not shown)'):J('未設定：簡易解釈で動いています','Not set: using the simple offline reading'));
   $('apiSave').textContent=tr(J('保存','Save'));$('apiClear').textContent=tr(J('キーを削除','Remove key'));

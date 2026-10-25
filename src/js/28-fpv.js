@@ -262,7 +262,7 @@ async function sendTalk(text){
   if(npc.act&&npc.act.id==='chat')npc.wait=Math.max(npc.wait,.6*HR);
   const wait={who:'npc',wait:true};talk.turns.push(wait);talk.busy=true;renderTalk();
   let r=null;
-  if(sample&&npc.kind==='person'){try{r=await sample.json(talkPrompt(npc,text),{modelTier:'quick',cache:false})}catch(err){const c=err&&err.code;if(c==='not_granted'||c==='sampling_disabled')sample=null;r=null}}
+  if(sample&&npc.kind==='person'){try{r=await sample.json(talkPrompt(npc,text),{model:MODELS.talk,modelTier:'quick',cache:false})}catch(err){const c=err&&err.code;if(c==='not_granted'||c==='sampling_disabled')sample=null;r=null}}
   if(!r||!r.en)r=cannedReply(npc,text);
   if(!talk||talk.npc!==npc)return;
   const i=talk.turns.indexOf(wait);const tt={who:'npc',en:String(r.en||'').slice(0,160),ja:String(r.ja||'').slice(0,100)};if(i>=0)talk.turns.splice(i,1);talk.turns.push(tt);

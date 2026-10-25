@@ -111,7 +111,7 @@ Mood: ${moodOf(w)} (energy ${n.energy.toFixed(1)}, full ${n.food.toFixed(1)}, so
 Recent memories: ${w.memory.slice(-5).join(' / ')||'nothing special'}
 Best friend: ${best}
 Reply with JSON only: {"en":"the inner voice in English","ja":"同じ内容の自然な日本語"}`;
-  try{const r=await sample.json(prompt,{modelTier:'quick',cache:false});if(selected===w){thought={en:String(r.en||''),ja:String(r.ja||'')};addPhrase(thought)}}
+  try{const r=await sample.json(prompt,{model:MODELS.talk,modelTier:'quick',cache:false});if(selected===w){thought={en:String(r.en||''),ja:String(r.ja||'')};addPhrase(thought)}}
   catch(err){const c=err&&err.code;if(c==='not_granted'||c==='sampling_disabled')sample=null;if(selected===w)thought=c==='rate_limited'?J('いまは聞き取れない…少し待ってからもう一度。','I can\'t hear it right now. Try again in a moment.'):(w.kind==='cat'?J('（にゃーん）','(Meow.)'):TEMPLATE_THOUGHT[moodOf(w)])}
   cThink.disabled=false;updateCard();
 });
