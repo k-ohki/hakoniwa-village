@@ -35,7 +35,7 @@ function buildBuilding(spec,pos,o={}){
   (spec.activities||[]).forEach(a=>{const aid=(o.fixed?id+'.':'g_'+id+'_')+a.key;actId[a.key]=aid;
     ACTS[aid]={label:J(a.label_ja,a.label_en),use:J(a.use_ja||a.label_ja,a.use_en||a.label_en),glyph:a.glyph||'♪',dur:a.dur||[.6,1.3],gain:a.gain||{fun:.3},gen:true,
       created:o.fixed?null:clock.sim,hours:a.hours||null,who:a.who||'all',staff:!!a.staff,days:a.days||null,
-      phrase:()=>a.phrase_en?J(a.phrase_ja||a.phrase_en,a.phrase_en):null};
+      phrase:()=>a.phrase_en?J(fitGreeting(a.phrase_ja||a.phrase_en),fitGreeting(a.phrase_en)):null};
     ACT_IDS.push(aid);bld.acts.push(aid)});
   const actOf=k=>actId[k]||(ACTS[k]&&!ACTS[k].home?k:null);
   if(spec.enterable)buildInterior(bld,spec,pos,B,actOf);

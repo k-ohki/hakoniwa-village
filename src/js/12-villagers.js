@@ -172,7 +172,7 @@ function startAct(w,g){
 function finishAct(w,interrupted){
   const a=w.act;w.act=null;w.target=null;if(!a||!w.house)return;
   w.lastAct=a.id;const hs=a.hs||w.house;
-  if(a.id==='sleep'){w.needs.energy=Math.max(w.needs.energy,.92);if(!interrupted)say(w,pick([J('おはよう！よく眠れた。','Good morning! I slept well.'),J('ふぁ〜、おはよう。','Yawn... good morning.')]));remember(w,'ぐっすり眠った')}
+  if(a.id==='sleep'){w.needs.energy=Math.max(w.needs.energy,.92);if(!interrupted)say(w,greetI()===0?pick([J('おはよう！よく眠れた。','Good morning! I slept well.'),J('ふぁ〜、おはよう。','Yawn... good morning.')]):J('ふぁ〜、よく寝た。','Yawn... that was a good sleep.'));remember(w,'ぐっすり眠った')}
   if(a.id==='toilet'&&!interrupted&&Math.random()<.6)say(w,J('トイレを流して、手を洗おう。','Flush the toilet and wash your hands.'));
   if(a.id==='cook'){hs.cooking=null;if(!interrupted){hs.mealReady=clock.sim+2.5*HR;hs.mealName=hs.cookName;say(w,J(`${hs.mealName.ja}ができたよ！`,`${cap(hs.mealName.en)} is ready!`),5);log(J(`${w.name}が${hs.mealName.ja}を作った`,`${w.en} made ${hs.mealName.en}.`))}}
   if(a.id==='eat'){hs.dirty=true;remember(w,'ごはんを食べた');if(!interrupted&&Math.random()<.5)say(w,J('ごちそうさまでした。','Thank you for the meal. That was good.'))}

@@ -13,6 +13,11 @@ const paceAt=h=>1-(1-1/SLOW)*clamp(Math.min(h-4.5,22.5-h),0,1);
 const DAY=(()=>{let s=0;for(let i=0;i<240;i++)s+=HR*.1/paceAt(i*.1+.05);return s})();
 // 町の成長などの「時刻で数える」間隔用（以前の保存では sim と時刻がずれていることがあるので gh から求める）
 const gameT=()=>clock.gh*HR;
+// あいさつを今の時刻に合わせる（朝 4〜11時・昼 11〜17時・夜）。決まった台詞や保存した会話の「Good morning」を昼に言わないように
+const GREET={en:['Good morning','Good afternoon','Good evening'],ja:['おはよう','こんにちは','こんばんは'],jaP:['おはようございます','こんにちは','こんばんは']};
+const greetI=()=>{const h=clock.hour;return h>=4&&h<11?0:h>=11&&h<17?1:2};
+function fitGreeting(s){if(!s)return s;const i=greetI();
+  return s.replace(/\b(good) (morning|afternoon|evening)\b/gi,m=>m[0]==='G'?GREET.en[i]:GREET.en[i].toLowerCase()).replace(/おはようございます/g,GREET.jaP[i]).replace(/おはよう|こんばんは/g,GREET.ja[i])}
 const weather={kind:'clear',until:0,rainbowUntil:0,festUntil:0,plan:null};
 function setWeather(kind,hours){weather.kind=kind;weather.until=clock.sim+hours*HR}
 const mealName=()=>{const h=clock.hour;return h<10.5?J('朝ごはん','breakfast'):h<15.5?J('お昼ごはん','lunch'):J('夕ごはん','dinner')};
